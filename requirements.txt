@@ -1,0 +1,34 @@
+# ============================================================================
+# Pinned 2026-07-07 (Phase 0). Verified against PyPI latest stable.
+#
+# torch/torchvision: these pins install CPU wheels on Windows and CUDA-enabled
+# wheels on Linux by default. If the GPU server's driver needs a different
+# torch build, change ONLY torch/torchvision, reinstall, and commit the change.
+#
+# After the first install on the training server, freeze the full environment:
+#     pip freeze > requirements.lock.txt      (commit it — scope.md §11.1)
+#
+# numpy / opencv-python / pandas / matplotlib / pillow arrive as ultralytics
+# dependencies (which sets its own tested version ceilings) and are captured
+# by the lock file rather than pinned here.
+# ============================================================================
+torch==2.12.1
+torchvision==0.27.1
+ultralytics==8.4.90          # >=8.4 includes the YOLO26 family (plan C2 shortlist)
+albumentations==2.0.8        # adverse-condition generation (scope §11.3 B.6)
+ensemble-boxes==1.0.9        # WBF fusion + ensemble aggregation (scope §11.3 B.4)
+pytorch-ood==0.3.2           # Mahalanobis frame-level OOD (scope §11.3 B.3)
+netcal==1.4.0                # ECE / reliability diagrams / recalibration (scope §11.3 B.5)
+torch-uncertainty==0.12.1    # calibration metrics + ensemble utilities (scope §11.3 B.2)
+lightning==2.6.5             # REQUIRED by torch-uncertainty at import but undeclared in its metadata
+rich==15.0.0                 # ditto — do not remove while torch-uncertainty is pinned to 0.12.1
+scikit-learn==1.9.0          # EmpiricalCovariance / LedoitWolf (scope §11.3 B.3)
+torchmetrics==1.9.0          # independent metric cross-checks (scope §14)
+scipy==1.18.0                # linear_sum_assignment / Hungarian (scope §11.3 B.4)
+tensorboard==2.21.0          # default local experiment tracking (scope §11.2)
+pyyaml==6.0.2                # config loading
+
+# Optional — uncomment when actually used:
+# wandb                      # cloud tracking alternative (scope §11.2)
+# fiftyone                   # label QA for MIT annotation onboarding (scope §14)
+# torchcp                    # conformal stretch goal (scope §11.3 B.7)

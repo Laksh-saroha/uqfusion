@@ -1,0 +1,21 @@
+# environments
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# data & outputs — never committed; expected layout documented in README.md
+data/
+runs/
+wandb/
+
+# model weights (auto-downloaded by ultralytics)
+*.pt
+*.pth
+*.onnx
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

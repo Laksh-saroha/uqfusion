@@ -1,0 +1,64 @@
+# =============================================================================
+# uqfusion — single configuration file for ALL machines.
+#
+# Moving to a new machine (e.g. the GPU Jupyter server):
+#   1. Edit the `paths:` block below (and `device:` if needed).
+#   2. Nothing else should need to change.
+#
+# Relative paths are resolved against this file's directory.
+# Entries marked PENDING are finalized per progress.md open questions / the
+# Phase 1 timing dry-run; do not treat them as settled.
+# =============================================================================
+
+paths:
+  data_root: data              # expected dataset layout: README.md
+  outputs_root: runs           # all training/eval outputs
+  cache_root: runs/cache       # cached predictions for gate ablations (plan B5-2)
+
+datasets:
+  pohang:
+    root: "{data_root}/pohang"
+    vis_yaml: "{data_root}/pohang/data_vis.yaml"   # per-modality YOLO format (scope §5.1)
+    ir_yaml: "{data_root}/pohang/data_ir.yaml"
+  mit_marine:                  # onboarded Phase 2+ (plan C4); yamls filled then
+    root: "{data_root}/mit_marine"
+    vis_yaml: null
+    ir_yaml: null
+
+device: auto                   # auto | cpu | "0" | "0,1"
+
+# --- Phase 1: backbone benchmark (plan C5) ----------------------------------
+benchmark:
+  variants: [yolov8s, yolov9s, yolov10s, yolo11s, yolo12s, yolo26s]   # plan C2
+  seeds: [0, 1, 2]
+  imgsz: 640
+  epochs: 60                   # PENDING: finalize after 1-epoch timing dry-run
+  patience: 15
+  batch: 16                    # PENDING: largest batch fitting ALL variants, then pinned
+  optimizer: auto              # uniform rule: per-model tooling default, disclosed (plan C5)
+  train_stride: 2              # PENDING A2-6; applies to TRAINING frames only
+  deterministic: true
+  amp: true
+  workers: 8
+
+# --- Tiny-subset smoke paths (mandatory for every trainable component) ------
+smoke:
+  n_images: 32
+  epochs: 2
+  imgsz: 320
+  batch: 4
+
+# --- Reliability score, scope §6.4 (plan B5: constants are FIT ON VALIDATION,
+#     via pre-registered rules — never hand-set). Rules resolve to numbers in
+#     Phase 2/3 and the resolved values get committed alongside the fit code.
+reliability:
+  lambda_rule: "r_box = 0.9 at clean-val median U_box"
+  mahalanobis_mu_rule: "95th percentile of clean-val Mahalanobis distances"
+  mahalanobis_tau_rule: "scaled from clean-val IQR"
+  combination: multiplicative  # ablate vs min / weighted-geometric (plan B5-3)
+  alpha: 1.0                   # temporal smoothing OFF (=1.0) by default; PENDING A4-13
+  beta_nll: 0.5                # β-NLL weight (scope §6.2, R10)
+
+tracking:
+  backend: tensorboard         # local default, no account needed; wandb optional (scope §11.2)
+  project: uqfusion
