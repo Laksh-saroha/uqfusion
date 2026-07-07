@@ -57,6 +57,14 @@ gaussian:
   sigma_detach_features: true  # σ branch reads detached neck features (baseline-identical detector grads)
   nll_detach_mu: true          # NLL trains σ only; μ stays owned by DFL/CIoU (D1 attribution guarantee)
 
+# --- Phase 3 baselines (scope §9.2; plan B6-3/B6-7) --------------------------
+baselines:
+  mc_dropout:
+    p: 0.15                    # Dropout2d before each head branch's final conv (pre-fixed, B6-3)
+    T: 10                      # stochastic passes at inference
+  ensemble:
+    seeds: [0, 1, 2, 3, 4]     # M=5; members ARE the seed replicates (B6-7)
+
 # --- Tiny-subset smoke paths (mandatory for every trainable component) ------
 smoke:
   variant: yolov8n             # smallest model — smoke tests exercise plumbing, not quality

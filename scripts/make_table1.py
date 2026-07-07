@@ -34,4 +34,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:  # Windows cp1252 consoles: degrade non-ASCII output instead of crashing
+        sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
     sys.exit(main())

@@ -2,10 +2,12 @@
 
 > Purpose: a cold read of this file (plus `scope.md` and `docs/plan-2026-07-07-kickoff.md`) must reconstruct where the project stands without re-deriving anything. Updated at every phase boundary and every non-trivial decision.
 
-**Last updated:** 2026-07-07 (session 1; Phase 2 core built and smoke-verified)
-**Current phase:** Phase 2 — proof of concept — **CPU-verifiable portion COMPLETE, both smoke gates GREEN.** The full O2→O3→O4 chain (σ² head + β-NLL/warm-up → Mahalanobis → reliability → gated WBF) is implemented and passes its synthetic-data gates on CPU (see Run log). Remaining for Phase 2 close-out (needs server/data): small-scale run on real Pohang frames, the §12.1 detection-parity check (A4-11's condition), and the real IR→VIS homography once calibration files arrive (OQ-5).
-**Phase 1 — code COMPLETE** (commit `37bac1e`), **GPU portion deferred**: Laksh runs the server sequence (audit → stride → grid → FPS → Table 1) whenever he gets server time; epochs/batch set to standard values (D15). Phase 1 closes when Table 1 + selection memo exist.
-**Phase 0 — COMPLETE** (commit `ffbe87f`): repo, pinned env (install-verified), portable config + loader, docs, env smoke script.
+**Last updated:** 2026-07-07 (session 1; Phase 3 code complete and smoke-verified; HOW_TO_RUN.md written)
+**Current phase:** Phase 3 — baselines + eval harness — **CPU-verifiable portion COMPLETE, smoke gate GREEN** (`scripts/smoke_phase3.py`; see Run log). MC-Dropout, Deep Ensembles, prediction caches, corruption generation, the pre-registered calibration suite, learned gate, and the gate-ablation sweep are all implemented; the three eval CLIs are verified. **`HOW_TO_RUN.md` is the canonical per-phase runbook.** Remaining for Phases 1–3 close-out: the GPU/server runs (Laksh, whenever server time happens) + the OQ answers below.
+**Phase 2 — CPU portion COMPLETE** (commit `e75c110`): O2→O3→O4 chain green on both gates; server-side remainder = real-data run + §12.1 parity check + real homography (OQ-5).
+**Phase 1 — code COMPLETE** (commit `37bac1e`), GPU portion deferred; epochs/batch at standard values (D15). Closes with Table 1 + selection memo.
+**Phase 0 — COMPLETE** (commit `ffbe87f`): repo, pinned env, portable config, docs.
+**Phase 4 — NOT STARTED** (needs go-ahead + Phase 1–3 server results): Table 3 runner, real VIS↔IR pairing, both-degraded row + R_sys histogram, MIT in, DETR row decision, multi-seed publication runs.
 
 ---
 
@@ -49,6 +51,11 @@
 | D16 | 2026-07-07 | `dataset_requirement.md` added as the binding data contract (layout, yamls, 3-way split, filename ordinals, IR bit-depth note, calibration files). **Phase 1 grid must train on Pohang-only yamls** — if the current combined Pohang+MIT yamls (A1-2) mix MIT frames, Pohang-only yamls are required first. | Benchmark decision is Pohang-based per plan C4; a combined training set would silently change what Table 1 measures | answer A1-2; plan C4 |
 | D17 | 2026-07-07 | **Gaussian head integration = in-place conversion, no Ultralytics fork.** A loaded `DetectionModel` gets a fresh `cv4` log-variance branch added to its live `Detect` head + a class swap (`GaussianDetect`/`GaussianDetectionModel`); trainer is a thin `DetectionTrainer` subclass (4th loss item, warm-up epoch sync callback). σ parameterized as log σ² over LTRB distances in stride units (same targets as DFL), converted to pixels at inference; σ rides through NMS as extra channels. **Gradient policy defaults (A4-11 conservatism): σ branch reads detached features, NLL sees detached μ → deterministic detector trains bit-identically to baseline by construction.** Warm-up = NLL weight 0 (σ's only gradient source) — no param-group surgery. All relaxable via the `gaussian:` config block for the Phase 2 ablation. | Survives ultralytics upgrades better than a vendored fork; pretrained weights untouched; parity guaranteed, not hoped for | plan B1; scope §6.2, §11.3 B.1; verified against pinned ultralytics 8.4.90 internals |
 | D18 | 2026-07-07 | **DFL-derived uncertainty (§7.2 option (a)) emitted at inference from the same trained model** — per-coordinate std of the DFL bin distribution, appended after σ. Table 2's "DFL-derived vs explicit Gaussian" ablation therefore needs zero extra training. | The single-model ablation D1 promised, made concrete | plan B1; scope §7.2; R2 |
+| D19 | 2026-07-07 | **MC-Dropout protocol pre-fixed:** one `Dropout2d` inserted before the final 1×1 conv of each head branch (cv2 + cv3, every level); p=0.15, T=10 (config `baselines.mc_dropout`); retrained from pretrained weights; its own training results.csv IS the required deterministic row (val runs dropout-off) | Dropout isn't free on YOLO — a different deterministic model, disclosed | plan B6-3; scope §9.2, R5 |
+| D20 | 2026-07-07 | **One cross-pass/member matching protocol** (`uq/clustering.py`, shared by MC-Dropout and ensembles): greedy by descending conf; per other source, best-IoU unused same-class detection at IoU≥0.55 joins; cluster conf = mean(conf)·support/n_sources; σ = per-coordinate member std; **singletons get σ = box size** (max size-normalized uncertainty ≈ 1) — a disclosed convention, not NaN | Calibration metrics are sensitive to matching; fixed as method, not knob | plan B6-4 |
+| D21 | 2026-07-07 | **Metric definitions pre-registered in code** (`eval/metrics.py` module docstring): D-ECE (conf-vs-precision bins @IoU≥0.5), per-edge z-score coverage + interval-ECE, per-edge Gaussian NLL, AUSE + AURC (risk = 1−IoU, FP=1), OOD AUROC; mAP = local COCO-style 101-point (no pycocotools dependency). Calibration-under-shift = same metrics on corrupted caches | Kills post-hoc metric shopping (B6-5) and makes B6-6 a cache re-read | plan B6-5/B6-6; scope §12 |
+| D22 | 2026-07-07 | **Ensemble = M seed replicates trained via the Phase 1 grid runner** (resume-safe; per-member deterministic rows free in the CSV); M=5 seeds {0..4} in config; frame features for OOD taken from member 0 only (one consistent feature space) | plan B6-7 seed accounting, executed | plan B6-7; scope §9.4, R4 |
+| D23 | 2026-07-07 | **Corruptions** (fog/rain/lowlight/glare/blur/noise) via albumentations, severity 1–3, deterministic per frame from (seed, index); the seed is stamped into cache meta. **Anti-leakage rule operationalized: tuning caches and final-test caches must use different `--corrupt-seed`** | plan B5-5's train/test degradation separation, enforced by convention + traceable metadata | plan B5-5; scope §5.2, §11.3 B.6 |
 
 ## Answers received (Laksh, 2026-07-07) — §A questions
 
@@ -91,7 +98,16 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 | Mahalanobis OOD scorer (`uq/mahalanobis.py`) | **Implemented + smoke-tested** — toy separation: clean d̄ 33.9 vs degraded 59.3, 100% beyond clean 95th pct |
 | `compute_reliability()` + constants fitting (`uq/reliability.py`, §6.4 verbatim incl. empty-frame fallback, R_sys) | **Implemented + smoke-tested** — gate favored clean stream 16/16 frames (R̄ 0.81 vs 0.16) |
 | Reliability-weighted WBF fusion + homography transform (`uq/fusion.py`) | **Implemented + smoke-tested with identity H** — real IR→VIS homography blocked on calibration files (OQ-5); per-fused-box σ propagation deferred to Phase 3 |
-| Bulk prediction-cache runner (all val/test frames → npz for B5-2 ablations) | **Not built** — Phase 3 harness work; the per-frame producer (UQPredictor) exists |
+| Prediction caches (`eval/cache.py` + `scripts/build_cache.py`, gaussian/mc/ensemble sources, optional corruption, meta-stamped) | **Implemented + smoke-tested** (8 caches round-trip) + CLI verified |
+| MC-Dropout (`uq/mc_dropout.py` + `scripts/train_mc_dropout.py`; D19 protocol) | **Implemented + smoke-tested**: 6 dropout layers armed, cluster σ CV 1.62, toy deterministic mAP50-95 0.60 |
+| Deep Ensemble (`uq/ensemble.py` + `scripts/train_ensemble.py`; D22, trains via grid runner) | **Implemented + smoke-tested** (M=2 toy): member-disagreement σ CV 0.96 |
+| Shared clustering protocol (`uq/clustering.py`; D20) | **Implemented + smoke-tested** via both baselines |
+| Corruption generation (`eval/corruptions.py`, 6 conditions, albumentations 2.0.8; D23) | **Implemented + smoke-tested** (all 6 valid + changed) |
+| Pre-registered metrics (`eval/metrics.py`: D-ECE, interval-ECE/coverage, NLL, AUSE, AURC, OOD AUROC, local COCO mAP; D21) + `scripts/evaluate_uq.py` | **Implemented + smoke-tested** — finite for all 3 sources incl. the DFL §7.2 row; observed toy-scale MC/ens NLL blow-up (4003/627 vs Gaussian 2.8) = the known agreeing-passes-overconfidence effect, informative not a bug |
+| Learned gate (`eval/learned_gate.py`; D4/B4 design) | **Implemented + smoke-tested**: favors clean stream 100% (mean w_vis 0.101) |
+| Fusion-system eval + gate ablation (`eval/fusion_eval.py` + `scripts/ablate_gate.py`) | **Implemented + smoke-tested**: gated 0.739 vs blind-VIS 0.000 vs IR 0.778 mAP50-95; 6-row ablation sweep |
+| `HOW_TO_RUN.md` (per-phase runbook) | **Written; all documented CLIs verified on this machine** |
+| Phase 4 (Table 3 runner, real VIS↔IR pairing, MIT onboarding, DETR row) | **Not started** — awaiting phase gate |
 | Gaussian σ² head + β-NLL (scope §6.2) | Not started (Phase 2; CPU-side may overlap Phase 1) |
 | `compute_reliability()` (scope §6.4) | Not started (Phase 2) |
 | IR→VIS homography + WBF fusion | Not started (Phase 2; blocked on A2-8 for calibration files) |
@@ -112,14 +128,16 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 
 ## Next actions
 
-**Laksh, on the H100 server, whenever server time happens** (full command sequence: dataset_requirement.md, bottom):
-1. Clone repo, edit `config.yaml` `paths:`, `pip install -r requirements.txt -e .`, `pip freeze > requirements.lock.txt`.
-2. `python scripts/smoke_env.py` (expect CUDA True), `python scripts/smoke_benchmark.py`, `python scripts/smoke_gaussian.py`, `python scripts/smoke_uq_pipeline.py` — all four should print their OK lines on the server too.
-3. **Phase 1 GPU portion:** `audit_split` (must PASS) → `make_stride_subset` → full grid (`run_benchmark.py --data <derived-yaml>`) → `measure_fps` → `make_table1` → IR top-2 confirmation grid. Epochs/batch are set to standard values (D15); a 1-epoch dry-run first is optional tuning.
-4. **Phase 2 real-data validation (after the Phase 1 winner is known, or on yolov8s meanwhile):** train one Gaussian model on a small real Pohang subset via `uqfusion.uq.train_gaussian.train_gaussian`, plus the same variant WITHOUT the σ branch at identical settings → the §12.1 parity check (A4-11's condition: mAP within seed noise). I'll wrap this pair as a script when the split questions (OQ-1/OQ-2) are answered.
-5. Answer OQ-1/OQ-2/OQ-3 (val split, Pohang-only yamls, IR bit depth); drop calibration files at `data/pohang/calibration/` (OQ-5).
+**The canonical runbook is now [`HOW_TO_RUN.md`](HOW_TO_RUN.md)** — per-phase commands for the server, verified locally.
 
-**Then (me):** Table 1 → selection memo + §7.2 resolution (D1/D18 make it a one-model comparison) → port the Gaussian conversion to the winner if it isn't v8/11-family → **phase gate: Laksh's go-ahead for Phase 3** (baselines: MC-Dropout insertion + deep ensembles; eval harness with pre-registered metrics; cache runner; learned gate).
+**Laksh, on the H100 server, whenever server time happens:**
+1. Setup + full smoke suite (HOW_TO_RUN §0–§1; expect CUDA True and all five OK lines).
+2. **Phase 1:** audit (must PASS) → stride → full grid → FPS → Table 1 → IR top-2 confirm (HOW_TO_RUN §2). Send back `table1.md`, `table1_ir.md`, audit report.
+3. **Phase 2:** Gaussian training on the winner + the §12.1 parity row (HOW_TO_RUN §3).
+4. **Phase 3:** baselines → caches → `evaluate_uq` (Table 2) → `ablate_gate` (HOW_TO_RUN §4).
+5. Answer the OQ table above (OQ-1/2/3 gate real-data training; OQ-5 calibration files gate the homography).
+
+**Then (me):** selection memo + §7.2 resolution from Table 1 → port Gaussian conversion if the winner isn't v8/11-family → analyze Table 2/ablation outputs → **phase gate: Laksh's go-ahead for Phase 4** (Table 3 runner with real VIS↔IR pairing + homography, both-degraded row + R_sys histogram, MIT onboarding, DETR row decision, multi-seed publication runs, landscape re-check per plan C1).
 
 ## Run log
 
@@ -127,3 +145,4 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 |---|---|---|---|---|---|
 | 2026-07-07 | 2 | `smoke_gaussian` (CPU, synthetic heteroscedastic, yolov8n@320, 10 ep, warmup 2 + ramp 2) | post-`37bac1e` working tree | **GREEN** — nll/epoch [0, 0, 0.06, −0.11, −0.15, −0.17, −0.18, −0.14, −0.15, −0.11]; σ: 4.47px CV 0.42; noise-direction PASS (0.0639 > 0.0538); toy mAP50 0.97 | Negative NLL is correct (log σ² < 0 when σ < 1 stride unit). Deterministic: identical trajectory across re-runs |
 | 2026-07-07 | 2 | `smoke_uq_pipeline` (CPU, same weights) | ditto | **GREEN** — O3 separation clean 33.9 / degraded 59.3 (100% > clean p95); λ=2.00, μ_d=48.8, τ=4.68; gate 16/16 frames; empty-frame fallback exercised | Blank-frame R=0 is correct here (blank IS OOD for the toy model) — the real "clear empty sea = reliable" semantics can only be tested on real data with empty-sea frames in the clean fit set |
+| 2026-07-07 | 3 | `smoke_phase3` (CPU: MC p=0.15/T=5 + M=2 ensemble @10 ep; 8 caches; full metric/gate/fusion chain) | post-`e75c110` working tree | **GREEN** — all 6 corruptions valid; MC σ CV 1.62, ens σ CV 0.96; metrics finite for all sources incl. DFL row; learned gate 100% clean-preference; systems mAP50-95: vis(blind) 0.000 / ir 0.778 / naive 0.738 / gated 0.739 / learned 0.740; 6-row ablation | Toy-scale notes: (1) MC/ens NLL blow-up (4003/627 vs Gaussian 2.8) = agreeing-passes overconfidence — the contrast Table 2 exists to measure, exaggerated at T=5/tiny models; (2) fully-blind degraded stream → all combination rules converge in the ablation (expected: R≈0 condemns the stream under every rule); differences emerge under partial degradation at real scale. Two smoke-design fixes en route: gate training needs both outcomes represented (interleaved degradation), ensemble smoke CSV must live under the smoke root (resume-skip reused stale members) |

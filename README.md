@@ -8,6 +8,7 @@ UG Research Fellowship project, Thapar Institute of Engineering and Technology (
 - [`scope.md`](scope.md) — source of truth: motivation, architecture, datasets, evaluation plan.
 - [`docs/plan-2026-07-07-kickoff.md`](docs/plan-2026-07-07-kickoff.md) — approved architecture review + backbone selection plan.
 - [`progress.md`](progress.md) — current phase, decision log, open questions, run log.
+- [`HOW_TO_RUN.md`](HOW_TO_RUN.md) — **per-phase runbook**: exact commands for every phase, dev machine and GPU server.
 
 ## Repository layout
 
@@ -80,6 +81,14 @@ Smoke gates (CPU, synthetic heteroscedastic data — run before any GPU time):
 ```bash
 python scripts/smoke_gaussian.py      # §18-2 gate: trains, warm-up engages, σ non-degenerate & tracks noise
 python scripts/smoke_uq_pipeline.py   # OOD separation -> reliability gate -> WBF fusion, end-to-end
+```
+
+## Phase 3 — baselines + evaluation harness
+
+`src/uqfusion/uq/`: `mc_dropout.py` (pre-fixed dropout insertion + T-pass predictor), `ensemble.py` (M seed replicates via the grid runner), `clustering.py` (the one shared cross-pass matching protocol). `src/uqfusion/eval/`: `cache.py` (prediction caches — every downstream number reads from these), `corruptions.py` (6 albumentations conditions, seed-stamped), `metrics.py` (pre-registered: D-ECE, interval-ECE/coverage, NLL, AUSE/AURC, OOD AUROC, local COCO mAP), `learned_gate.py` (§7.5 upper bound), `fusion_eval.py` (system comparison + §6.4 gate ablations). CLIs: `train_mc_dropout` / `train_ensemble` / `build_cache` / `evaluate_uq` / `ablate_gate`.
+
+```bash
+python scripts/smoke_phase3.py        # gate: baselines, caches, corruptions, metrics, learned gate, fusion eval
 ```
 
 ## License note
