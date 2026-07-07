@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-src/uqfusion/__init__.py
-src/uqfusion/config.py
-src/uqfusion.egg-info/PKG-INFO
-src/uqfusion.egg-info/SOURCES.txt
-src/uqfusion.egg-info/dependency_links.txt
-src/uqfusion.egg-info/top_level.txt

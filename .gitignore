@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+*.egg-info/
 
 # data & outputs — never committed; expected layout documented in README.md
 data/
