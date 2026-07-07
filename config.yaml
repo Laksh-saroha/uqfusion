@@ -32,9 +32,9 @@ benchmark:
   variants: [yolov8s, yolov9s, yolov10s, yolo11s, yolo12s, yolo26s]   # plan C2
   seeds: [0, 1, 2]
   imgsz: 640
-  epochs: 60                   # PENDING: finalize after 1-epoch timing dry-run
-  patience: 15
-  batch: 32                    # PENDING dry-run: largest batch fitting ALL variants on the H100, then pinned
+  epochs: 100                  # standard fine-tuning default; tweak after first server runs if needed
+  patience: 20
+  batch: 32                    # sized for the H100; drop if any variant OOMs (largest-common-fit rule)
   optimizer: auto              # uniform rule: per-model tooling default, disclosed (plan C5)
   pretrained: true             # all rows fine-tune from official COCO weights (identical rule)
   train_stride: 2              # approved A2-6; applies to TRAINING frames only
@@ -48,6 +48,15 @@ benchmark:
 data_audit:
   min_gap_frames: 100          # ~10 s at 10 Hz: min temporal gap between train and val/test frames of the same run
 
+# --- Gaussian σ² head, O2 (scope §6.2; plan B1; decisions D1) ----------------
+gaussian:
+  beta: 0.5                    # β-NLL exponent (R10); 0 = plain NLL
+  nll_gain: 1.0                # weight of the NLL term in the summed loss
+  warmup_epochs: 5             # μ trains alone first; σ frozen via zero NLL weight (R11)
+  ramp_epochs: 5               # linear NLL-weight ramp after warm-up
+  sigma_detach_features: true  # σ branch reads detached neck features (baseline-identical detector grads)
+  nll_detach_mu: true          # NLL trains σ only; μ stays owned by DFL/CIoU (D1 attribution guarantee)
+
 # --- Tiny-subset smoke paths (mandatory for every trainable component) ------
 smoke:
   variant: yolov8n             # smallest model — smoke tests exercise plumbing, not quality
@@ -55,6 +64,8 @@ smoke:
   epochs: 2
   imgsz: 320
   batch: 4
+  gaussian_epochs: 10          # smoke_gaussian: 2 warm-up + 2 ramp + 6 active NLL epochs
+  hetero_images: 48
 
 # --- Reliability score, scope §6.4 (plan B5: constants are FIT ON VALIDATION,
 #     via pre-registered rules — never hand-set). Rules resolve to numbers in
@@ -64,8 +75,7 @@ reliability:
   mahalanobis_mu_rule: "95th percentile of clean-val Mahalanobis distances"
   mahalanobis_tau_rule: "scaled from clean-val IQR"
   combination: multiplicative  # ablate vs min / weighted-geometric (plan B5-3)
-  alpha: 1.0                   # temporal smoothing OFF (=1.0) by default; PENDING A4-13
-  beta_nll: 0.5                # β-NLL weight (scope §6.2, R10)
+  alpha: 1.0                   # temporal smoothing OFF — per-frame headline protocol (decision D14)
 
 tracking:
   backend: tensorboard         # local default, no account needed; wandb optional (scope §11.2)

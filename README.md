@@ -64,6 +64,24 @@ This repo is developed and smoke-tested on CPU; **all real training runs on a GP
 
 Data contract and the exact server run order: [`dataset_requirement.md`](dataset_requirement.md). In short: `smoke_env` → `smoke_benchmark` → **`audit_split` (must PASS)** → `make_stride_subset` → timing dry-run → full grid → `measure_fps` → `make_table1`. The grid is resume-safe: re-running skips (variant, seed) pairs already in the results CSV.
 
+## Phase 2 — single-pass UQ (core contribution)
+
+`src/uqfusion/uq/`:
+
+- `gaussian.py` — σ² branch (`cv4`) added **alongside** the untouched DFL head by in-place conversion of a loaded model (no Ultralytics fork), + β-NLL loss with warm-up/ramp. Gradient policy: detached features + detached μ by default, so the deterministic detector trains bit-identically to baseline (`gaussian:` block in config to relax). Also emits DFL-derived uncertainty (scope §7.2 option (a)) from the same model at inference.
+- `train_gaussian.py` — stock Ultralytics training loop via a thin custom trainer (adds the 4th loss item + warm-up epoch sync).
+- `infer.py` — `UQPredictor`: one forward pass → boxes + per-box σ (rides through NMS as extra channels) + pooled neck features; the producer for cached-prediction ablations.
+- `mahalanobis.py` — frame-level OOD scorer (Ledoit-Wolf), fit on clean features only.
+- `reliability.py` — scope §6.4 verbatim: size-normalized `u_i`, confidence-weighted `U_box`, calibrated `O`, combination rules, empty-frame fallback, temporal smoothing, fusion weights + absolute `R_sys`.
+- `fusion.py` — IR→VIS homography + reliability-weighted WBF.
+
+Smoke gates (CPU, synthetic heteroscedastic data — run before any GPU time):
+
+```bash
+python scripts/smoke_gaussian.py      # §18-2 gate: trains, warm-up engages, σ non-degenerate & tracks noise
+python scripts/smoke_uq_pipeline.py   # OOD separation -> reliability gate -> WBF fusion, end-to-end
+```
+
 ## License note
 
 Built on Ultralytics (AGPL-3.0) — the fork/extension and this repo inherit AGPL-3.0 obligations for public distribution (confirmation pending, progress.md question A3-10).
