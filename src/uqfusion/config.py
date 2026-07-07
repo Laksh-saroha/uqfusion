@@ -67,6 +67,27 @@ def load_config(path: str | os.PathLike | None = None) -> dict[str, Any]:
     return cfg
 
 
+def resolve_data_yaml(cfg: dict[str, Any], data: str) -> str:
+    """Map a CLI --data value to a dataset yaml path.
+
+    'vis' / 'ir' are aliases for the Pohang per-modality yamls (scope §5.1);
+    anything else is taken as an explicit path (e.g. a derived stride yaml).
+    """
+    aliases = {
+        "vis": cfg["datasets"]["pohang"]["vis_yaml"],
+        "ir": cfg["datasets"]["pohang"]["ir_yaml"],
+    }
+    resolved = aliases.get(data, data)
+    if resolved is None:
+        raise ValueError(f"dataset alias '{data}' resolves to null in config.yaml")
+    if not Path(resolved).is_file():
+        raise FileNotFoundError(
+            f"dataset yaml not found: {resolved} — is the data present on this machine "
+            "and laid out per dataset_requirement.md?"
+        )
+    return str(resolved)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Structural smoke test: load, resolve, report. Fails on malformed config;
     warns (does not fail) when data folders are absent, since the datasets only

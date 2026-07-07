@@ -34,15 +34,23 @@ benchmark:
   imgsz: 640
   epochs: 60                   # PENDING: finalize after 1-epoch timing dry-run
   patience: 15
-  batch: 16                    # PENDING: largest batch fitting ALL variants, then pinned
+  batch: 32                    # PENDING dry-run: largest batch fitting ALL variants on the H100, then pinned
   optimizer: auto              # uniform rule: per-model tooling default, disclosed (plan C5)
-  train_stride: 2              # PENDING A2-6; applies to TRAINING frames only
+  pretrained: true             # all rows fine-tune from official COCO weights (identical rule)
+  train_stride: 2              # approved A2-6; applies to TRAINING frames only
   deterministic: true
   amp: true
   workers: 8
+  fps_frames: 500              # FPS protocol (plan C5)
+  fps_warmup: 50
+
+# --- Split audit (Phase 1; plan B6-2 / decision D6-rev) ----------------------
+data_audit:
+  min_gap_frames: 100          # ~10 s at 10 Hz: min temporal gap between train and val/test frames of the same run
 
 # --- Tiny-subset smoke paths (mandatory for every trainable component) ------
 smoke:
+  variant: yolov8n             # smallest model — smoke tests exercise plumbing, not quality
   n_images: 32
   epochs: 2
   imgsz: 320

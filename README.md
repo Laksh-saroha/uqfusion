@@ -58,7 +58,11 @@ The contract the code relies on: `data_vis.yaml` and `data_ir.yaml` exist, are v
 
 ## Compute model
 
-This repo is developed and smoke-tested on CPU; **all real training runs on a GPU Jupyter server**. Phase 1's first GPU action is a 1-epoch timing dry-run to calibrate the benchmark budget before committing the full grid (plan §C5).
+This repo is developed and smoke-tested on CPU; **all real training runs on a GPU Jupyter server** (H100). Phase 1's first GPU action is a 1-epoch timing dry-run to calibrate the benchmark budget before committing the full grid (plan §C5).
+
+## Phase 1 — backbone benchmark
+
+Data contract and the exact server run order: [`dataset_requirement.md`](dataset_requirement.md). In short: `smoke_env` → `smoke_benchmark` → **`audit_split` (must PASS)** → `make_stride_subset` → timing dry-run → full grid → `measure_fps` → `make_table1`. The grid is resume-safe: re-running skips (variant, seed) pairs already in the results CSV.
 
 ## License note
 
