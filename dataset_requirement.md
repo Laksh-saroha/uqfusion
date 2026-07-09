@@ -66,6 +66,25 @@ Place the Pohang sensor calibration (camera intrinsics + VIS↔IR extrinsics, an
 
 Same contract as above under `data/mit_marine/` when the annotation set is ready. Still needed from you: how many images are annotated, and their QA status.
 
+**Multi-camera layout (Laksh's Q, 2026-07-08).** The rig varies by run (some runs: left/center/right VIS + IR; others: left/right VIS + IR). Yes — two modality trees is exactly right, **but the flattening must not destroy run/camera/timestamp identity**, because (a) each (IR cam, VIS cam) pair has its own homography, (b) the split audit groups frames by run for the temporal-leakage check, and (c) VIS 12 fps vs IR 30 fps means pairing is by timestamp, not by filename equality. Concretely:
+
+```
+data/mit_marine/
+├── data_vis.yaml / data_ir.yaml       # train/val/test txt lists — POOL ALL cameras (more detection data)
+├── images/vis/<run>/<camera>/<timestamp>.jpg    # camera ∈ {vis_left, vis_center, vis_right}
+├── images/ir/<run>/<camera>/<timestamp>.jpg     # camera ∈ {ir_left, ir_right}
+├── labels/...                          # mirrors images/
+├── pairs.csv                           # the "link": vis_path, ir_path, run, cam_pair, dt_ms
+└── calibration/H_<ircam>_to_<viscam>.json   # docs/calibration_and_registration.md
+```
+
+Rules:
+- **Detection training pools every camera** (they're the same visual domain — free data). The per-modality yamls list all of it.
+- **Fusion uses only `pairs.csv` frames.** Recommend fixing ONE canonical camera pair — **left VIS ↔ left IR**, present in both rig configurations — so exactly one homography per rig state is needed. Center/right frames still train detection; they just don't enter fusion pairs.
+- Pair by nearest timestamp, tolerance ≤ 42 ms (half the 12 fps VIS period); record `dt_ms` per pair.
+- Runs with different rig configs are fine — the camera set simply varies per run directory.
+- A `scripts/make_pairs.py` generator (+ the homography estimator) is planned for MIT onboarding — don't hand-build pairs.csv.
+
 ---
 
 ### Server run order for Phase 1 (also in README)
