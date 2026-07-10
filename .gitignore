@@ -7,6 +7,8 @@ __pycache__/
 
 # data & outputs — never committed; expected layout documented in README.md
 data/
+# prepared Pohang dataset (~37 GB) — uploaded to the server out-of-band, not via git
+Pohang_dataset/
 runs/
 wandb/
 

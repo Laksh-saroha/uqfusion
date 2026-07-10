@@ -11,6 +11,25 @@ Every command below runs from the repo root. Everything lands under `runs/` (git
 
 ---
 
+## What to upload to the server (per phase)
+
+The **repo** (git clone/pull) carries all code, `config.yaml`, scripts, and `yolov8n.pt` (smoke). The **dataset is separate** (gitignored) — upload the prepared Pohang trees as each phase needs them. The dataset was prepared locally by `scripts/prepare_pohang.py` (IR letterboxed to 640×640; both modalities re-split into leakage-free per-run blocks; audit PASSES). COCO pretrained weights for the 6 variants auto-download on first run (needs internet on the server); if the server is offline, pre-stage them.
+
+**Placement / paths (resolves OQ-9):** put the prepared dataset at `<data_root>/pohang/` so that `<data_root>/pohang/data_vis.yaml` and `.../data_ir.yaml` exist (that's what `config.yaml` `datasets.pohang.*` points to). Then set the single `path:` line in each yaml to the server location of `pohang/visible` and `pohang/infrared` (currently an absolute dev-machine path). Nothing else in the yamls changes — the `train/val/test.txt` entries are relative to `path:`.
+
+| Phase | New data to upload | Size | Cumulative on server |
+|---|---|---|---|
+| Setup + smoke (§0–1) | nothing beyond the repo | — | repo only |
+| **Phase 1 — VIS grid** (§2 steps 1–5) | `pohang/visible/` — `images/<run>/`, `labels/<run>/`, `train\|val\|test.txt`, `data_vis.yaml` | ~33 GB | repo + visible |
+| **Phase 1 — IR confirm** (§2 step 6) | `pohang/infrared/` — same structure + `data_ir.yaml` | ~4.5 GB | + infrared |
+| **Phase 2** (§3) | — (reuses visible + infrared) | — | same |
+| **Phase 3** (§4) | — (corruptions are generated on the fly from the images) | — | same |
+| **Phase 4** (§5) | `pohang/meta/<run>/calibration/` (per-run intrinsics+extrinsics, for the IR→VIS homography) + `pohang/paired/*.csv` (VIS↔IR pairs); MIT dataset when ready | ~0.3 GB + MIT | + calibration + pairs + MIT |
+
+**Do NOT upload** (keep as local backup only): `infrared_orig/` (~4.5 GB, the pre-letterbox 640×512 IR originals — needed only to re-export IR) and the full-res VIS originals (the `imgsz`>640 small-object lever, archived off the dev machine; upload only if you later train at 960+ from originals). See [`Pohang_dataset/IR_PREPROCESSING.md`](Pohang_dataset/IR_PREPROCESSING.md) for the IR conversion record.
+
+---
+
 ## 0. One-time setup (per machine)
 
 ```bash
@@ -44,7 +63,13 @@ Expected final lines: `SMOKE OK`, `GAUSSIAN SMOKE OK`, `UQ PIPELINE SMOKE OK`, `
 ## 2. Phase 1 — backbone benchmark → Table 1 (server)
 
 ```bash
-# 1. Verify the split is leakage-free (MUST exit 0; report lands in runs/audit/)
+# 1. Verify the split is leakage-free (MUST exit 0; report lands in runs/audit/).
+#    The split was already re-built + audited GREEN on the prep machine, and the
+#    audit is deterministic (filename-based), so expect an instant PASS. Its job
+#    here is a path/upload sanity gate: a FAIL means config paths or the upload
+#    are wrong, not the split. It reads filenames only (does not stat every
+#    image), so also confirm counts, e.g. `wc -l pohang/visible/train.txt` vs
+#    images on disk, to catch a partial upload.
 python scripts/audit_split.py
 
 # 2. Stride-subsample the training frames (approved A2-6); prints the derived yaml path
