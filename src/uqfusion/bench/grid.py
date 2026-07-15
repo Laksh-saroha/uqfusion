@@ -9,6 +9,7 @@ on a shared server needs that more than elegance.
 from __future__ import annotations
 
 import csv
+import hashlib
 import subprocess
 import time
 from pathlib import Path
@@ -17,6 +18,7 @@ RESULT_FIELDS = [
     "variant", "seed", "precision", "recall", "map50", "map50_95",
     "params_m", "gflops", "epochs_cfg", "train_time_s", "run_dir",
     "ultralytics_version", "torch_version", "git_commit",
+    "data_yaml", "split_fingerprint", "classes",
 ]
 
 
@@ -35,16 +37,51 @@ def _git_commit() -> str:
         return "unknown"
 
 
-def _completed(csv_path: Path) -> set[tuple[str, str]]:
+def split_fingerprint(data_yaml: str | Path) -> str:
+    """Machine-independent identity of the train+val frame sets.
+
+    Hashes sorted `run/filename` ids (not absolute paths, not txt bytes), so the
+    same split fingerprints identically across machines and list formats, and a
+    re-split — the failure mode this guards against — changes it. Test is
+    excluded: Phase 1 never touches it.
+    """
+    from uqfusion.data.lists import load_data_yaml, run_key, split_image_list
+
+    data = load_data_yaml(data_yaml)
+    h = hashlib.sha256()
+    for split in ("train", "val"):
+        ids = sorted(f"{run_key(p)}/{p.name}" for p in split_image_list(data, split))
+        h.update(f"{split}:{len(ids)}\n".encode())
+        h.update("\n".join(ids).encode())
+    return h.hexdigest()[:12]
+
+
+def _completed(csv_path: Path, classes_tag: str) -> dict[tuple[str, str], str]:
+    """{(variant, seed): split_fingerprint} for rows already in the CSV.
+    Rows whose class filter differs from the current run — or that predate
+    fingerprint/classes stamping — get '' so the mix-refusal trips on them."""
     if not csv_path.is_file():
-        return set()
+        return {}
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
-        return {(row["variant"], row["seed"]) for row in csv.DictReader(f)}
+        return {(row["variant"], row["seed"]):
+                ((row.get("split_fingerprint") or "")
+                 if (row.get("classes") or "all") == classes_tag else "")
+                for row in csv.DictReader(f)}
 
 
 def _append_row(csv_path: Path, row: dict) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     new_file = not csv_path.is_file()
+    if not new_file:
+        # A CSV written under an older RESULT_FIELDS would silently misalign
+        # columns on append — refuse instead.
+        with open(csv_path, "r", encoding="utf-8", newline="") as f:
+            header = next(csv.reader(f), [])
+        if header != RESULT_FIELDS:
+            raise RuntimeError(
+                f"{csv_path} header {header} != current RESULT_FIELDS — "
+                "written by an older schema. Use a fresh --out-csv."
+            )
     with open(csv_path, "a", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=RESULT_FIELDS)
         if new_file:
@@ -82,6 +119,7 @@ def run_grid(
     workers: int | None = None,
     out_csv: str | Path | None = None,
     run_prefix: str = "bench",
+    classes: list[int] | None = None,
 ) -> Path:
     """Run the grid; return the results CSV path. Every argument defaults to config.yaml."""
     import torch
@@ -100,11 +138,25 @@ def run_grid(
     out_csv = Path(out_csv) if out_csv else out_root / "benchmark_results.csv"
     device = resolve_device(cfg)
     commit = _git_commit()
-    done = _completed(out_csv)
+    fingerprint = split_fingerprint(data_yaml)
+    classes_tag = " ".join(str(c) for c in classes) if classes else "all"
+    done = _completed(out_csv, classes_tag)
+
+    # A row from a different (or unstamped) split — or a different class
+    # filter — must never be silently skipped as "done" or averaged into the
+    # same CSV: refuse to mix.
+    stale = sorted(k for k, fp in done.items() if fp != fingerprint)
+    if stale:
+        raise RuntimeError(
+            f"{out_csv} holds {len(stale)} row(s) whose split_fingerprint/classes "
+            f"!= current ('{fingerprint}', classes '{classes_tag}') (e.g. {stale[0]}): "
+            f"the CSV belongs to a different experiment. "
+            f"Quarantine it (mv) or pass a fresh --out-csv before running this grid."
+        )
 
     for variant in variants:
         for seed in seeds:
-            if (variant, str(seed)) in done:
+            if done.get((variant, str(seed))) == fingerprint:
                 print(f"[grid] skip {variant} seed {seed} — already in {out_csv.name}")
                 continue
             name = f"{run_prefix}_{variant}_seed{seed}"
@@ -124,6 +176,7 @@ def run_grid(
                 data=str(data_yaml), epochs=epochs, imgsz=imgsz, batch=batch,
                 seed=seed, deterministic=b["deterministic"], optimizer=b.get("optimizer", "auto"),
                 patience=b["patience"], amp=b["amp"], workers=workers, device=device,
+                classes=classes,
                 project=str(out_root / "runs"), name=name, exist_ok=True, verbose=True,
             )
             train_time = time.time() - t0
@@ -134,6 +187,7 @@ def run_grid(
             eval_model = YOLO(str(best)) if best and Path(str(best)).is_file() else model
             metrics = eval_model.val(
                 data=str(data_yaml), imgsz=imgsz, device=device, split="val",
+                classes=classes,
                 project=str(out_root / "runs"), name=f"{name}_val", exist_ok=True,
             )
 
@@ -146,6 +200,8 @@ def run_grid(
                 "run_dir": str(out_root / "runs" / name),
                 "ultralytics_version": ultralytics.__version__,
                 "torch_version": torch.__version__, "git_commit": commit,
+                "data_yaml": str(data_yaml), "split_fingerprint": fingerprint,
+                "classes": classes_tag,
             }
             _append_row(out_csv, row)
             print(f"[grid] {name} done in {train_time / 60:.1f} min -> {out_csv}")

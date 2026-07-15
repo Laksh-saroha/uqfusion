@@ -55,6 +55,22 @@ def make_table1(
     by_variant = load_results(results_csv)
     if not by_variant:
         raise ValueError(f"no rows in {results_csv}")
+    fingerprints = {(r.get("split_fingerprint") or "") for rows in by_variant.values() for r in rows}
+    if len(fingerprints) > 1:
+        raise ValueError(
+            f"{results_csv} mixes rows from different splits "
+            f"(fingerprints: {sorted(fingerprints)}) — a mean over them is meaningless. "
+            "Separate the CSVs before building Table 1."
+        )
+    fingerprint = next(iter(fingerprints))
+    class_tags = {(r.get("classes") or "all") for rows in by_variant.values() for r in rows}
+    if len(class_tags) > 1:
+        raise ValueError(
+            f"{results_csv} mixes rows with different class filters "
+            f"({sorted(class_tags)}) — metrics are not comparable. "
+            "Separate the CSVs before building Table 1."
+        )
+    classes_tag = next(iter(class_tags))
     fps = load_fps(fps_csv)
 
     header = (
@@ -77,8 +93,11 @@ def make_table1(
     lines.append("")
     lines.append(
         f"*Generated from `{Path(results_csv).name}` — ultralytics {meta.get('ultralytics_version', '?')}, "
-        f"torch {meta.get('torch_version', '?')}, commit {meta.get('git_commit', '?')}. "
-        f"Mean ± std over seeds; identical data/split/imgsz/epochs/batch across rows (plan C5).*"
+        f"torch {meta.get('torch_version', '?')}, commit {meta.get('git_commit', '?')}, "
+        f"split fingerprint {fingerprint or 'unstamped (pre-provenance CSV)'}, "
+        f"classes {classes_tag}. "
+        f"Mean ± std over seeds; identical data/split/imgsz/epochs/batch across rows "
+        f"(plan C5; single fingerprint enforced).*"
     )
     table = "\n".join(lines)
 

@@ -32,6 +32,9 @@ def main() -> int:
     parser.add_argument("--batch", type=int, default=None, help="override benchmark.batch (dry-runs)")
     parser.add_argument("--out-csv", default=None, help="override results CSV path (e.g. IR confirmation grid)")
     parser.add_argument("--run-prefix", default="bench", help="run-name prefix (use e.g. 'ir' for the IR grid)")
+    parser.add_argument("--classes", nargs="*", type=int, default=None,
+                        help="train/eval only these class ids (e.g. --classes 0 = ship-only); "
+                             "default: all classes")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -39,7 +42,7 @@ def main() -> int:
     out_csv = run_grid(
         cfg, data_yaml,
         variants=args.variants, seeds=args.seeds, epochs=args.epochs, batch=args.batch,
-        out_csv=args.out_csv, run_prefix=args.run_prefix,
+        out_csv=args.out_csv, run_prefix=args.run_prefix, classes=args.classes,
     )
     print(f"[grid] results CSV: {out_csv}")
     return 0
