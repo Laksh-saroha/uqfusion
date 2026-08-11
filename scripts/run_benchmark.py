@@ -30,11 +30,24 @@ def main() -> int:
     parser.add_argument("--seeds", nargs="*", type=int, default=None, help="override benchmark.seeds")
     parser.add_argument("--epochs", type=int, default=None, help="override benchmark.epochs (dry-runs)")
     parser.add_argument("--batch", type=int, default=None, help="override benchmark.batch (dry-runs)")
+    parser.add_argument("--workers", type=int, default=None,
+                        help="override benchmark.workers (config's 2 is the server /dev/shm cap; "
+                             "a local box with real shared memory wants more)")
     parser.add_argument("--out-csv", default=None, help="override results CSV path (e.g. IR confirmation grid)")
     parser.add_argument("--run-prefix", default="bench", help="run-name prefix (use e.g. 'ir' for the IR grid)")
     parser.add_argument("--classes", nargs="*", type=int, default=None,
                         help="train/eval only these class ids (e.g. --classes 0 = ship-only); "
                              "default: all classes")
+    parser.add_argument("--mosaic", type=float, default=None,
+                        help="mosaic augmentation probability 0.0-1.0 (train arg); "
+                             "default: ultralytics default")
+    parser.add_argument("--close-mosaic", type=int, default=None,
+                        help="disable mosaic for the final N epochs (train arg); "
+                             "0 = keep mosaic on the whole run (clean ablation); "
+                             "default: ultralytics default (10)")
+    parser.add_argument("--no-resume", action="store_true",
+                        help="restart an interrupted run at epoch 0 instead of continuing "
+                             "from its weights/last.pt (default: resume)")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -42,7 +55,9 @@ def main() -> int:
     out_csv = run_grid(
         cfg, data_yaml,
         variants=args.variants, seeds=args.seeds, epochs=args.epochs, batch=args.batch,
+        workers=args.workers,
         out_csv=args.out_csv, run_prefix=args.run_prefix, classes=args.classes,
+        mosaic=args.mosaic, close_mosaic=args.close_mosaic, resume=not args.no_resume,
     )
     print(f"[grid] results CSV: {out_csv}")
     return 0

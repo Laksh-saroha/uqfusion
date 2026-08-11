@@ -120,8 +120,16 @@ def run_grid(
     out_csv: str | Path | None = None,
     run_prefix: str = "bench",
     classes: list[int] | None = None,
+    mosaic: float | None = None,
+    close_mosaic: int | None = None,
+    resume: bool = True,
 ) -> Path:
-    """Run the grid; return the results CSV path. Every argument defaults to config.yaml."""
+    """Run the grid; return the results CSV path. Every argument defaults to config.yaml.
+
+    resume=True picks an interrupted run back up from its own weights/last.pt instead of
+    restarting it at epoch 0. Grid-level resume only ever skipped whole (variant, seed)
+    rows, so a machine that died 90 epochs into yolo26x threw all 90 away.
+    """
     import torch
     import ultralytics
     from ultralytics import YOLO
@@ -160,9 +168,16 @@ def run_grid(
                 print(f"[grid] skip {variant} seed {seed} — already in {out_csv.name}")
                 continue
             name = f"{run_prefix}_{variant}_seed{seed}"
-            print(f"[grid] === {name}: {epochs} epochs, imgsz {imgsz}, batch {batch}, data {data_yaml}")
+            # An interrupted run leaves weights/last.pt behind; the row is absent from the
+            # CSV (only written after val), so we land here with a checkpoint to continue.
+            last_ckpt = out_root / "runs" / name / "weights" / "last.pt"
+            resuming = resume and last_ckpt.is_file()
+            if resuming:
+                print(f"[grid] === {name}: RESUME from {last_ckpt}")
+            else:
+                print(f"[grid] === {name}: {epochs} epochs, imgsz {imgsz}, batch {batch}, data {data_yaml}")
             weights = f"{variant}.pt" if b.get("pretrained", True) else f"{variant}.yaml"
-            model = YOLO(weights)
+            model = YOLO(str(last_ckpt)) if resuming else YOLO(weights)
             params = sum(p.numel() for p in model.model.parameters())
             try:
                 from ultralytics.utils.torch_utils import get_flops
@@ -172,19 +187,47 @@ def run_grid(
                 gflops = float("nan")
 
             t0 = time.time()
-            model.train(
-                data=str(data_yaml), epochs=epochs, imgsz=imgsz, batch=batch,
-                seed=seed, deterministic=b["deterministic"], optimizer=b.get("optimizer", "auto"),
-                patience=b["patience"], amp=b["amp"], workers=workers, device=device,
-                classes=classes,
-                project=str(out_root / "runs"), name=name, exist_ok=True, verbose=True,
-            )
+            # mosaic is a train-only hyperparameter (augmentation probability);
+            # left unset -> Ultralytics default. Not stamped in the CSV schema —
+            # the exact value lands in each run dir's args.yaml, and separate
+            # --out-csv/--run-prefix keep ablation arms apart.
+            extra = {}
+            if mosaic is not None:
+                extra["mosaic"] = mosaic
+            if close_mosaic is not None:
+                extra["close_mosaic"] = close_mosaic
+            if resuming:
+                # resume=True makes Ultralytics reload epoch/optimiser/EMA state and every
+                # hyperparameter from the checkpoint's own args.yaml — passing them again
+                # here would be ignored at best and conflict at worst.
+                try:
+                    model.train(resume=True)
+                except AssertionError as exc:
+                    # "...training to N epochs is finished, nothing to resume." The run
+                    # completed but died before its row was written; fall through to val.
+                    if "nothing to resume" not in str(exc):
+                        raise
+                    print(f"[grid] {name} was already trained out — validating only")
+            else:
+                model.train(
+                    data=str(data_yaml), epochs=epochs, imgsz=imgsz, batch=batch,
+                    seed=seed, deterministic=b["deterministic"], optimizer=b.get("optimizer", "auto"),
+                    patience=b["patience"], amp=b["amp"], workers=workers, device=device,
+                    classes=classes, **extra,
+                    project=str(out_root / "runs"), name=name, exist_ok=True, verbose=True,
+                )
+            # Wall time of THIS invocation. A resumed run therefore under-reports; the
+            # run dir's own results.csv holds the per-epoch cumulative timing if the
+            # total matters (it does not for Table 1, which ranks accuracy).
             train_time = time.time() - t0
 
             # Validate the best checkpoint explicitly so the reported numbers are
             # unambiguous (not "whatever epoch the trainer last printed").
             best = getattr(getattr(model, "trainer", None), "best", None)
-            eval_model = YOLO(str(best)) if best and Path(str(best)).is_file() else model
+            if not (best and Path(str(best)).is_file()):
+                # No live trainer (resume that had nothing left to do): take best.pt off disk.
+                best = out_root / "runs" / name / "weights" / "best.pt"
+            eval_model = YOLO(str(best)) if Path(str(best)).is_file() else model
             metrics = eval_model.val(
                 data=str(data_yaml), imgsz=imgsz, device=device, split="val",
                 classes=classes,

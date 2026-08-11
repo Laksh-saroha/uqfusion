@@ -20,6 +20,7 @@ datasets:
     root: "{data_root}/pohang"
     vis_yaml: "{data_root}/pohang/data_vis.yaml"   # per-modality YOLO format (scope §5.1)
     ir_yaml: "{data_root}/pohang/data_ir.yaml"
+  
   mit_marine:                  # onboarded Phase 2+ (plan C4); yamls filled then
     root: "{data_root}/mit_marine"
     vis_yaml: null
@@ -29,8 +30,43 @@ device: auto                   # auto | cpu | "0" | "0,1"
 
 # --- Phase 1: backbone benchmark (plan C5) ----------------------------------
 benchmark:
-  variants: [yolov8s, yolov9s, yolov10s, yolo11s, yolo12s, yolo26s]   # plan C2
-  seeds: [0, 1, 2]
+  # Full size ladder per family (nano→x). Per-family scale letters differ:
+  # v9 uses t/s/m/c/e (no n/l/x); v10 adds a `b` between s and l. All 31
+  # variants verified to build in ultralytics 8.4.90 (scripts/smoke_env.py).
+  # Supersedes the s-only shortlist of plan C2 / decision D8.
+  variants:
+    - yolov8n
+    - yolov8s
+    - yolov8m
+    - yolov8l
+    - yolov8x
+    - yolov9t
+    - yolov9s
+    - yolov9m
+    - yolov9c
+    - yolov9e
+    - yolov10n
+    - yolov10s
+    - yolov10m
+    - yolov10b
+    - yolov10l
+    - yolov10x
+    - yolo11n
+    - yolo11s
+    - yolo11m
+    - yolo11l
+    - yolo11x
+    - yolo12n
+    - yolo12s
+    - yolo12m
+    - yolo12l
+    - yolo12x
+    - yolo26n
+    - yolo26s
+    - yolo26m
+    - yolo26l
+    - yolo26x
+  seeds: [0]                   # single-seed Phase 1 sweep across the 31-variant ladder (D8 amended); seed variance spent later on the winner
   imgsz: 640
   epochs: 100                  # standard fine-tuning default; tweak after first server runs if needed
   patience: 20

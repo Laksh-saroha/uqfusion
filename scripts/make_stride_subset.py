@@ -1,5 +1,9 @@
 """Create a stride-subsampled TRAINING list + derived dataset yaml (approved A2-6).
 
+Strides over unique per-run TIME STEPS (frame ordinals), not raw frame lists —
+L/R stereo frames share an index and must be kept/dropped together, otherwise
+the subset alternates cameras instead of thinning temporal near-duplicates.
+
 Never touches the source data. Run after the split audit passes.
 
 Usage:
