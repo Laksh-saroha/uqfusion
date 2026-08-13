@@ -1,6 +1,12 @@
 @echo off
 REM ---------------------------------------------------------------------------
-REM Phase 1 tail on the laptop: yolo26m/26l/26x x seeds 0,1,2 (9 runs).
+REM Phase 1 tail on the laptop: yolo26l/26x x seeds 0,1,2 (6 runs).
+REM
+REM 2026-08-12: yolo26m dropped from --variants. Seeds 0,1 are already in the CSV;
+REM seed 2 was abandoned after five pause/resume cycles reset ultralytics'
+REM EarlyStopping counter (the stopper is rebuilt fresh on resume and is NOT
+REM restored from the checkpoint, so patience restarts and the run never stops).
+REM Its fragmented run dir is in runs\benchmark\_discarded\. yolo26m stays n=2.
 REM
 REM Crash/shutdown safe in two layers:
 REM   1. grid.py resumes an interrupted run from its own weights/last.pt
@@ -34,7 +40,7 @@ python scripts\run_benchmark.py ^
     --data runs\derived\data_vis_stride2.yaml ^
     --classes 0 ^
     --seeds 0 1 2 ^
-    --variants yolo26m yolo26l yolo26x ^
+    --variants yolo26l yolo26x ^
     --batch 8 ^
     --workers 8 ^
     --out-csv runs\benchmark\benchmark_results_tail.csv ^
