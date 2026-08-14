@@ -16,6 +16,14 @@ archive/
 # dataset/transfer archives — Pohang_dataset.zip alone is 38 GB
 *.zip
 
+# derived upload payload (split lists rewritten to instance paths + tar manifests);
+# regenerate with: python jarvislabs/build_payload.py
+jarvislabs/payload/
+jarvislabs/.venv-jl/
+jarvislabs/l4_state.json
+# transient: holds the API key for set_key.cmd, deleted the moment it is consumed
+jarvislabs/jlkey.txt
+
 # model weights (auto-downloaded by ultralytics)
 *.pt
 *.pth
