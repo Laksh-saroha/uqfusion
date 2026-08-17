@@ -1,12 +1,33 @@
 @echo off
 REM ---------------------------------------------------------------------------
-REM Phase 1 tail on the laptop: yolo26l/26x x seeds 0,1,2 (6 runs).
+REM Phase 1 tail on the laptop: yolo26x x seeds 0,1,2 (3 runs).
 REM
 REM 2026-08-12: yolo26m dropped from --variants. Seeds 0,1 are already in the CSV;
 REM seed 2 was abandoned after five pause/resume cycles reset ultralytics'
 REM EarlyStopping counter (the stopper is rebuilt fresh on resume and is NOT
 REM restored from the checkpoint, so patience restarts and the run never stops).
 REM Its fragmented run dir is in runs\benchmark\_discarded\. yolo26m stays n=2.
+REM
+REM 2026-08-14: yolo26l dropped too, same defect, one resume instead of five.
+REM Seeds 0,1 are in the CSV (both stopped at ep 28, best at ep 8). Seed 2 peaked
+REM at ep 6 but was resumed at ep 16; the fresh stopper re-anchored on ep 19 and
+REM pushed the stop from ep 26 out to ep 39, so the run would have trained ~40%
+REM longer than its siblings for a best.pt that was already fixed at ep 6. Stopped
+REM at ep 26 and discarded rather than banked. yolo26l stays n=2.
+REM
+REM Both variants are n=2 by the same root cause: the ONLY safe time to pause a
+REM run is before its fitness peak, where the rebuilt stopper re-converges on the
+REM same window. After the peak, every resume extends the run and breaks
+REM comparability with the other seeds. Prefer letting a run finish.
+REM
+REM 2026-08-17 CORRECTION: both seed-2 runs were RECOVERED and both variants are
+REM n=3. The notes above were written using the wrong fitness definition (8.4.90
+REM ranks epochs on mAP50-95 alone, not 0.1*mAP50 + 0.9*mAP50-95), which put
+REM yolo26l seed 2's peak at the wrong epoch. Re-audited: it peaked at ep 6 and
+REM ran to ep 26, i.e. exactly peak+patience, so best.pt holds the weights an
+REM uninterrupted run would have kept. Banked via scripts\recover_row.py.
+REM The pause-after-peak advice still stands; the n=2 conclusions do not.
+REM See docs\phase1-experimental-record.md sections 6 and 15.
 REM
 REM Crash/shutdown safe in two layers:
 REM   1. grid.py resumes an interrupted run from its own weights/last.pt
@@ -40,7 +61,7 @@ python scripts\run_benchmark.py ^
     --data runs\derived\data_vis_stride2.yaml ^
     --classes 0 ^
     --seeds 0 1 2 ^
-    --variants yolo26l yolo26x ^
+    --variants yolo26x ^
     --batch 8 ^
     --workers 8 ^
     --out-csv runs\benchmark\benchmark_results_tail.csv ^

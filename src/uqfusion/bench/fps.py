@@ -15,9 +15,28 @@ from pathlib import Path
 from uqfusion.bench.grid import resolve_device
 
 FPS_FIELDS = [
-    "variant", "weights", "device", "half", "n_images",
+    "variant", "seed", "run_id", "weights", "device", "half", "n_images",
     "wall_ms_per_img", "fps", "pre_ms", "inf_ms", "post_ms",
+    # A laptop GPU throttles over a long sweep, and drift of that kind aliases onto
+    # whichever variant happened to be measured late. Stamping time and thermal state
+    # per measurement makes it separable after the fact instead of invisible.
+    "timestamp", "gpu_temp_c", "gpu_clock_mhz",
 ]
+
+
+def gpu_state() -> dict:
+    """Current temperature and graphics clock, or blanks if nvidia-smi is unavailable."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=temperature.gpu,clocks.current.graphics",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=10, check=True).stdout.strip().splitlines()[0]
+        temp, clock = (x.strip() for x in out.split(","))
+        return {"gpu_temp_c": temp, "gpu_clock_mhz": clock}
+    except Exception:  # noqa: BLE001 - telemetry is never worth failing a measurement over
+        return {"gpu_temp_c": "", "gpu_clock_mhz": ""}
 
 
 def measure_fps(
@@ -43,9 +62,12 @@ def measure_fps(
         raise ValueError("no images supplied for FPS measurement")
 
     model = YOLO(str(weights))
-    # ultralytics 8.4.x deprecates predict's `half` in favour of `quantize`; `half`
-    # still works on the pinned 8.4.90 — revisit here if the pin is ever bumped.
-    kwargs = dict(imgsz=b["imgsz"], device=device, half=half, verbose=False)
+    # `half=` still works on the pinned 8.4.90 but warns on every call, which means
+    # one warning per timed frame. `quantize` is the canonical form it forwards to
+    # (cfg/__init__.py maps half->quantize=16, and None means fp32); verified
+    # equivalent by checking AutoBackend.fp16 and the parameter dtype.
+    kwargs = dict(imgsz=b["imgsz"], device=device, quantize=16 if half else None,
+                  verbose=False)
 
     for img in (images * ((warmup // len(images)) + 1))[:warmup]:
         model.predict(str(img), **kwargs)
@@ -62,6 +84,7 @@ def measure_fps(
     n = len(sample)
     return {
         "variant": variant, "weights": str(weights),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"), **gpu_state(),
         "device": "cpu" if on_cpu else str(device if device is not None else "cuda:auto"),
         "half": half, "n_images": n,
         "wall_ms_per_img": round(wall / n * 1000, 2),
@@ -76,7 +99,7 @@ def write_fps_csv(rows: list[dict], out_csv: str | Path) -> Path:
     out_csv = Path(out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with open(out_csv, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=FPS_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=FPS_FIELDS, restval="")
         writer.writeheader()
         writer.writerows(rows)
     return out_csv

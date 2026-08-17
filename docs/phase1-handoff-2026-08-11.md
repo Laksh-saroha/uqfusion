@@ -1,5 +1,17 @@
 # Phase 1 handoff — 2026-08-11
 
+> **SUPERSEDED — historical only.** Written mid-grid at 20 rows. The grid finished on
+> 2026-08-17 and the record was audited and consolidated; several statements here were
+> later corrected outright, including the fitness definition used to read every curve.
+> Current documents:
+>
+> - `phase1_benchmark/README.md` — the record, its layout, and its columns
+> - `docs/phase1-experimental-record.md` — provenance, defects, corrections, limitations
+> - `docs/phase1-handoff-2026-08-17.md` — operational state and traps
+>
+> Section 1 below (the ultralytics version finding) is still accurate and is the
+> original write-up of it.
+
 Laptop backbone-benchmark grid, Pohang maritime VIS, ship-only. Written mid-run so a
 new session can pick up without re-deriving anything.
 

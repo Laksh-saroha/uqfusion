@@ -1,0 +1,2 @@
+variant,seed,precision,recall,map50,map50_95,params_m,gflops,epochs_cfg,train_time_s,run_dir,ultralytics_version,torch_version,git_commit,data_yaml,classes,superseded_because
+yolo12x,0,0.8159846792941022,0.5890893941646572,0.6097605748202073,0.29691486056471234,59.22,200.3,100,47422.0,/workspace/Saroha_Work/runs/benchmark/runs/ship_yolo12x_seed0,8.4.90,2.12.1+cu126,unknown,runs/derived/data_vis_stride2.yaml,0,replaced by the row now in results.csv (map50_95 0.30414 vs 0.29691)

@@ -81,11 +81,24 @@ python scripts/run_benchmark.py --data runs/derived/data_vis_stride2.yaml --vari
 # 4. Full grid: 6 variants x 3 seeds (resume-safe — rerun continues after a crash)
 python scripts/run_benchmark.py --data runs/derived/data_vis_stride2.yaml
 
-# 5. FPS protocol (batch=1, fp32+fp16, on this GPU) and Table 1
-python scripts/measure_fps.py --data vis
-python scripts/make_table1.py                # -> runs/benchmark/table1.md
+# 5. Consolidate every run of both campaigns into phase1_benchmark/ with one CSV.
+#    Idempotent; --plan prints what it would move without touching anything.
+#    The CSV carries best_epoch / last_epoch / patience_gap / stop_reason and an
+#    `admissible` flag — filter on that, not by hand. Rows are keyed by
+#    <grid>_<variant>_seed<n>; `grid` separates the 2026-08 campaign from the
+#    2026-07 pilot, which ran on a different split (docs/phase1-pilot-grid.md).
+python scripts/consolidate_phase1.py --plan
+python scripts/consolidate_phase1.py --execute
 
-# 6. IR confirmation grid for the top-2 variants (plan C4/D8)
+# 6. FPS protocol (batch=1, fp32+fp16, on this GPU) and Table 1.
+#    MUST run on a CUDA build of torch — the script refuses a CPU device, because a
+#    CPU timing is not the number Table 1 wants. The repo .venv on the laptop is
+#    torch+cpu, so use the interpreter that has the GPU build and put the package on
+#    the path instead of installing into it:
+PYTHONPATH=src python scripts/measure_fps.py       # -> phase1_benchmark/fps.csv
+python scripts/make_table1.py                      # -> runs/benchmark/table1.md
+
+# 7. IR confirmation grid for the top-2 variants (plan C4/D8)
 python scripts/make_stride_subset.py --data ir
 python scripts/run_benchmark.py --data runs/derived/data_ir_stride2.yaml \
     --variants <top1> <top2> --out-csv runs/benchmark/ir_results.csv --run-prefix ir
@@ -93,6 +106,14 @@ python scripts/make_table1.py --results-csv runs/benchmark/ir_results.csv --out 
 ```
 
 **Send back:** `runs/benchmark/table1.md`, `table1_ir.md`, and the audit report → selection memo + §7.2 resolution get written, phase gate closes.
+
+> **The VIS grid is finished.** Its consolidated record is
+> `phase1_benchmark/results.csv` — 93 rows, 31 variants, two campaigns. Start from that
+> folder's `README.md` for the layout and column dictionary,
+> `docs/phase1-experimental-record.md` for provenance and known defects, and
+> `docs/phase1-pilot-grid.md` before any comparison that crosses the `grid` column.
+> Steps 1–4 above describe how it was produced; do not re-run them against the existing
+> record.
 
 ## 3. Phase 2 — Gaussian σ² model on real data (server)
 

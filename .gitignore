@@ -6,13 +6,19 @@ __pycache__/
 *.egg-info/
 
 # data & outputs — never committed; expected layout documented in README.md
-data/
+# Leading slash is load-bearing: a bare `data/` also matches src/uqfusion/data/, which
+# silently kept that whole package module out of version control until 2026-08-17.
+/data/
 # prepared Pohang dataset (~37 GB) — uploaded to the server out-of-band, not via git
 Pohang_dataset/
 runs/
 wandb/
 # pulled-back server run trees (weights + curves, ~18 GB)
 archive/
+# consolidated Phase 1 record: results.csv / superseded.csv / *.md ARE tracked,
+# the ~10.7 GB of weights, curves and plots beneath them is not (both grids)
+phase1_benchmark/runs/
+phase1_benchmark/extra/
 # dataset/transfer archives — Pohang_dataset.zip alone is 38 GB
 *.zip
 

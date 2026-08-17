@@ -16,10 +16,22 @@ UG Research Fellowship project, Thapar Institute of Engineering and Technology (
 config.yaml            <- the ONE file to edit when moving machines
 requirements.txt       <- pinned dependencies (see header for lock-file procedure)
 src/uqfusion/          <- project package (installed editable)
+scripts/               <- runnable tools (grid, consolidation, tables, audits)
 docs/                  <- approved plans / design memos
 data/                  <- datasets (gitignored; layout below)
 runs/                  <- training & eval outputs (gitignored)
+phase1_benchmark/      <- the finished Phase 1 backbone benchmark: 93 runs, one CSV
+                          (the CSVs and *.md are tracked; the run trees are not)
 ```
+
+**Phase 1 is complete.** Its record is `phase1_benchmark/results.csv` — 93 rows,
+31 detector variants, two training campaigns. Read
+[`phase1_benchmark/README.md`](phase1_benchmark/README.md) first for the layout and
+column dictionary, then
+[`docs/phase1-experimental-record.md`](docs/phase1-experimental-record.md) for
+provenance, known defects, and the limitations text, and
+[`docs/phase1-pilot-grid.md`](docs/phase1-pilot-grid.md) before making any comparison
+that crosses the `grid` column.
 
 ## Setup — identical on every machine
 
