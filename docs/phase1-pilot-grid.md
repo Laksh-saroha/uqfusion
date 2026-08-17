@@ -122,10 +122,16 @@ the only run in either campaign that never got a row.
 
 ## Provenance
 
-Extracted from `runs_31_07.tar.gz` (6.0 GB), kept untouched at
-`archive/phase1/pilot_2026-07-31/`, along with the source CSV
+Extracted from `runs_31_07.tar.gz` (6.0 GB). What remains at
+`archive/phase1/pilot_2026-07-31/` is the source CSV
 (`benchmark_results_ship_visfilter.csv`, 68 rows) and `bench_yolov8n_seed0/`, a v8n
 smoke test that was never part of the grid.
+
+**The tarball itself was deleted on 2026-08-17**, after all 2,281 of its files were
+matched to extracted counterparts under `phase1_benchmark/` by name and size (80 confirmed
+byte-identical by checksum). It never contained the missing split lists — those were lost
+on the wiped server, which is the whole subject of this document — so its deletion costs
+nothing that was not already gone. `phase1_benchmark/runs/pilot_*` is now the only copy.
 
 Metric cells were verified identical after the move; consolidation added the
 training-dynamics columns and changed nothing else.

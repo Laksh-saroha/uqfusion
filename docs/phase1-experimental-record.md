@@ -7,6 +7,16 @@ inferred, unless explicitly marked.
 Supersedes the 2026-08-11 revision, which was written mid-grid at 20 rows. Four of its
 findings were later corrected outright; each correction is marked *CORRECTION* below.
 
+**This document absorbed the two Phase 1 handoff files on 2026-08-17** (`phase1-handoff-2026-08-11.md`
+and `phase1-handoff-2026-08-17.md`, both deleted). They were dated operational snapshots
+of a grid that has since finished; everything in them that was a *measurement* rather than
+a status report is preserved here — the version finding (§3), the collision audit (§4), the
+admissibility rule (§6), the operational traps (§11, now 13 items pooled from both), the
+per-seed detail and robustness cross-check (§12), and the measured VRAM behaviour (§16,
+which existed only in the handoffs). What was dropped: live process IDs, mid-grid row
+counts, and provisional seed-means that the final table supersedes. Both files remain in
+git history if a dated snapshot is ever needed.
+
 **The record now lives in one place:** `phase1_benchmark/results.csv`, 93 rows across
 two training campaigns (`grid` = `main` / `pilot`). See `phase1_benchmark/README.md` for
 the layout and the column dictionary, and **`docs/phase1-pilot-grid.md` for what merging
@@ -403,7 +413,28 @@ Not scientific defects, but each cost real time and each is a reproducibility ha
    on completion only, and `grid.py::_completed()` skips by CSV row — so relaunching
    *resumes* the killed run rather than skipping it, and keeps training a run that was
    already finished. `scripts/recover_row.py` does the missing half: validate `best.pt`,
-   append the row, refuse if the run is inadmissible.
+   append the row, refuse if the run is inadmissible. To genuinely *skip* a run, move its
+   directory aside **and** drop the variant from `--variants`; seeds are shared across
+   variants in one invocation, so a single variant+seed cannot be skipped selectively.
+9. **Self-matching liveness probes lie.** `Get-CimInstance Win32_Process | Where-Object
+   { $_.CommandLine -match 'watch_grid' }` matches the PowerShell process running the
+   query itself, so a dead watchdog reports as alive. Constrain by
+   `-Filter "Name='cmd.exe' OR Name='python.exe'"` first. Fixed in commit `727adb4`.
+10. **Verify a resume from the log, not the process.** Look for the
+    `[grid] === <name>: RESUME from ...` banner *plus* live iteration frames. Ultralytics
+    progress bars are `\r`-delimited, so `tail -n` shows nothing useful — use
+    `tail -c N | tr '\r' '\n' | sed 's/\x1b\[[0-9;]*[A-Za-z]//g'`. Beware that an
+    `until ... grep -q 'it/s'` loop matches the **dataset scanner**, not training; anchor
+    on `^ *[0-9]+/100` instead.
+11. **Identify which run you are stopping** before killing anything — check the
+    `[grid] ===` banners and the CSV row count first.
+12. **`check_resume` reloads args from the checkpoint.** Only `imgsz`, `batch`, `device`
+    and `close_mosaic` pass through from a new invocation; **`workers` cannot be changed
+    on resume.**
+13. **`--data`, `--classes` and `--out-csv` must stay identical across grid
+    invocations**, or `grid.py`'s split-fingerprint / classes mix-refusal aborts the run.
+    A control experiment on a variant already in the CSV needs its own `--out-csv` *and*
+    `--run-prefix`, or the grid skips it as already done.
 
 ---
 
@@ -425,6 +456,19 @@ yolo26s   n=3   0.2813 ± 0.0045
 yolo12s   n=3   0.2783 ± 0.0109
 yolo26n   n=3   0.2540 ± 0.0058
 ```
+
+The admissibility rule (§6) drops one row, and the choice moves the order, so both
+readings are recorded. `yolo12x` is the only variant affected: **n=2, 0.3007 ± 0.0049**
+with the rule applied, **n=3, 0.2989 ± 0.0046** with all rows. Every other variant is
+identical under both.
+
+Per-seed detail for the leader:
+
+| `yolo26x` seed | mAP50 | mAP50-95 | train_time_s | peak ep | stopped at |
+|---|---|---|---|---|---|
+| 0 | 0.6380 | 0.30479 | 58,239.5 (16.2 h) | 8 | ep 28 |
+| 1 | 0.6362 | 0.30690 | 70,877.5 (19.7 h) | 12 | ep 32 |
+| 2 | 0.6192 | 0.30294 | 84,996.8 (23.6 h) | 30 | ep 50 |
 
 ### Pooled across both campaigns — the leading group, and how it changed
 
@@ -638,3 +682,101 @@ carried the lists themselves.
 The leading group went from four variants to eight, `yolo26x`'s margin fell below its
 own seed sd (§12), and every cross-grid comparison now carries the split caveat above.
 **Any table mixing `main` and `pilot` rows must say so and cite this section.**
+
+---
+
+## 16. Measured hardware behaviour — Machine B (RTX 4080 Laptop, 12,282 MiB)
+
+Preserved from the handoff documents; these are the only measurements of the laptop's
+limits and they constrain any future run on this card.
+
+### VRAM does not leak
+
+Per-epoch reserved peaks are **flat** across a full run — no growth, no accumulation.
+`yolo26x` seed 1 climbs 9.13 → 9.65 GB over epochs 1–3, then holds a 9.30–9.70 GB band
+for 24+ epochs. Seed 0 measured across its whole run: 328,004 frames, min 8.38 GB, max
+9.70 GB, mean 9.46 GB. The ~0.35 GB sawtooth is caching-allocator fragmentation tracking
+a variable box count per batch, not a leak.
+
+The printed column is `memory_reserved`, which **excludes** CUDA context, cuDNN workspaces
+and driver overhead. Driver-level that band is ~10.7 of 12.28 GB — **87% of the card, with
+roughly 1.5 GB of headroom.** Keep other GPU applications closed.
+
+### Batch-8 ceilings, and why batch cannot rise
+
+| variant | batch-8 peak |
+|---|---|
+| `yolo26m` | 4.3 GB |
+| `yolo26l` | 5.3 GB |
+| `yolo26x` | 7.9 GB (early-epoch estimate; the full-run figure above, 8.38–9.70 GB, is the one to quote) |
+
+**`yolo26x` at batch 16 peaks 15.31 GB.** Windows WDDM does not raise OOM at that point —
+it pages the excess into host RAM, so the run "succeeds" at 2.4 img/s, about **17× slower**.
+A silent 17× slowdown is worse than a crash. **Do not raise batch for `26x`.**
+
+### Dataloader workers
+
+`workers=16` is *worse* than `workers=8` (2.80 vs 4.00 it/s median), and CPU sits at ~14%
+either way — the loader was never the bottleneck. Machine A was capped at `workers=2` by
+`/dev/shm` size instead.
+
+### Environment
+
+```
+python 3.13.0
+torch 2.7.1+cu118      (untouched by the ultralytics upgrade — it only needs >=1.8.0)
+ultralytics 8.4.90     (upgraded from 8.4.7 on 2026-08-11)
+cv2 -> 4.10.0          (double-installed; see §9)
+grid: batch 8, workers 8, imgsz 640, patience 20, deterministic
+```
+
+---
+
+## 17. Key paths
+
+The record — everything Table 1 rests on:
+
+```
+phase1_benchmark/README.md                        layout + column dictionary — READ FIRST
+phase1_benchmark/results.csv                      93 rows, both campaigns, FINAL
+phase1_benchmark/fps.csv                          batch-1 fp32/fp16 latency + FPS per variant
+phase1_benchmark/superseded.csv                   rows withdrawn from the record, with reasons
+phase1_benchmark/runs/<grid>_<variant>_seed<n>/   args.yaml, results.csv, weights/, val/, plots/
+phase1_benchmark/extra/                           non-result artifacts; see CONTENTS.json
+phase1_benchmark/figures/                         Table 1 figures
+docs/phase1-pilot-grid.md                         the pilot rows: split difference, what merging assumes
+docs/phase1-robustness-table.md                   curve-vs-Table-1 cross-check
+```
+
+Tooling:
+
+```
+scripts/consolidate_phase1.py       builds the record; idempotent
+scripts/recover_row.py              bank a row for a finished-but-unbanked run
+scripts/make_robustness_table.py    regenerates the robustness table
+scripts/make_phase1_figures.py      regenerates the figures
+scripts/watch_grid.py               unattended health monitor (the only one that worked)
+src/uqfusion/bench/grid.py          grid driver, epoch-level resume
+run_tail_laptop.cmd                 grid launcher + retry wrapper
+runs/derived/data_vis_stride2.yaml  the split (fingerprint 682dbe9f0f05)
+runs/grid_laptop.log.gz             grid stdout, gzipped 2026-08-17 (308 MB -> 26 MB)
+runs/health.log                     watchdog, one line / 10 min
+```
+
+Superseded, kept only as evidence — **do not read numbers out of these**:
+
+```
+runs/benchmark/benchmark_results_tail.csv               the pre-consolidation record
+runs/benchmark/benchmark_results_tail.csv.bak_*         pre-edit snapshots
+runs/benchmark/_excel_mangled_20260817_1410.csv         corrupted by Excel (§11.7)
+archive/phase1/main_2026-08-10/handback/                server split lists — CRITICAL, keep
+archive/phase1/main_2026-08-10/runs/grid_tail.log.gz    server grid stdout, gzipped
+```
+
+> **The two original server tarballs were deleted on 2026-08-17** after a file-level
+> verification proved them fully redundant: every one of `runs.zip`'s 696 files and every
+> one of `runs_31_07.tar.gz`'s 2,281 files was matched to an extracted counterpart on disk
+> by name and size, with 60 and 80 of them respectively confirmed byte-identical by
+> checksum. Reclaimed 8.3 GB. The extracted trees under `phase1_benchmark/` are now the
+> only copy — note that the pilot campaign's split lists were already unrecoverable before
+> this (§15), and deleting the tarball does not change that.

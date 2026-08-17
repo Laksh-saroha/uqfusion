@@ -269,8 +269,8 @@ nano models, several of which measure marginally slower in fp16.
 - [`docs/phase1-pilot-grid.md`](../docs/phase1-pilot-grid.md) — the `pilot_*` rows: what
   they cover, the split difference, and what merging them assumes
 - [`docs/phase1-experimental-record.md`](../docs/phase1-experimental-record.md) —
-  provenance, defects, corrections; the source for the paper's methods and limitations
-- [`docs/phase1-handoff-2026-08-17.md`](../docs/phase1-handoff-2026-08-17.md) —
-  operational state and traps
+  provenance, defects, corrections, operational traps, measured VRAM limits, key paths;
+  the source for the paper's methods and limitations. It absorbed the two dated
+  `phase1-handoff-*.md` files on 2026-08-17
 - [`docs/phase1-robustness-table.md`](../docs/phase1-robustness-table.md) — per-run
   metric vs curve-peak cross-check

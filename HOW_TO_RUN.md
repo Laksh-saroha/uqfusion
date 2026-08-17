@@ -60,6 +60,28 @@ python scripts/smoke_phase3.py       # Phase 3: baselines, caches, corruptions, 
 
 Expected final lines: `SMOKE OK`, `GAUSSIAN SMOKE OK`, `UQ PIPELINE SMOKE OK`, `PHASE3 SMOKE OK`. A red smoke = stop; nothing downstream is trustworthy.
 
+### 1b. Dataset gate — run this first on any NEW machine
+
+`scripts/verify_dataset_state.py` confirms the dataset on *this* machine carries every
+prep step we applied. It deliberately imports **nothing** from `uqfusion` — it
+re-implements the split-fingerprint, leakage-audit, night-filter-hash and balance-gate
+logic independently, so it cross-checks the package instead of trusting it, and it runs
+from a bare copy of that one file. Thirteen checks, each printing PASS/FAIL/WARN/INFO;
+exit 0 = no FAIL.
+
+```bash
+python scripts/verify_dataset_state.py --data vis --stride-yaml runs/derived/data_vis_stride2.yaml
+python scripts/verify_dataset_state.py --data ir
+python scripts/verify_dataset_state.py --data vis --fast   # skip the full label read
+```
+
+It catches the failure modes that have actually bitten this project: a non-portable
+`A:/...` `path:` in a yaml, split lists missing the `./` prefix Ultralytics requires
+(fix with `scripts/fix_split_lists.py`), a partial upload, stale `*.cache` files, a
+night-filter that was applied to the wrong splits, and IR letterbox geometry drift.
+Add `--hash-labels` to compare the train-label content hash across machines — that is
+what proved the two Phase 1 machines trained on identical labels (`287b11c50b5a`).
+
 ## 2. Phase 1 — backbone benchmark → Table 1 (server)
 
 ```bash
