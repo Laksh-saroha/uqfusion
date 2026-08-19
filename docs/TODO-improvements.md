@@ -3,6 +3,10 @@
 **Created:** 2026-08-19, after the end-to-end architecture test
 ([`handoff-2026-08-19-fusion.md`](handoff-2026-08-19-fusion.md)).
 
+**For the full record of what was tried and rejected — and the prioritised future
+testing plan, including the falsification tests — see
+[`fusion-gate-experiment-record.md`](fusion-gate-experiment-record.md).**
+
 **Updated 2026-08-19** after the cheap-fixes pass completed. The six CPU-only fixes
 are **done** — results in [`runs/eval/cheap_fixes.md`](../runs/eval/cheap_fixes.md),
 analysis in [`handoff-2026-08-19-fusion.md`](handoff-2026-08-19-fusion.md) §14.

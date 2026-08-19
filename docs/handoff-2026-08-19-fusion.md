@@ -1337,3 +1337,13 @@ a diagnosed cause, not quietly dropped.
 | `scripts/diag_cross_modal_iou.py` | **new** — cross-modal box agreement; the explanation for the null result |
 | `scripts/sweep_iou_thr.py` | **new** — TODO §0.5, extends the grid past the boundary |
 | `runs/eval/sigma_wbf.md`, `sigma_wbf_iou055.md`, `cross_modal_iou.md`, `iou_thr_sweep.md` | results |
+
+---
+
+## 20. Where the rest of the record lives
+
+[`fusion-gate-experiment-record.md`](fusion-gate-experiment-record.md) carries the
+consolidated account: every alternative that was tried and rejected with its
+numbers, the three factual errors corrected along the way, the protocol and
+dataset-integrity evidence, and a prioritised future-testing plan — including four
+pre-registered falsification tests that would show this work is wrong.
