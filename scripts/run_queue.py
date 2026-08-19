@@ -1,0 +1,601 @@
+"""Sequential, resume-safe, pausable run queue for the Phase 2 laptop test.
+
+One process trains the queued runs in order. Three files under ``runs/queue/``
+carry the state, and the dashboard (``scripts/dashboard.py``) only ever reads
+them or flips a boolean in one of them:
+
+    queue.json    what to run, in order          (written by `init`, edit by hand)
+    state.json    what has happened per run      (written by the runner)
+    live.json     current epoch/batch heartbeat  (written by the runner, ~1 Hz)
+    control.json  {"paused": bool, ...}          (written by the dashboard or `pause`)
+
+**Pause is graceful, not a kill.** The runner raises out of the training loop from
+the `on_model_save` callback — the first instant at which `weights/last.pt` is
+complete on disk. Resuming then re-enters Ultralytics' own resume path with the
+optimizer, EMA, scaler and epoch counter intact, i.e. exactly the mechanism the
+Phase 1 grid already relied on after crashes. Killing the process mid-epoch also
+works (you lose that epoch), but it can catch `last.pt` half-written.
+
+Usage:
+    python scripts/run_queue.py init          # write runs/queue/queue.json
+    python scripts/run_queue.py run           # work the queue (this is the long one)
+    python scripts/run_queue.py status        # one-shot text status
+    python scripts/run_queue.py pause         # ask the running queue to stop cleanly
+    python scripts/run_queue.py resume
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import sys
+import time
+import traceback
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))  # repo is not pip-installed in the GPU interpreter
+
+from uqfusion.config import load_config, resolve_data_yaml  # noqa: E402
+
+QUEUE_DIR = ROOT / "runs" / "queue"
+QUEUE_JSON = QUEUE_DIR / "queue.json"
+STATE_JSON = QUEUE_DIR / "state.json"
+LIVE_JSON = QUEUE_DIR / "live.json"
+CONTROL_JSON = QUEUE_DIR / "control.json"
+QUEUE_LOG = QUEUE_DIR / "queue.log"
+
+TERMINAL = {"done", "failed", "skipped"}
+HEARTBEAT_S = 1.0
+
+
+def set_queue_dir(path: str | Path) -> None:
+    """Relocate all four queue files. Used by the smoke test so a dry run of the
+    queue machinery cannot touch the real queue's state."""
+    global QUEUE_DIR, QUEUE_JSON, STATE_JSON, LIVE_JSON, CONTROL_JSON, QUEUE_LOG
+    QUEUE_DIR = Path(path)
+    QUEUE_JSON = QUEUE_DIR / "queue.json"
+    STATE_JSON = QUEUE_DIR / "state.json"
+    LIVE_JSON = QUEUE_DIR / "live.json"
+    CONTROL_JSON = QUEUE_DIR / "control.json"
+    QUEUE_LOG = QUEUE_DIR / "queue.log"
+
+
+class PauseRequested(Exception):
+    """Raised out of a training callback to stop at a checkpoint boundary."""
+
+
+# --------------------------------------------------------------------------- io
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def read_json(path: Path, default):
+    """Tolerant read: the dashboard and the runner write these concurrently, and a
+    torn read must never take the trainer down."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path: Path, data, strict: bool = False) -> bool:
+    """Write JSON without ever taking the trainer down. Returns True on success.
+
+    `os.replace` gives readers an all-or-nothing view, but on Windows the rename
+    fails with `PermissionError: [WinError 5]` whenever another process has the
+    destination open — and the dashboard polls these files every 2 s. That race
+    killed a training run once: a once-a-second *cosmetic* heartbeat write raised
+    straight through an Ultralytics callback and out of the epoch loop.
+
+    So: retry the rename briefly, then fall back to writing in place. A reader can
+    catch a torn file that way, which is why every reader here goes through
+    `read_json` and treats a parse failure as "no data yet" rather than an error.
+    Only `strict=True` callers (queue creation) are told about a failure at all.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(data, indent=2)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        for _ in range(5):
+            try:
+                os.replace(tmp, path)
+                return True
+            except PermissionError:
+                time.sleep(0.05)
+        path.write_text(payload, encoding="utf-8")  # reader holds the target: write in place
+        tmp.unlink(missing_ok=True)
+        return True
+    except Exception as exc:  # noqa: BLE001 - bookkeeping must never sink a run
+        if strict:
+            raise
+        print(f"[queue] warning: could not write {path.name}: "
+              f"{type(exc).__name__}: {exc}", flush=True)
+        return False
+
+
+def log(msg: str) -> None:
+    line = f"{now()}  {msg}"
+    print(f"[queue] {msg}", flush=True)
+    QUEUE_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(QUEUE_LOG, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
+_LAST_CONTROL = {"paused": False}
+
+
+def control() -> dict:
+    """Current control flags, falling back to the last good read.
+
+    A plain default would read "not paused" whenever the dashboard happens to be
+    mid-write, so a Pause could be dropped for a whole epoch. Remembering the last
+    successful read makes a torn read a no-op instead of a reversal.
+    """
+    global _LAST_CONTROL
+    value = read_json(CONTROL_JSON, None)
+    if isinstance(value, dict):
+        _LAST_CONTROL = value
+    return _LAST_CONTROL
+
+
+def set_control(**kw) -> dict:
+    c = control()
+    c.update(kw)
+    c["updated"] = now()
+    write_json(CONTROL_JSON, c)
+    return c
+
+
+def load_state() -> dict:
+    return read_json(STATE_JSON, {"runs": {}})
+
+
+def save_state(state: dict) -> None:
+    state["updated"] = now()
+    write_json(STATE_JSON, state)
+
+
+def run_state(state: dict, run_id: str) -> dict:
+    return state.setdefault("runs", {}).setdefault(run_id, {"status": "pending"})
+
+
+# ------------------------------------------------------------------- queue init
+
+
+def measurements() -> tuple[list[dict], float]:
+    """Every candidate scripts/tune_batch.py has measured here, plus card size."""
+    rows, total_gb = [], 0.0
+    for name in ("tune_batch.json", "tune_workers.json"):
+        tune = read_json(ROOT / "runs" / "tune" / name, None) or {}
+        rows += [r for r in tune.get("results", [])
+                 if "error" not in r and r.get("img_s", 0) > 0]
+        total_gb = max(total_gb, float(tune.get("total_gb") or 0.0))
+    return rows, total_gb
+
+
+def default_queue(cfg: dict, variant: str, batch: int | None, workers: int | None) -> dict:
+    b = cfg["benchmark"]
+    rows, total_gb = measurements()
+    fastest = max(rows, key=lambda r: r["img_s"]) if rows else None
+
+    defaults = {
+        "variant": variant,
+        "imgsz": b["imgsz"],
+        # Epochs and patience are the FULL-SCALE values on purpose: this is an
+        # architecture test at reduced model size, not a reduced-schedule test.
+        "epochs": b["epochs"],
+        "patience": b["patience"],
+        "batch": batch or (fastest or {}).get("batch") or b["batch"],
+        "workers": workers if workers is not None
+        else (fastest or {}).get("workers", b["workers"]),
+    }
+
+    # Report the row that was actually chosen — and, when that is not the fastest
+    # measured one, why giving up throughput was the point.
+    chosen = next((r for r in rows if r["batch"] == defaults["batch"]
+                   and r["workers"] == defaults["workers"]), None)
+    if chosen:
+        card = f" of {total_gb:.1f} GB" if total_gb else ""
+        note = (f"measured on this GPU: {chosen['img_s']} img/s, "
+                f"driver peak {chosen['driver_peak_gb']} GB{card}")
+        if fastest and fastest["img_s"] > chosen["img_s"]:
+            gain = 100 * (fastest["img_s"] / chosen["img_s"] - 1)
+            note += (f"; fastest measured was batch {fastest['batch']}/workers "
+                     f"{fastest['workers']} at {fastest['img_s']} img/s (+{gain:.1f}%, "
+                     f"driver peak {fastest['driver_peak_gb']} GB), not chosen")
+        defaults["_sizing_source"] = note
+    elif rows:
+        defaults["_sizing_source"] = "chosen by hand; not among the measured candidates"
+
+    vis = "runs/derived/data_vis_stride5.yaml"
+    ir = "runs/derived/data_ir_stride2.yaml"
+
+    # Option (C) for the mosaic problem: Ultralytics closes mosaic at the fixed
+    # epoch `epochs - close_mosaic` = 90, which an early-stopping run never
+    # reaches, so every model would train on mosaicked frames and be scored on
+    # clean ones. Each run therefore gets a second stage that continues from its
+    # own best.pt with mosaic off. Two stages rather than a mid-run switch keeps
+    # the effect attributable: the pair of checkpoints IS the ablation.
+    # The learning rate is the whole ballgame here, and the first attempt got it
+    # wrong: leaving `optimizer: auto` restarts a fresh schedule at full lr0
+    # (0.001667), which knocks a converged model straight off its optimum —
+    # measured, mAP50-95 0.2505 -> 0.2111 in one epoch, recovering only to 0.2451
+    # in ten. That is not what `close_mosaic` does. Stock close_mosaic fires at
+    # epoch `epochs - close_mosaic` = 90 of 100, where the linear schedule
+    # lf(x) = (1 - x/epochs)(1 - lrf) + lrf has already decayed LR to 0.109 x lr0.
+    # So the faithful reconstruction of "the tail of the schedule with mosaic off"
+    # is lr0 x 0.1 decaying to lr0 x 0.01 — which is what these numbers are.
+    # `auto` must be replaced by an explicit optimizer, because auto ignores lr0.
+    ft = {
+        "epochs": 10,
+        "train_overrides": {
+            "mosaic": 0.0,        # the point of the stage
+            "close_mosaic": 0,    # nothing left to close
+            "warmup_epochs": 0.0,  # LR warm-up: 3 of 10 epochs would be absurd
+            "patience": 10,       # no early stop inside a 10-epoch stage
+            "optimizer": "AdamW",  # what `auto` selects here; named so lr0 is honoured
+            "lr0": 0.000167,      # 0.1 x auto's 0.001667 = the LR at epoch 90 of 100
+            "lrf": 0.1,           # decays to 1.67e-5, matching the schedule's tail
+            "momentum": 0.9,      # auto's choice, restated
+        },
+        # σ is already trained by this point; re-running its warm-up would zero
+        # the NLL again and waste half the stage.
+        "gaussian_overrides": {"warmup_epochs": 0, "ramp_epochs": 0},
+    }
+
+    def stage(run_id, sigma, data):
+        return [
+            {"id": run_id, "sigma": sigma, "data": data, "seed": 0},
+            {"id": f"{run_id}_ft", "sigma": sigma, "data": data, "seed": 0,
+             "from": run_id, **ft},
+        ]
+
+    return {
+        "created": now(),
+        "note": "Phase 2 architecture test on the 640 dataset, VIS at stride 5. "
+                "Order is deliberate: each run is immediately followed by its "
+                "mosaic-off stage, so stopping the queue early still leaves "
+                "complete pairs rather than half-finished ones. The VIS sigma run "
+                "goes first (it is the one that can fail); its parity twin is the "
+                "§12.1 check and must stay at identical settings.",
+        "defaults": defaults,
+        "runs": [
+            *stage("gauss_vis_seed0", True, vis),
+            *stage("parity_vis_seed0", False, vis),
+            *stage("gauss_ir_seed0", True, ir),
+            *stage("parity_ir_seed0", False, ir),
+        ],
+    }
+
+
+def cmd_init(args) -> int:
+    cfg = load_config(args.config)
+    if QUEUE_JSON.is_file() and not args.force:
+        print(f"{QUEUE_JSON} exists — pass --force to overwrite (state.json is kept).")
+        return 1
+    q = default_queue(cfg, args.variant, args.batch, args.workers)
+    write_json(QUEUE_JSON, q)
+    write_json(CONTROL_JSON, {"paused": False, "updated": now()})
+    d = q["defaults"]
+    print(f"wrote {QUEUE_JSON}")
+    print(f"  variant {d['variant']} | imgsz {d['imgsz']} | batch {d['batch']} | "
+          f"workers {d['workers']} | epochs {d['epochs']} | patience {d['patience']}")
+    if "_sizing_source" in d:
+        print(f"  batch/workers from {d['_sizing_source']}")
+    else:
+        print("  batch/workers NOT measured on this machine — run scripts/tune_batch.py first.")
+    for r in q["runs"]:
+        print(f"  - {r['id']:<20} sigma={str(r['sigma']):<5} {r['data']}")
+    return 0
+
+
+# ----------------------------------------------------------------- the run loop
+
+
+def shielded(fn):
+    """Run a callback for its side effects only — never let it reach the trainer.
+
+    These callbacks exist to report on training, so a fault in one must degrade
+    the reporting, not the run. PauseRequested is the single deliberate exception
+    and is allowed through; everything else is logged once and swallowed.
+    """
+    def wrapper(trainer):
+        try:
+            return fn(trainer)
+        except PauseRequested:
+            raise
+        except Exception as exc:  # noqa: BLE001 - see docstring
+            print(f"[queue] warning: {fn.__name__} failed "
+                  f"({type(exc).__name__}: {exc}) — training continues", flush=True)
+    wrapper.__name__ = fn.__name__
+    return wrapper
+
+
+def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
+    """Heartbeat + pause callbacks. Deliberately cheap: they run per batch."""
+    tick = {"last": 0.0, "i": 0, "n": 0, "t_epoch": time.time()}
+
+    def on_epoch_start(trainer):
+        tick["i"], tick["n"] = 0, len(trainer.train_loader)
+        tick["t_epoch"] = time.time()
+
+    def on_batch_end(trainer):
+        tick["i"] += 1
+        t = time.time()
+        if t - tick["last"] < HEARTBEAT_S:
+            return
+        tick["last"] = t
+        import torch
+
+        elapsed = t - tick["t_epoch"]
+        it_s = tick["i"] / elapsed if elapsed > 0 else 0.0
+        write_json(LIVE_JSON, {
+            "updated": now(),
+            "run_id": run_id,
+            "epoch": int(trainer.epoch) + 1,
+            "epochs": int(trainer.epochs),
+            "batch_i": tick["i"],
+            "batch_n": tick["n"],
+            "it_s": round(it_s, 2),
+            "img_s": round(it_s * int(spec["batch"]), 1),
+            "epoch_eta_s": round((tick["n"] - tick["i"]) / it_s) if it_s > 0 else None,
+            "gpu_reserved_gb": round(torch.cuda.memory_reserved() / 2**30, 2)
+            if torch.cuda.is_available() else None,
+            "pause_pending": bool(control().get("paused")),
+        })
+
+    def on_fit_epoch_end(trainer):
+        rs = run_state(state, run_id)
+        rs["epochs_done"] = int(trainer.epoch) + 1
+        rs["epoch_time_s"] = round(getattr(trainer, "epoch_time", 0.0), 1)
+        stopper = getattr(trainer, "stopper", None)
+        if stopper is not None:
+            rs["best_fitness"] = round(float(stopper.best_fitness), 5)
+            rs["best_epoch"] = int(stopper.best_epoch)
+            rs["patience_gap"] = int(trainer.epoch) + 1 - int(stopper.best_epoch)
+        metrics = getattr(trainer, "metrics", None) or {}
+        rs["map50_95"] = round(float(metrics.get("metrics/mAP50-95(B)", 0.0)), 5)
+        rs["map50"] = round(float(metrics.get("metrics/mAP50(B)", 0.0)), 5)
+        save_state(state)
+
+    def on_model_save(trainer):
+        # The one safe pause point: last.pt has just been written in full.
+        if control().get("paused"):
+            raise PauseRequested(f"paused after epoch {int(trainer.epoch) + 1}")
+
+    return {
+        "on_train_epoch_start": [shielded(on_epoch_start)],
+        "on_train_batch_end": [shielded(on_batch_end)],
+        "on_fit_epoch_end": [shielded(on_fit_epoch_end)],
+        "on_model_save": [shielded(on_model_save)],
+    }
+
+
+def wait_while_paused(state: dict) -> bool:
+    """Block until unpaused. Returns False if the process was interrupted."""
+    if not control().get("paused"):
+        return True
+    log("paused — waiting for resume (dashboard button, or `run_queue.py resume`)")
+    state["queue_status"] = "paused"
+    save_state(state)
+    try:
+        while control().get("paused"):
+            time.sleep(2)
+    except KeyboardInterrupt:
+        return False
+    log("resumed")
+    state["queue_status"] = "running"
+    save_state(state)
+    return True
+
+
+def cmd_run(args) -> int:
+    cfg = load_config(args.config)
+    queue = read_json(QUEUE_JSON, None)
+    if queue is None:
+        print(f"no queue at {QUEUE_JSON} — run `python scripts/run_queue.py init` first.")
+        return 1
+
+    from uqfusion.uq.train_gaussian import train_gaussian
+
+    defaults = queue.get("defaults", {})
+    state = load_state()
+    state["queue_status"] = "running"
+    state["pid"] = os.getpid()
+    state["queue_file"] = str(QUEUE_JSON)
+    state["defaults"] = defaults
+    save_state(state)
+
+    specs = [{**defaults, **r} for r in queue["runs"]]
+    if args.only:
+        specs = [s for s in specs if s["id"] in set(args.only)]
+
+    log(f"queue: {len(specs)} run(s) | variant {defaults.get('variant')} "
+        f"| batch {defaults.get('batch')} workers {defaults.get('workers')} "
+        f"| epochs {defaults.get('epochs')} patience {defaults.get('patience')}")
+
+    interrupted = False
+    i = 0
+    while i < len(specs):
+        # Index, not iteration: a paused run must be retried at the SAME position
+        # when it resumes, not pushed behind the rest of the queue.
+        spec = specs[i]
+        run_id = spec["id"]
+        rs = run_state(state, run_id)
+        if rs.get("status") in TERMINAL and not args.redo:
+            log(f"skip {run_id} — already {rs['status']}")
+            i += 1
+            continue
+        if run_id in set(control().get("skip") or []):
+            rs["status"] = "skipped"
+            save_state(state)
+            log(f"skip {run_id} — marked skipped in control.json")
+            i += 1
+            continue
+        if not wait_while_paused(state):
+            interrupted = True
+            break
+
+        # A stage that continues another run needs that run's best.pt. If the
+        # parent failed or was skipped, fail loudly — silently training this from
+        # COCO weights would produce a plausible model that is not the experiment.
+        start_weights = None
+        parent = spec.get("from")
+        if parent:
+            prs = state.get("runs", {}).get(parent, {})
+            candidate = prs.get("best_weights")
+            if prs.get("status") != "done" or not candidate or not Path(candidate).is_file():
+                rs.update(status="failed", finished=now(),
+                          error=f"parent run '{parent}' is {prs.get('status', 'missing')} "
+                                f"with no usable best.pt — nothing to continue from")
+                save_state(state)
+                log(f"=== {run_id}: SKIPPED, parent '{parent}' did not produce weights")
+                i += 1
+                continue
+            start_weights = candidate
+
+        rs.update(status="running", started=rs.get("started") or now(), error=None)
+        save_state(state)
+        log(f"=== {run_id}: start (sigma={spec['sigma']}, data={spec['data']}"
+            + (f", from={parent}" if parent else "") + ")")
+
+        try:
+            best, run_dir = train_gaussian(
+                cfg,
+                resolve_data_yaml(cfg, spec["data"]),
+                variant=spec["variant"],
+                seed=int(spec["seed"]),
+                epochs=int(spec["epochs"]),
+                imgsz=int(spec["imgsz"]),
+                batch=int(spec["batch"]),
+                workers=int(spec["workers"]),
+                run_name=run_id,
+                sigma=bool(spec["sigma"]),
+                out_subdir=queue.get("out_subdir", "phase2"),
+                resume=True,
+                callbacks=make_callbacks(run_id, state, spec),
+                weights=start_weights,
+                train_overrides=spec.get("train_overrides"),
+                gaussian_overrides=spec.get("gaussian_overrides"),
+            )
+        except PauseRequested as exc:
+            rs.update(status="paused", note=str(exc))
+            save_state(state)
+            log(f"=== {run_id}: {exc} — checkpoint kept, will resume where it stopped")
+            if not wait_while_paused(state):
+                interrupted = True
+                break
+            continue  # same index: re-enter this run, which resumes from last.pt
+        except KeyboardInterrupt:
+            rs.update(status="interrupted")
+            save_state(state)
+            log(f"=== {run_id}: interrupted by Ctrl-C — rerun `run` to resume from last.pt")
+            interrupted = True
+            break
+        except Exception as exc:  # noqa: BLE001 - one bad run must not sink the queue
+            rs.update(status="failed", error=f"{type(exc).__name__}: {exc}"[:400],
+                      finished=now())
+            save_state(state)
+            log(f"=== {run_id}: FAILED {type(exc).__name__}: {exc}")
+            traceback.print_exc()
+            if args.stop_on_fail:
+                interrupted = True
+                break
+            i += 1
+            continue
+
+        rs.update(status="done", finished=now(), run_dir=str(run_dir), best_weights=str(best))
+        save_state(state)
+        log(f"=== {run_id}: done -> {best}")
+        i += 1
+
+    state["queue_status"] = "interrupted" if interrupted else "idle"
+    save_state(state)
+    LIVE_JSON.unlink(missing_ok=True)
+    remaining = [s["id"] for s in specs
+                 if run_state(state, s["id"]).get("status") not in TERMINAL]
+    log(f"queue finished ({'interrupted' if interrupted else 'all runs terminal'}); "
+        f"remaining: {remaining or 'none'}")
+    return 0
+
+
+# ---------------------------------------------------------------------- status
+
+
+def cmd_status(args) -> int:
+    queue = read_json(QUEUE_JSON, None)
+    if queue is None:
+        print(f"no queue at {QUEUE_JSON}")
+        return 1
+    state, live, ctl = load_state(), read_json(LIVE_JSON, {}), control()
+    print(f"queue  : {state.get('queue_status', 'never started')}"
+          f"{'  [PAUSE REQUESTED]' if ctl.get('paused') else ''}")
+    print(f"updated: {state.get('updated', '-')}")
+    print(f"{'run':<22}{'status':<12}{'epochs':<9}{'best ep':<9}{'mAP50-95':<10}")
+    for r in queue["runs"]:
+        rs = state.get("runs", {}).get(r["id"], {})
+        print(f"{r['id']:<22}{rs.get('status', 'pending'):<12}"
+              f"{str(rs.get('epochs_done', '-')):<9}{str(rs.get('best_epoch', '-')):<9}"
+              f"{str(rs.get('map50_95', '-')):<10}")
+    if live:
+        print(f"\nlive: {live.get('run_id')} epoch {live.get('epoch')}/{live.get('epochs')} "
+              f"batch {live.get('batch_i')}/{live.get('batch_n')} "
+              f"{live.get('img_s')} img/s  gpu {live.get('gpu_reserved_gb')} GB")
+    return 0
+
+
+def cmd_pause(args) -> int:
+    set_control(paused=True)
+    print("pause requested — the current run stops after its next epoch checkpoint.")
+    return 0
+
+
+def cmd_resume(args) -> int:
+    set_control(paused=False)
+    print("resume requested. If the runner process exited, start it again: "
+          "python scripts/run_queue.py run")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--config", default=None)
+    parser.add_argument("--queue-dir", default=None,
+                        help="relocate queue.json/state.json/control.json (default runs/queue)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    p_init = sub.add_parser("init", help="write runs/queue/queue.json")
+    p_init.add_argument("--variant", default="yolo26s")
+    p_init.add_argument("--batch", type=int, default=None)
+    p_init.add_argument("--workers", type=int, default=None)
+    p_init.add_argument("--force", action="store_true")
+    p_init.set_defaults(func=cmd_init)
+
+    p_run = sub.add_parser("run", help="work the queue")
+    p_run.add_argument("--only", nargs="+", default=None, help="run only these ids")
+    p_run.add_argument("--redo", action="store_true", help="rerun ids already marked done")
+    p_run.add_argument("--stop-on-fail", action="store_true")
+    p_run.set_defaults(func=cmd_run)
+
+    sub.add_parser("status", help="one-shot status").set_defaults(func=cmd_status)
+    sub.add_parser("pause", help="ask the queue to pause").set_defaults(func=cmd_pause)
+    sub.add_parser("resume", help="clear the pause flag").set_defaults(func=cmd_resume)
+
+    args = parser.parse_args()
+    if args.queue_dir:
+        set_queue_dir(args.queue_dir)
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
