@@ -32,6 +32,15 @@ class ReliabilityConstants:
     alpha: float = 1.0                    # temporal smoothing OFF by default (decision D14)
     combination: str = "multiplicative"   # multiplicative | min | geometric (plan B5-3)
     gamma: float = 0.5                    # geometric-mean exponent (only used when combination="geometric")
+    # --- photometric term (TODO §0.2). None = DISABLED, reproducing §6.4 byte
+    # for byte. Mahalanobis distance measures whether a frame is UNUSUAL; a dark
+    # frame is not unusual, it is empty, and empty sits near the middle of the
+    # feature distribution. Measured: pohang01 (real night, mAP 0.0000) scores
+    # D=28.4 vs pohang00's 30.0 (daylight, mAP 0.4004) — the gate ranks the
+    # blind frames as CLEANER. `r_bright` supplies the axis D cannot see.
+    mu_b: float | None = None             # brightness at 50% clean-mAP retention
+    tau_b: float | None = None            # logistic scale of that retention curve
+    bright_stat: str = "mean"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -70,21 +79,40 @@ def per_box_uncertainty(sigma_ltrb: np.ndarray, boxes_xyxy: np.ndarray) -> np.nd
     return (sigma_ltrb / scale).mean(axis=1)
 
 
-def compute_reliability(record: dict, frame_distance: float, constants: ReliabilityConstants) -> dict:
-    """Scope §6.4 for one frame of one modality.
+def compute_reliability(
+    record: dict,
+    frame_distance: float,
+    constants: ReliabilityConstants,
+    frame_brightness: float | None = None,
+) -> dict:
+    """Scope §6.4 for one frame of one modality, plus the optional §0.2 photometric term.
 
     record: UQPredictor output (boxes_xyxy, conf, sigma_ltrb, ...).
     Returns R plus every intermediate, so calibration analysis and the learned
     gate (plan B4) read from the same record.
+
+    `frame_brightness` is the content-region statistic from `frame_brightness.py`
+    (letterbox pad excluded). It is combined by MIN, not by product: the two
+    signals answer different questions ("is this frame strange?" and "is this
+    frame lit?") and either one firing is sufficient grounds to distrust the
+    modality. A product would let a confident-looking D dilute a brightness
+    alarm, which is the exact failure being fixed.
     """
     o = 1.0 / (1.0 + np.exp(-(frame_distance - constants.mu_d) / constants.tau))
     r_frame = 1.0 - float(o)
+
+    r_bright = None
+    if constants.mu_b is not None and frame_brightness is not None:
+        tau_b = max(float(constants.tau_b or _EPS), _EPS)
+        r_bright = float(1.0 / (1.0 + np.exp(-(float(frame_brightness) - constants.mu_b) / tau_b)))
+        r_frame = min(r_frame, r_bright)
 
     n = len(record["boxes_xyxy"])
     if n == 0:
         # Empty-frame fallback (scope §6.4): clear-empty-sea vs fog-blind is
         # decided by the frame-level signal alone.
-        return {"R": r_frame, "r_frame": r_frame, "r_box": None, "U_box": None, "O": float(o), "n_dets": 0}
+        return {"R": r_frame, "r_frame": r_frame, "r_box": None, "U_box": None, "O": float(o),
+                "r_bright": r_bright, "n_dets": 0}
 
     u = per_box_uncertainty(record["sigma_ltrb"], record["boxes_xyxy"])
     c = np.asarray(record["conf"], dtype=np.float64)
@@ -101,7 +129,8 @@ def compute_reliability(record: dict, frame_distance: float, constants: Reliabil
     else:
         raise ValueError(f"unknown combination rule: {constants.combination}")
 
-    return {"R": float(r), "r_frame": r_frame, "r_box": r_box, "U_box": u_box, "O": float(o), "n_dets": n}
+    return {"R": float(r), "r_frame": r_frame, "r_box": r_box, "U_box": u_box, "O": float(o),
+            "r_bright": r_bright, "n_dets": n}
 
 
 def smooth_reliability(r_now: float, r_prev: float | None, alpha: float) -> float:
