@@ -52,13 +52,26 @@ pip freeze > requirements.lock.txt
 Order matters (later smokes reuse earlier artifacts). All CPU, minutes each.
 
 ```bash
-python scripts/smoke_benchmark.py    # Phase 1 harness: grid -> val -> CSV -> FPS -> Table 1
-python scripts/smoke_gaussian.py     # Phase 2 §18-2 gate: σ head trains, warm-up engages, σ tracks noise
-python scripts/smoke_uq_pipeline.py  # Phase 2: OOD -> reliability -> gated WBF end-to-end
-python scripts/smoke_phase3.py       # Phase 3: baselines, caches, corruptions, metrics, gate, ablation
+python scripts/smoke_benchmark.py     # Phase 1 harness: grid -> val -> CSV -> FPS -> Table 1
+python scripts/smoke_gaussian.py      # Phase 2 §18-2 gate, DFL path (v8/v9/11/12): trains, warm-up engages, σ tracks noise
+python scripts/smoke_gaussian_e2e.py  # Phase 2 §18-2 gate, END2END path (YOLO26 — the selected backbone)
+python scripts/smoke_uq_pipeline.py   # Phase 2: OOD -> reliability -> gated WBF end-to-end
+python scripts/smoke_phase3.py        # Phase 3: baselines, caches, corruptions, metrics, gate, ablation
 ```
 
-Expected final lines: `SMOKE OK`, `GAUSSIAN SMOKE OK`, `UQ PIPELINE SMOKE OK`, `PHASE3 SMOKE OK`. A red smoke = stop; nothing downstream is trustworthy.
+Expected final lines: `SMOKE OK`, `GAUSSIAN SMOKE OK`, `END2END GAUSSIAN SMOKE OK`, `UQ PIPELINE SMOKE OK`, `PHASE3 SMOKE OK`. A red smoke = stop; nothing downstream is trustworthy.
+
+**Both Gaussian gates must be green**, because the two head families take different σ
+codepaths and each can fail while the other passes:
+
+| gate | backbone family | what only it can catch |
+|---|---|---|
+| `smoke_gaussian.py` | plain `Detect`, `reg_max=16` | σ tracks injected noise; the §7.2 DFL-derived row is emitted |
+| `smoke_gaussian_e2e.py` | end2end `Detect`, `reg_max=1` | σ rides the one2one (deployed) branch, survives the top-k gather, and leaves box/cls/dfl bit-identical |
+
+The end2end gate's five structural checks need no training and run in seconds — they
+are the ones that catch σ that is finite, positive and non-degenerate while still being
+attached to the wrong branch. See `docs/architecture-option-a.md`.
 
 ### 1b. Dataset gate — run this first on any NEW machine
 
@@ -153,6 +166,72 @@ python scripts/run_benchmark.py --data runs/derived/data_vis_stride2.yaml --vari
 
 **Check:** `runs/gaussian/<name>/results.csv` — `train/nll_loss` is 0 for `warmup_epochs`, then activates; val mAP within seed noise of the parity row (guaranteed-by-construction with the default detached-gradient config, but verify anyway).
 
+## 3b. Phase 2 on the laptop — the queued architecture test
+
+Before committing the DGX to full-resolution `yolo26m`, the same chain runs here at
+`yolo26s` / imgsz 640 on the existing 640 dataset. **Epochs and patience are the
+full-scale values** (`benchmark.epochs` 100, `benchmark.patience` 20) — the model is
+smaller, the schedule is not, so early stopping behaves as it will on the server.
+
+```bash
+python scripts/tune_batch.py                 # measure batch/workers on THIS GPU (once)
+python scripts/run_queue.py init --batch 24 --workers 8
+python scripts/run_queue.py run              # or double-click queue.cmd
+```
+
+Then, in a second window, the instrument panel:
+
+```bash
+python scripts/dashboard.py --open           # or double-click dashboard.cmd
+```
+
+`http://127.0.0.1:8770` lists the runs left, the current epoch/batch, measured
+throughput, GPU reserved, and the epoch each run will stop by (best epoch +
+patience). One button pauses and resumes. The dashboard has no authority: it reads
+`runs/queue/` and flips one boolean in `control.json`. Closing it, or never opening
+it, changes nothing about a run in progress.
+
+| file | written by | holds |
+|---|---|---|
+| `runs/queue/queue.json` | `init`, then edit by hand | what to run, in order |
+| `runs/queue/state.json` | the runner | per-run status, epochs, best epoch, mAP |
+| `runs/queue/live.json` | the runner (~1 Hz) | current epoch/batch heartbeat |
+| `runs/queue/control.json` | dashboard or `run_queue.py pause` | `{"paused": bool}` |
+
+**Pause is graceful, not a kill.** The runner raises out of the training loop from
+`on_model_save` — the first instant `weights/last.pt` is complete on disk — then
+re-enters Ultralytics' own resume path with optimizer, EMA, scaler and epoch counter
+intact. Killing the window works too (you lose the epoch in flight), and rerunning
+`run` picks every unfinished run back up. Two things had to be fixed for that to be
+true, both gated by `scripts/smoke_resume.py`:
+
+- `GaussianTrainer.get_model` now **converts before loading weights**. The stock
+  order intersects the checkpoint against a model that has no `cv4` yet, so on
+  resume every σ key fell out and the branch restarted from init while the detector
+  carried on. The gate reproduces the old order to prove the hazard is real.
+- Early stopping is **restored from the run's own `results.csv`**. Ultralytics
+  rebuilds `EarlyStopping` on resume and never restores it, so patience would count
+  from a local peak — a paused run would train past the rule the un-paused runs obeyed.
+
+Add these to the smoke suite in §1 when queue work is involved:
+
+```bash
+python scripts/smoke_resume.py    # σ survives resume; early stopping restored
+python scripts/smoke_queue.py     # pause -> resumable checkpoint -> same run finishes
+```
+
+Expect `RESUME SMOKE OK` and `QUEUE SMOKE OK`. Both are minutes on tiny data.
+
+**Sizing note (RTX 4080 Laptop, 12.0 GB).** `tune_batch.py` ranks candidates by
+measured throughput *and* reports the driver-level peak, because on WDDM an
+over-large batch does not OOM — it pages and runs ~17× slower in silence. Measured
+for `yolo26s` + σ at 640: batch 32 is fastest (78.2 img/s) but peaks 11.42 GB of
+12.0, so anything else touching the GPU pushes it into paging; **batch 24 gives 75.8
+img/s at 9.26 GB** and is the shipped default. Workers 4/8/12/16 span 76.0–79.6
+img/s — inside probe noise, consistent with the Phase 1 finding that the loader was
+never the bottleneck — so `workers: 8` stays, the value proven across nine
+multi-hour laptop runs.
+
 ## 4. Phase 3 — baselines, caches, calibration, gate (server)
 
 ```bash
@@ -192,22 +271,56 @@ python scripts/evaluate_uq.py \
     --cache ensemble_fog=runs/cache/ens_vis_val_fog.pkl \
     --out runs/eval/table2_vis.md
 
-# 4. Gate-level ablation (combination rule x α) — pure CPU over the caches
+# 4. Paired VIS<->IR frames + per-run calibration homography. Anything that
+#    FUSES needs both: the two caches must be index-aligned, and IR boxes must
+#    be mapped into the VIS frame. Pairing comes from Pohang_dataset/paired/*.csv
+#    — NOT from frame numbers, which disagree on 58% of pairs.
+python scripts/build_pairs.py --split val --out-dir runs/derived
+python scripts/derive_homography.py --out runs/derived/homography_ir_to_vis.json
+
+# 5. Paired caches — both streams over the SAME instants, in the same order
+python scripts/build_cache.py --source gaussian --weights $G --conf 0.001 \
+    --images-list runs/derived/paired_val_vis.txt --out runs/cache/gauss_vis_paired_clean.pkl
+python scripts/build_cache.py --source gaussian --weights $G_IR --conf 0.001 \
+    --images-list runs/derived/paired_val_ir.txt  --out runs/cache/gauss_ir_paired_clean.pkl
+
+# 6. Gate-level ablation (combination rule x α) — pure CPU over the caches.
+#    --vis-cache/--ir-cache MUST be index-aligned. Each modality gets its own
+#    Mahalanobis fit cache: the streams come from different checkpoints, so
+#    their pooled-feature spaces are not comparable.
 python scripts/ablate_gate.py \
-    --vis-cache runs/cache/gauss_vis_val_fog.pkl \
-    --ir-cache  runs/cache/gauss_ir_val_clean.pkl \
-    --clean-cache runs/cache/gauss_vis_val_clean.pkl \
-    --fit-cache runs/cache/gauss_vis_train_clean.pkl \
+    --vis-cache runs/cache/gauss_vis_paired_fog.pkl \
+    --ir-cache  runs/cache/gauss_ir_paired_clean.pkl \
+    --vis-clean-cache runs/cache/gauss_vis_paired_clean.pkl \
+    --ir-clean-cache  runs/cache/gauss_ir_paired_clean.pkl \
+    --vis-fit-cache runs/cache/gauss_vis_train_clean.pkl \
+    --ir-fit-cache  runs/cache/gauss_ir_train_clean.pkl \
+    --homography runs/derived/homography_ir_to_vis.json \
+    --manifest runs/derived/paired_val_manifest.csv \
     --out runs/eval/gate_ablation.md
+
+# 7. Table 3 — the whole architecture, end to end, on real paired frames
+python scripts/run_fusion_eval.py --out runs/eval/table3_fusion.md
+
+# 8. Per-class AP — mAP is macro-averaged, so a dead class hides inside it
+python scripts/per_class_ap.py --cache runs/cache/gauss_ir_paired_clean.pkl
 ```
 
-The learned-gate upper bound (§7.5) and full fusion-system comparison run inside the Python API (`uqfusion.eval.learned_gate`, `uqfusion.eval.fusion_eval.evaluate_systems`) and are exercised by `smoke_phase3.py`; their manuscript-facing CLI arrives with the Phase 4 Table 3 runner, where the VIS/IR pairing of real frames is defined.
+**The pre-2026-08-19 step-4 invocation was wrong** and died on an assert: it fed an
+11,352-frame VIS val cache and a 2,234-frame IR val cache to a function that pairs
+them by index. Fusion requires paired caches, built as in step 4/5 above.
+
+The learned-gate upper bound (§7.5) and the full fusion-system comparison have a
+manuscript-facing CLI as of 2026-08-19: `scripts/run_fusion_eval.py` (Table 3).
+They remain exercised at synthetic scale by `smoke_phase3.py`.
 
 **Inference-cost column note (plan B6):** report measured wall-clock from the cache-build logs (Gaussian 1 pass vs MC T=10 vs ensemble M=5), not just the nominal multiplier.
 
-## 5. Phase 4 — publication run (not yet coded)
+## 5. Phase 4 — publication run (partly coded)
 
-Multi-seed final runs on both datasets, Table 3 (adverse-condition robustness incl. the both-degraded row + `R_sys` histogram), MIT dataset in, DETR benchmark row decision, manuscript artifacts. The Table 3 runner + real VIS↔IR frame pairing + IR→VIS homography (needs the calibration files, OQ-5) are the main new code. Phase gate: Laksh's go-ahead after Phase 3 results.
+Multi-seed final runs on both datasets, Table 3 (adverse-condition robustness incl. the both-degraded row + `R_sys` histogram), MIT dataset in, DETR benchmark row decision, manuscript artifacts. Phase gate: Laksh's go-ahead after Phase 3 results.
+
+**Landed 2026-08-19** (see [`docs/handoff-2026-08-19-fusion.md`](docs/handoff-2026-08-19-fusion.md)): the Table 3 runner (`run_fusion_eval.py`), real VIS↔IR frame pairing (`build_pairs.py` — 2,232 aligned val pairs) and the IR→VIS homography (`derive_homography.py`, per-run, **OQ-5 closed**). Still open for Phase 4: multi-seed, the both-degraded row, MIT, DETR.
 
 ---
 
