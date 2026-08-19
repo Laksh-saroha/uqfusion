@@ -32,11 +32,17 @@ from uqfusion.uq.train_gaussian import train_gaussian
 SMOKE_GAUSSIAN_OVERRIDES = {"warmup_epochs": 2, "ramp_epochs": 2}
 
 
-def train_smoke_gaussian(cfg: dict, fresh: bool = True):
+def train_smoke_gaussian(
+    cfg: dict,
+    fresh: bool = True,
+    variant: str | None = None,
+    run_name: str = "smoke_gauss",
+    root_name: str = "smoke_gaussian",
+):
     """Build the hetero dataset and train the tiny Gaussian model. Shared with the
-    pipeline smoke. Returns (best_weights, run_dir, data_root, noise_map)."""
+    pipeline smoke and the end2end gate. Returns (best_weights, run_dir, data_root, noise_map)."""
     s = cfg["smoke"]
-    root = Path(cfg["paths"]["outputs_root"]) / "smoke_gaussian"
+    root = Path(cfg["paths"]["outputs_root"]) / root_name
     data_root = root / "hetero_data"
     if fresh and root.exists():
         shutil.rmtree(root)
@@ -47,12 +53,12 @@ def train_smoke_gaussian(cfg: dict, fresh: bool = True):
     best, run_dir = train_gaussian(
         cfg,
         data_yaml,
-        variant=s["variant"],
+        variant=variant or s["variant"],
         epochs=s.get("gaussian_epochs", 10),
         imgsz=s["imgsz"],
         batch=s["batch"],
         workers=0,
-        run_name="smoke_gauss",
+        run_name=run_name,
         gaussian_overrides=SMOKE_GAUSSIAN_OVERRIDES,
     )
     return best, run_dir, data_root, noise_map

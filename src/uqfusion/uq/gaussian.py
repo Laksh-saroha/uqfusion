@@ -22,6 +22,27 @@ negligible and noted.)
 σ parameterization: per-anchor log σ² over the four DFL regression targets —
 LTRB distances in stride units (matching `bbox2dist`), converted to pixels at
 inference by multiplying exp(½·logvar) with the anchor's stride.
+
+End2end backbones (YOLO26 — `end2end=True`, `reg_max=1`) are supported by the
+same conversion, with three differences forced by the head's shape:
+
+  1. **σ rides the one2one branch.** `Detect.forward` runs the head twice and
+     inference decodes from `preds["one2one"]`; the one2many branch is discarded.
+     The two branches use different target assignments (topk 10 vs 7/topk2 1), so
+     σ attached to one2many would be calibrated against a box predictor that never
+     reaches the output — plausible-looking and wrong. `_sigma_box_head` picks the
+     branch that produces the final detections.
+  2. **`postprocess` is overridden** to gather σ with the same top-k index as the
+     boxes. Stock `Detect.postprocess` splits exactly `[4, nc]`, so trailing σ
+     channels would be absorbed into `scores` and compete in the top-k as class
+     logits. (`Segment.postprocess` carries mask coefficients the same way.)
+  3. **μ comes from the raw box output.** At `reg_max=1` there is no bin
+     distribution to take an expectation over, and the NLL target must stay
+     unclamped — `bbox2dist(..., reg_max-1)` would clamp it to `(0, -0.01)`.
+
+`sigma_detach_features` is a no-op on end2end heads: Ultralytics already feeds the
+one2one branch detached features, so D17's parity guarantee holds there for free and
+the flag cannot be relaxed without forking `Detect.forward`.
 """
 
 from __future__ import annotations
@@ -31,7 +52,8 @@ import torch.nn as nn
 from ultralytics.nn.modules import Detect
 from ultralytics.nn.modules.conv import Conv
 from ultralytics.nn.tasks import DetectionModel
-from ultralytics.utils.loss import v8DetectionLoss
+from ultralytics.utils import LOGGER
+from ultralytics.utils.loss import E2ELoss, v8DetectionLoss
 from ultralytics.utils.tal import bbox2dist
 
 LOGVAR_MIN, LOGVAR_MAX = -12.0, 8.0  # clamp in stride-unit log-variance space
@@ -43,6 +65,7 @@ DEFAULT_GAUSSIAN_CFG = {
     "ramp_epochs": 5,               # linear NLL-weight ramp after warm-up
     "sigma_detach_features": True,  # cv4 reads detached neck features
     "nll_detach_mu": True,          # NLL trains σ only; μ stays owned by DFL/CIoU
+    "sigma_width": None,            # cv4 hidden width; None mirrors the box branch
 }
 
 
@@ -57,10 +80,18 @@ class GaussianDetect(Detect):
     output_dfl_unc = False         # inference: also append DFL-distribution std (pixels) — §7.2 ablation row
     sigma_detach_features = True   # gradient isolation of the σ branch from the trunk
 
+    def _sigma_box_head(self) -> nn.Module:
+        """The box branch cv4 shadows: whichever one produces the FINAL detections.
+
+        Plain heads: cv2. End2end heads: one2one_cv2, because one2many is discarded
+        at inference and carries a different target assignment.
+        """
+        return self.one2one_cv2 if self.end2end else self.cv2
+
     def forward_head(self, x, box_head=None, cls_head=None):
-        """Standard head outputs plus `logvars` (bs, 4, anchors) on the one-to-many path."""
+        """Standard head outputs plus `logvars` (bs, 4, anchors) on the deployed branch."""
         preds = Detect.forward_head(self, x, box_head=box_head, cls_head=cls_head)
-        if preds and getattr(self, "cv4", None) is not None and box_head is self.cv2:
+        if preds and getattr(self, "cv4", None) is not None and box_head is self._sigma_box_head():
             bs = x[0].shape[0]
             xs = [xi.detach() for xi in x] if self.sigma_detach_features else x
             preds["logvars"] = torch.cat(
@@ -90,6 +121,24 @@ class GaussianDetect(Detect):
             y = torch.cat((y, dfl_std), dim=1)
         return y
 
+    def postprocess(self, preds: torch.Tensor) -> torch.Tensor:
+        """End2end top-k selection that carries the σ channels through the gather.
+
+        Stock `Detect.postprocess` splits `[4, nc]` exactly, so any trailing σ column
+        would be read as a class logit and could win the top-k. Extra channels are
+        gathered with the SAME index as the boxes, so σ[i] always describes box[i].
+
+        Returns (bs, k, 6 + extra): x1 y1 x2 y2 | conf | cls | σ_LTRB [| dfl_σ_LTRB].
+        """
+        extra = preds.shape[-1] - 4 - self.nc
+        if extra <= 0:  # σ output disabled — stock behaviour
+            return Detect.postprocess(self, preds)
+        boxes, scores, sigma = preds.split([4, self.nc, extra], dim=-1)
+        scores, conf, idx = self.get_topk_index(scores, self.max_det)
+        boxes = boxes.gather(dim=1, index=idx.repeat(1, 1, 4))
+        sigma = sigma.gather(dim=1, index=idx.repeat(1, 1, extra))
+        return torch.cat([boxes, scores, conf, sigma], dim=-1)
+
 
 class GaussianDetectionLoss(v8DetectionLoss):
     """box/cls/dfl (untouched, incl. target assignment) + β-NLL over LTRB distances.
@@ -98,8 +147,8 @@ class GaussianDetectionLoss(v8DetectionLoss):
     and logs the items under 4 loss names (GaussianTrainer.get_validator).
     """
 
-    def __init__(self, model):
-        super().__init__(model)
+    def __init__(self, model, tal_topk: int = 10, tal_topk2: int | None = None):
+        super().__init__(model, tal_topk=tal_topk, tal_topk2=tal_topk2)
         cfg = {**DEFAULT_GAUSSIAN_CFG, **getattr(model, "gaussian_cfg", {})}
         self.beta = float(cfg["beta"])
         self.nll_gain = float(cfg["nll_gain"])
@@ -128,8 +177,16 @@ class GaussianDetectionLoss(v8DetectionLoss):
 
         pred_distri = preds["boxes"].permute(0, 2, 1)  # (bs, A, 4*reg_max)
         b, a, c = pred_distri.shape
-        mu = pred_distri.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_distri.dtype))
-        target_ltrb = bbox2dist(anchor_points, target_bboxes / stride_tensor, self.reg_max - 1)
+        if self.use_dfl:
+            mu = pred_distri.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_distri.dtype))
+            target_ltrb = bbox2dist(anchor_points, target_bboxes / stride_tensor, self.reg_max - 1)
+        else:
+            # reg_max == 1 (YOLO26): the box branch predicts LTRB distances directly —
+            # no bin distribution to take an expectation over. The target must stay
+            # UNCLAMPED: bbox2dist(..., reg_max-1) would clamp to (0, -0.01) and zero
+            # every target. Stock BboxLoss never hits this path (it skips DFL entirely).
+            mu = pred_distri
+            target_ltrb = bbox2dist(anchor_points, target_bboxes / stride_tensor)
 
         mu = mu[fg_mask].float()
         logvar = logvars.permute(0, 2, 1)[fg_mask].float().clamp(LOGVAR_MIN, LOGVAR_MAX)
@@ -153,20 +210,59 @@ class GaussianDetectionLoss(v8DetectionLoss):
         return loss4 * batch_size, loss4.detach()
 
 
+class GaussianE2ELoss(E2ELoss):
+    """YOLO26's two-branch loss, with β-NLL on the one2one branch only.
+
+    Ultralytics weights the branches on a schedule that moves one2many 0.8 → 0.1 and
+    one2one 0.2 → 0.9 across a run. Letting the NLL ride inside the one2one vector
+    would multiply our warm-up/ramp by that schedule — the σ term's effective weight
+    would climb ~4.5× over training and `nll_gain` would stop meaning anything, while
+    the smoke gate (which never runs long enough to see the decay) still passed.
+
+    So the NLL is concatenated UNSCALED and the detector's three terms keep the stock
+    weighting bit-for-bit. The trainer sums the returned vector for backward.
+    """
+
+    def __init__(self, model):
+        super().__init__(model, loss_fn=v8DetectionLoss)  # stock one2many + schedule state
+        self.one2one = GaussianDetectionLoss(model, tal_topk=7, tal_topk2=1)
+
+    @property
+    def epoch(self) -> int:
+        """Forwarded to the branch that owns the warm-up schedule (see GaussianTrainer)."""
+        return self.one2one.epoch
+
+    @epoch.setter
+    def epoch(self, value: int) -> None:
+        self.one2one.epoch = value
+
+    def __call__(self, preds, batch):
+        preds = self.one2many.parse_output(preds)
+        loss_o2m = self.one2many.loss(preds["one2many"], batch)  # (box, cls, dfl)
+        loss_o2o = self.one2one.loss(preds["one2one"], batch)    # (box, cls, dfl, nll)
+        detector = loss_o2m[0] * self.o2m + loss_o2o[0][:3] * self.o2o
+        loss = torch.cat((detector, loss_o2o[0][3:]))            # NLL escapes the schedule
+        return loss, loss_o2o[1]
+
+
 class GaussianDetectionModel(DetectionModel):
     """DetectionModel whose criterion is the Gaussian loss. Produced by class swap
     in `convert_to_gaussian`; survives checkpoint pickling because the class is
     importable from the installed uqfusion package."""
 
     def init_criterion(self):
+        if getattr(self, "end2end", False):
+            return GaussianE2ELoss(self)
         return GaussianDetectionLoss(self)
 
 
 def convert_to_gaussian(model: DetectionModel, gaussian_cfg: dict | None = None) -> DetectionModel:
     """In-place conversion of a standard DetectionModel: add cv4, swap classes.
 
-    Idempotent (resume-safe). Raises on non-plain-Detect heads (v10Detect,
-    YOLO26, ...) — plan B1's conditionals apply there and need their own path.
+    Supports both plain `Detect` heads (v8/v9/v11/v12 — DFL, reg_max 16) and end2end
+    `Detect` heads (YOLO26 — one2one, reg_max 1); see the module docstring for the
+    three differences on the end2end path. Idempotent (resume-safe). Raises on Detect
+    SUBCLASSES (v10Detect, Segment, Pose, ...) — those need their own path.
     """
     head = model.model[-1]
     cfg = {**DEFAULT_GAUSSIAN_CFG, **(gaussian_cfg or {})}
@@ -177,19 +273,43 @@ def convert_to_gaussian(model: DetectionModel, gaussian_cfg: dict | None = None)
         return model
     if type(head) is not Detect:
         raise TypeError(
-            f"convert_to_gaussian expects a plain Detect head, got {type(head).__name__} — "
-            "for non-DFL/end2end heads the plan B1 conditional design applies (not implemented yet)"
+            f"convert_to_gaussian expects a Detect head, got {type(head).__name__} — "
+            "Detect subclasses need their own σ path (plan B1 conditionals)"
         )
-    if getattr(head, "end2end", False):
-        raise NotImplementedError("end2end (one2one) heads are out of scope for the σ branch (plan B1)")
 
-    ch = tuple(seq[0].conv.in_channels for seq in head.cv2)   # neck feature widths per level
-    c4 = head.cv2[0][0].conv.out_channels                     # mirror cv2's hidden width
-    cv4 = nn.ModuleList(
-        nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, 4, 1)) for x in ch
-    )
-    for seq in cv4:
-        seq[-1].bias.data.zero_()  # logvar starts at 0 -> σ = 1 stride unit: sane, non-degenerate
+    end2end = bool(getattr(head, "end2end", False))
+    if end2end and not cfg["sigma_detach_features"]:
+        LOGGER.warning(
+            "gaussian.sigma_detach_features=False cannot be honored on an end2end head: "
+            "ultralytics already detaches the one2one branch's features upstream. "
+            "Forcing True — the detached-feature ablation needs a plain-Detect backbone."
+        )
+        cfg = {**cfg, "sigma_detach_features": True}
+
+    box_head = head.one2one_cv2 if end2end else head.cv2      # the branch cv4 shadows
+    ch = tuple(seq[0].conv.in_channels for seq in box_head)    # neck feature widths per level
+    # cv4's hidden width mirrors the box branch by default. That coupling is a
+    # liability on P2 backbones: Ultralytics sizes every Detect branch from ch[0],
+    # so adding a stride-4 level drops ch[0] 128 -> 64 and silently HALVES c4
+    # (32 -> 16, cv4 0.286M -> 0.148M) — the variance head shrinks at the same
+    # moment it is asked to cover 4x the anchors. An architecture arm would then
+    # be testing two changes. `sigma_width` pins it so it tests one.
+    c4 = int(cfg["sigma_width"]) if cfg.get("sigma_width") else box_head[0][0].conv.out_channels
+    # Built inside a forked RNG so the global stream is left exactly where it was.
+    # D17 guarantees the detector trains bit-identically to its baseline, and at
+    # the gradient level it does (detached features, detached μ; the end2end gate
+    # measures max |Δ| = 0.00e+00). But *initialising* cv4 draws from the global
+    # generator, which offsets every subsequent draw — dataloader seeding and
+    # augmentation included. The two arms then see different augmentations from
+    # batch 1 and diverge for a reason that has nothing to do with σ, which is
+    # what turned §12.1 into a comparison of two trajectories instead of a
+    # measurement. Forking restores true bit-identity through the warm-up.
+    with torch.random.fork_rng(devices=[]):  # CPU generator only; modules build on CPU
+        cv4 = nn.ModuleList(
+            nn.Sequential(Conv(x, c4, 3), Conv(c4, c4, 3), nn.Conv2d(c4, 4, 1)) for x in ch
+        )
+        for seq in cv4:
+            seq[-1].bias.data.zero_()  # logvar starts at 0 -> σ = 1 stride unit: sane, non-degenerate
     device = next(head.parameters()).device
     head.cv4 = cv4.to(device)
 

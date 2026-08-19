@@ -34,6 +34,10 @@ def main() -> int:
     parser.add_argument("--weights", nargs="+", required=True)
     parser.add_argument("--data", default="vis")
     parser.add_argument("--split", default="val", choices=["train", "val", "test"])
+    parser.add_argument("--images-list", default=None,
+                        help="txt of image paths, one per line, used INSTEAD of --data/--split. "
+                             "Order is preserved verbatim — this is how paired VIS/IR caches stay "
+                             "index-aligned for fusion_eval (see scripts/build_pairs.py).")
     parser.add_argument("--out", required=True)
     parser.add_argument("--imgsz", type=int, default=None)
     parser.add_argument("--conf", type=float, default=0.25)
@@ -62,14 +66,21 @@ def main() -> int:
 
         predictor = EnsemblePredictor(args.weights, device=device, imgsz=imgsz, conf=args.conf)
 
-    images = split_image_list(load_data_yaml(resolve_data_yaml(cfg, args.data)), args.split)
+    if args.images_list:
+        list_path = Path(args.images_list)
+        images = [Path(ln.strip()) for ln in list_path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        missing = [p for p in images[:50] if not p.is_file()]
+        if missing:
+            raise FileNotFoundError(f"{list_path}: image not found, e.g. {missing[0]}")
+    else:
+        images = split_image_list(load_data_yaml(resolve_data_yaml(cfg, args.data)), args.split)
     if args.limit:
         images = images[: args.limit]
 
     transform = make_corruption(args.corrupt, args.severity, args.corrupt_seed) if args.corrupt else None
     meta = {
         "source": args.source, "weights": [str(w) for w in args.weights], "data": args.data,
-        "split": args.split, "imgsz": imgsz, "conf": args.conf,
+        "split": args.split, "images_list": args.images_list, "imgsz": imgsz, "conf": args.conf,
         "corrupt": args.corrupt, "severity": args.severity if args.corrupt else None,
         "corrupt_seed": args.corrupt_seed if args.corrupt else None,
     }
