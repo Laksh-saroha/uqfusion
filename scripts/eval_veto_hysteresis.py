@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 from pathlib import Path
@@ -47,45 +46,7 @@ if str(ROOT / "src") not in sys.path:
 
 from uqfusion.eval.apmetrics import ap_from_parts, bootstrap_delta, frame_parts  # noqa: E402
 from uqfusion.eval.ctx import load_context, run_systems  # noqa: E402
-
-
-def temporal_order(records) -> dict[str, np.ndarray]:
-    """{run: frame indices in ascending capture order}, from the file stem."""
-    runs, nums = [], []
-    for r in records:
-        p = Path(r["image_path"])
-        runs.append(p.parent.name)
-        m = re.search(r"(\d+)$", p.stem)
-        if not m:
-            raise ValueError(f"cannot recover a frame number from {p.stem!r}")
-        nums.append(int(m.group(1)))
-    runs, nums = np.asarray(runs), np.asarray(nums)
-    out = {}
-    for run in sorted(set(runs.tolist())):
-        idx = np.flatnonzero(runs == run)
-        out[run] = idx[np.argsort(nums[idx], kind="mergesort")]
-    return out
-
-
-def filter_veto(veto: list[bool], order: dict[str, np.ndarray], k: int, mode: str) -> list[bool]:
-    """Apply a length-k filter to the veto flags, within each run, in time order."""
-    v = np.asarray(veto, dtype=bool)
-    if k <= 1:
-        return v.tolist()
-    half = k // 2
-    out = v.copy()
-    for idx in order.values():
-        seq = v[idx].astype(np.int32)
-        n = len(seq)
-        pad = np.pad(seq, (half, half), mode="edge")
-        win = np.lib.stride_tricks.sliding_window_view(pad, k)[:n]
-        if mode == "majority":
-            out[idx] = win.sum(axis=1) * 2 > k
-        elif mode == "dilate":
-            out[idx] = win.max(axis=1) > 0
-        else:
-            raise ValueError(f"unknown mode {mode!r}")
-    return out.tolist()
+from uqfusion.eval.hysteresis import filter_veto, temporal_order  # noqa: E402
 
 
 def main() -> int:
@@ -99,7 +60,12 @@ def main() -> int:
     args = ap.parse_args()
 
     t0 = time.time()
-    ctx = load_context(**({'conditions': tuple(args.conditions)} if args.conditions else {}))
+    # This script's recorded numbers (runs/eval/x_veto_hysteresis.md) were taken
+    # under the 2026-08-19 configuration, BEFORE the finalization made dilate-15
+    # the default. Pin that configuration explicitly so `k=1` still means the
+    # raw per-frame switch and the assertions below keep holding.
+    ctx = load_context(capability_sel="all", bright_soft=True, veto_filter=None,
+                       **({'conditions': tuple(args.conditions)} if args.conditions else {}))
     order = temporal_order(ctx.vis_by_cond["clean"])
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}
     print(f"[hys] temporal order over {len(order)} runs: "

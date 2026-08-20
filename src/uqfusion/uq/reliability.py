@@ -41,6 +41,13 @@ class ReliabilityConstants:
     mu_b: float | None = None             # brightness at 50% clean-mAP retention
     tau_b: float | None = None            # logistic scale of that retention curve
     bright_stat: str = "mean"
+    # --- 2026-08-20 finalization. The interaction readout (followup §3) showed
+    # `veto_only` equals the full gate+veto system in EVERY cell: once the hard
+    # veto holds the switch, folding r_bright into the soft weight changes
+    # nothing. `bright_soft=False` therefore computes and returns r_bright (the
+    # veto still reads it) but keeps it OUT of r_frame. Default True reproduces
+    # the 2026-08-19 record byte for byte; the finalized system sets False.
+    bright_soft: bool = True
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -98,14 +105,19 @@ def compute_reliability(
     modality. A product would let a confident-looking D dilute a brightness
     alarm, which is the exact failure being fixed.
     """
-    o = 1.0 / (1.0 + np.exp(-(frame_distance - constants.mu_d) / constants.tau))
+    # exponent clipped at +-700 (float64 exp overflows ~709); saturates to the
+    # same 0/1 the unclipped value would, without the RuntimeWarning when an
+    # ablation pushes mu_d to an extreme.
+    z = np.clip(-(frame_distance - constants.mu_d) / constants.tau, -700.0, 700.0)
+    o = 1.0 / (1.0 + np.exp(z))
     r_frame = 1.0 - float(o)
 
     r_bright = None
     if constants.mu_b is not None and frame_brightness is not None:
         tau_b = max(float(constants.tau_b or _EPS), _EPS)
         r_bright = float(1.0 / (1.0 + np.exp(-(float(frame_brightness) - constants.mu_b) / tau_b)))
-        r_frame = min(r_frame, r_bright)
+        if constants.bright_soft:
+            r_frame = min(r_frame, r_bright)
 
     n = len(record["boxes_xyxy"])
     if n == 0:

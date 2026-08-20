@@ -41,6 +41,12 @@ term the Mahalanobis distance cannot supply, and the hard veto that removes a
 blind modality from the WBF input list instead of down-weighting it. Both default
 to OFF so this script still reproduces the original Table 3 byte for byte.
 
+2026-08-20 finalization: with `--brightness-constants` + `--veto`, the defaults
+now produce the FINALIZED system — veto-only photometric term (no soft
+component), dilate-15 hysteresis on the switch, capability prior over the fit
+runs only. To reproduce the 2026-08-19 record's table instead, add
+`--bright-soft --capability-runs all --veto-dilate 1`.
+
 Usage:
     python scripts/run_fusion_eval.py --out runs/eval/table3_fusion.md
 """
@@ -118,6 +124,18 @@ def main() -> int:
     parser.add_argument("--veto", type=float, default=None,
                         help="exclude a modality from fusion when its r_bright falls below this; "
                              "needs --brightness-constants. Use 0.5, the registered boundary")
+    parser.add_argument("--veto-dilate", type=int, default=15,
+                        help="hysteresis window on the veto switch (dilate mode, capture order); "
+                             "adopted 15 per runs/eval/x_veto_hysteresis.md. <=1 restores the "
+                             "per-frame switch. Only active together with --veto")
+    parser.add_argument("--bright-soft", action="store_true",
+                        help="ALSO fold r_bright into the soft weight (the 2026-08-19 chain). "
+                             "Default off: the interaction readout showed veto-only equals "
+                             "gate+veto in every cell, so the soft term is retired")
+    parser.add_argument("--capability-runs", choices=("fit", "all"), default="fit",
+                        help="frames the capability prior is computed over. 'fit' (default) is "
+                             "run-disjoint from the held-out night run; 'all' reproduces the "
+                             "2026-08-19 tables, whose prior included the held-out run")
     parser.add_argument("--night-runs", default="pohang01",
                         help="comma-separated recording runs to report as the night split")
     args = parser.parse_args()
@@ -158,21 +176,32 @@ def main() -> int:
     if args.shared_constants:
         scorer_ir, c_ir = scorer_vis, c_vis
 
+    night_runs = tuple(r.strip() for r in args.night_runs.split(",") if r.strip())
+    frame_runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_by_cond["clean"]])
+    night_sel = np.flatnonzero(np.isin(frame_runs, night_runs))
+    day_sel = np.flatnonzero(~np.isin(frame_runs, night_runs))
+
     # Capability prior: each modality's clean-val mAP, measured on the same
     # clean caches the constants are fit on (so no new data is consulted).
+    # Default 'fit' restricts it to the non-night runs — the 'all' prior
+    # included the held-out night run (followup §7); measured effect of the fix
+    # is <= +0.0047, all of it on day cells, none on the night headline.
     cap_vis = cap_ir = 1.0
     if args.capability_weighted:
         from uqfusion.eval.matching import load_gt, map50_95
 
         g = [load_gt(r["image_path"], r["image_hw"]) for r in vis_by_cond["clean"]]
-        cap_vis = map50_95(vis_by_cond["clean"], g)["map50_95"]
         ir_in_vis_h = per_frame_homographies(Path(args.manifest), Path(args.homography))
         from uqfusion.uq.fusion import apply_homography
 
         ir_mapped = [{**r, "boxes_xyxy": apply_homography(np.asarray(r["boxes_xyxy"]).reshape(-1, 4), h)}
                      for r, h in zip(ir_clean, ir_in_vis_h)]
-        cap_ir = map50_95(ir_mapped, g)["map50_95"]
-        print(f"[fusion] capability prior: VIS {cap_vis:.4f}  IR {cap_ir:.4f}  (ratio {cap_vis / cap_ir:.1f}x)")
+        cap_sel = day_sel if args.capability_runs == "fit" else np.arange(len(g))
+        g_cap = [g[i] for i in cap_sel]
+        cap_vis = map50_95([vis_by_cond["clean"][i] for i in cap_sel], g_cap)["map50_95"]
+        cap_ir = map50_95([ir_mapped[i] for i in cap_sel], g_cap)["map50_95"]
+        print(f"[fusion] capability prior ({args.capability_runs} runs, {len(cap_sel)} frames): "
+              f"VIS {cap_vis:.4f}  IR {cap_ir:.4f}  (ratio {cap_vis / cap_ir:.1f}x)")
 
     # Photometric gate and hard veto — both off unless asked for.
     bright_by_cond, c_vis_gate, bright_desc = {}, c_vis, "photometric gate OFF"
@@ -188,19 +217,19 @@ def main() -> int:
                                  f"runs/cache/gauss_vis_paired_{cond}.pkl --modality vis")
             bright_by_cond[cond] = np.asarray(
                 [f[stat] for f in json.loads(bp.read_text(encoding="utf-8"))["frames"]], dtype=float)
-        c_vis_gate = _replace2(c_vis, mu_b=bc["mu_b"], tau_b=bc["tau_b"], bright_stat=stat)
-        bright_desc = f"photometric gate ON ({stat}, mu_b={bc['mu_b']:.3f}, tau_b={bc['tau_b']:.3f})"
+        c_vis_gate = _replace2(c_vis, mu_b=bc["mu_b"], tau_b=bc["tau_b"], bright_stat=stat,
+                               bright_soft=args.bright_soft)
+        bright_desc = (f"photometric term ({stat}, mu_b={bc['mu_b']:.3f}, tau_b={bc['tau_b']:.3f}, "
+                       f"{'soft+veto' if args.bright_soft else 'veto-only'})")
         print(f"[fusion] {bright_desc}"
-              + (f", hard veto at r_bright < {args.veto}" if args.veto is not None else ", no veto"))
+              + (f", hard veto at r_bright < {args.veto}"
+                 + (f" with dilate-{args.veto_dilate} hysteresis" if args.veto_dilate > 1 else "")
+                 if args.veto is not None else ", no veto"))
     elif args.veto is not None:
         raise SystemExit("--veto needs --brightness-constants: the veto fires on r_bright")
     # IR deliberately gets no photometric term: on a thermal sensor "dark" means
     # cold water, which is the condition IR exists for. The fix is VIS-only.
 
-    night_runs = tuple(r.strip() for r in args.night_runs.split(",") if r.strip())
-    frame_runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_by_cond["clean"]])
-    night_sel = np.flatnonzero(np.isin(frame_runs, night_runs))
-    day_sel = np.flatnonzero(~np.isin(frame_runs, night_runs))
     print(f"[fusion] day/night split: {len(day_sel)} day, {len(night_sel)} night "
           f"({'+'.join(night_runs)})")
 
@@ -238,16 +267,31 @@ def main() -> int:
     from uqfusion.eval.matching import load_gt as _load_gt, map50_95 as _map
 
     gts_all = [_load_gt(r["image_path"], r["image_hw"]) for r in vis_by_cond["clean"]]
+
+    # Veto hysteresis (finalized 2026-08-20): the switch is dilated in capture
+    # order BEFORE fusion, via veto_override; the soft weight is untouched.
+    hyst_order = None
+    if args.veto is not None and args.veto_dilate > 1:
+        from uqfusion.eval.hysteresis import filter_veto, raw_veto_flags, temporal_order
+        hyst_order = temporal_order(vis_by_cond["clean"])
+
     rows = []
     diag = []
     split_rows = []
     for cond in args.conditions:
+        veto_kw = {"veto_below": args.veto}
+        if hyst_order is not None and bright_by_cond.get(cond) is not None:
+            vv = raw_veto_flags(bright_by_cond[cond], c_vis_gate.mu_b, c_vis_gate.tau_b,
+                                args.veto, len(vis_by_cond[cond]))
+            vv = filter_veto(vv, hyst_order, args.veto_dilate, "dilate")
+            veto_kw = {"veto_below": None,
+                       "veto_override": (vv, [False] * len(vis_by_cond[cond]))}
         res = evaluate_systems(vis_by_cond[cond], ir_clean, scorer_vis, c_vis_gate, gate=gate,
                                h_ir_to_vis=h_frames, scorer_ir=scorer_ir, constants_ir=c_ir,
                                capability_vis=cap_vis, capability_ir=cap_ir,
                                gts=gts_all, iou_thr_wbf=args.iou_thr,
                                brightness_vis=bright_by_cond.get(cond), brightness_ir=None,
-                               veto_below=args.veto)
+                               **veto_kw)
         # The split re-scores the SAME fused outputs on a frame subset; fusion is
         # never re-run, so the split cannot disagree with the pooled row about
         # what the system actually did.
@@ -288,9 +332,12 @@ def main() -> int:
           f"IR->VIS homography: {'IDENTITY (sensitivity run)' if args.identity_h else 'per-run, from calibration'}. "
           f"Reliability constants: {'SHARED VIS (sensitivity run)' if args.shared_constants else 'per modality'}, "
           f"rule = {constants_rule}, combination={combination}, alpha={alpha}"
-          + (f", capability-weighted (VIS {cap_vis:.4f} / IR {cap_ir:.4f})" if args.capability_weighted else "")
+          + (f", capability-weighted over {args.capability_runs} runs "
+             f"(VIS {cap_vis:.4f} / IR {cap_ir:.4f})" if args.capability_weighted else "")
           + f", WBF iou_thr={args.iou_thr}, {bright_desc}"
-          + (f", hard veto at r_bright<{args.veto}" if args.veto is not None else "") + ".",
+          + (f", hard veto at r_bright<{args.veto}"
+             + (f" (dilate-{args.veto_dilate} hysteresis)" if args.veto_dilate > 1 else "")
+             if args.veto is not None else "") + ".",
           "",
           "mAP@50-95 (mAP@50 in parentheses). The IR stream is always clean — only the VIS stream is degraded.",
           "",
@@ -334,6 +381,9 @@ def main() -> int:
                     "iou_thr": args.iou_thr,
                     "brightness_constants": args.brightness_constants,
                     "veto": args.veto,
+                    "veto_dilate": args.veto_dilate,
+                    "bright_soft": args.bright_soft,
+                    "capability_runs": args.capability_runs,
                     "night_runs": list(night_runs),
                     "shared_constants": args.shared_constants}, indent=2), encoding="utf-8")
     print(f"[fusion] -> {out_path}")

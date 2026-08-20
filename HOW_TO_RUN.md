@@ -299,8 +299,18 @@ python scripts/ablate_gate.py \
     --manifest runs/derived/paired_val_manifest.csv \
     --out runs/eval/gate_ablation.md
 
-# 7. Table 3 — the whole architecture, end to end, on real paired frames
-python scripts/run_fusion_eval.py --out runs/eval/table3_fusion.md
+# 7. Table 3 — the whole architecture, end to end, on real paired frames.
+#    This is the FINALIZED system (docs/architecture-final-2026-08-20.md):
+#    run-disjoint capability prior, veto-only photometric term, dilate-15
+#    hysteresis on the veto switch. For the 2026-08-19 record's table add
+#    --bright-soft --capability-runs all --veto-dilate 1.
+python scripts/run_fusion_eval.py --capability-weighted --iou-thr 0.85 \
+    --constants runs/eval/reliability_constants.json \
+    --brightness-constants runs/eval/brightness_constants.json --veto 0.5 \
+    --out runs/eval/table3_fusion.md
+
+# 7b. The finalized system with bootstrap CIs + the soft-weight ablation
+python scripts/eval_final_system.py --out runs/eval/final_system.md
 
 # 8. Per-class AP — mAP is macro-averaged, so a dead class hides inside it
 python scripts/per_class_ap.py --cache runs/cache/gauss_ir_paired_clean.pkl

@@ -73,7 +73,10 @@ def main() -> int:
     args = ap.parse_args()
 
     t0 = time.time()
-    ctx = load_context(**({'conditions': tuple(args.conditions)} if args.conditions else {}))
+    # Recorded under the 2026-08-19 adopted system; pinned so re-runs keep
+    # reproducing runs/eval/x_topk_truncation.md.
+    ctx = load_context(capability_sel="all", bright_soft=True, veto_filter=None,
+                       **({'conditions': tuple(args.conditions)} if args.conditions else {}))
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}
 
     n_vis = int(sum(len(r["conf"]) for r in ctx.vis_by_cond["clean"]))

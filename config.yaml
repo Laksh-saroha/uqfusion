@@ -32,6 +32,14 @@ datasets:
 
 device: auto                   # auto | cpu | "0" | "0,1"
 
+# --- GPU interpreter (machine-specific) --------------------------------------
+# The dev .venv is the torch+CPU build. Chain scripts that launch training must
+# use THIS interpreter and verify CUDA first (uqfusion.config.resolve_gpu_python):
+# followup-analysis-2026-08-20.md §9 records 4 epochs at a 19.8x penalty because
+# a chain inherited sys.executable from the CPU venv. null = use sys.executable
+# (correct on the server, where the launching interpreter IS the GPU one).
+gpu_python: "C:/Users/lasa2/AppData/Local/Programs/Python/Python313/python.exe"
+
 # --- Phase 1: backbone benchmark (plan C5) ----------------------------------
 benchmark:
   # Full size ladder per family (nano→x). Per-family scale letters differ:

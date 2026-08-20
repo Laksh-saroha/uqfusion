@@ -30,6 +30,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+from uqfusion.config import resolve_gpu_python  # noqa: E402
 S3_STATE = ROOT / "runs" / "queue_screen3" / "state.json"
 LOG = ROOT / "runs" / "queue_screen4" / "chain.log"
 TERMINAL = ("done", "failed", "skipped")
@@ -61,6 +65,12 @@ def main() -> int:
     ap.add_argument("--max-wait-h", type=float, default=8.0)
     args = ap.parse_args()
 
+    # §9 of the followup record: this chain once inherited the CPU-torch venv via
+    # sys.executable and trained 4 epochs at a 19.8x penalty. The interpreter is
+    # now pinned in config.yaml and probed for CUDA BEFORE anything launches.
+    gpu_py = resolve_gpu_python()
+    log(f"chain: GPU interpreter {gpu_py} (CUDA probe passed)")
+
     log("chain: waiting for the stage-3 GPU queue to finish")
     deadline = time.time() + args.max_wait_h * 3600
     while True:
@@ -80,7 +90,7 @@ def main() -> int:
     wts = p2.get("best_weights")
     if p2.get("status") == "done" and wts and Path(wts).is_file():
         log(f"chain: step 1 — IR upgrade into fusion from {wts}")
-        r = subprocess.run([sys.executable, str(ROOT / "scripts" / "eval_ir_upgrade_fusion.py"),
+        r = subprocess.run([gpu_py, str(ROOT / "scripts" / "eval_ir_upgrade_fusion.py"),
                             "--weights", wts, "--tag", "p2feat", "--n-boot", "1000"],
                            cwd=str(ROOT))
         log(f"chain: step 1 exit {r.returncode}")
@@ -95,7 +105,7 @@ def main() -> int:
         log(f"chain: WARNING {clahe_yaml.name} missing — the CLAHE export has not finished. "
             f"That run will fail and the queue will continue past it.")
     log("chain: step 2 — stage-4 training queue")
-    r = subprocess.run([sys.executable, str(ROOT / "scripts" / "run_queue.py"),
+    r = subprocess.run([gpu_py, str(ROOT / "scripts" / "run_queue.py"),
                         "--queue-dir", "runs/queue_screen4", "run"], cwd=str(ROOT))
     log(f"chain: step 2 exit {r.returncode}")
     log("chain: done")

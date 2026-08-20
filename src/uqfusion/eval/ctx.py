@@ -10,11 +10,20 @@ table used the D5/B5 constants while every analysis used the D-6 ladder fit, and
 gated glare read 0.0641 instead of 0.2058. That happened because the setup was
 duplicated. This module exists so it cannot happen again.
 
-`load_context()` reproduces the adopted configuration by default:
+`load_context()` reproduces the ADOPTED configuration by default. As of the
+2026-08-20 finalization (`docs/architecture-final-2026-08-20.md`) that is:
 
-    --capability-weighted --iou-thr 0.85
-    --constants runs/eval/reliability_constants.json
-    --brightness-constants runs/eval/brightness_constants.json --veto 0.5
+    capability-weighted WBF, iou_thr 0.85, sigma-weighted available
+    D-6 ladder constants (runs/eval/reliability_constants.json)
+    photometric term VETO-ONLY (bright_soft=False; followup §3: the soft term
+        is redundant — `veto_only` equals gate+veto in every cell)
+    hard veto at r_bright < 0.5 with DILATE-15 hysteresis in capture order
+        (followup §4: fog/night +0.0020 CI [+0.0007, +0.0028], guard unmoved)
+    capability prior computed RUN-DISJOINT over the fit runs (followup §7:
+        the all-frames prior included the held-out night run)
+
+To reproduce the 2026-08-19 record exactly instead, pass
+`capability_sel="all", bright_soft=True, veto_filter=None`.
 
 The learned gate is deliberately NOT loaded: it is a fitted model reported
 separately, and none of the follow-up tests ablate it.
@@ -32,6 +41,7 @@ import numpy as np
 from uqfusion.config import load_config
 from uqfusion.eval.cache import load_cache
 from uqfusion.eval.fusion_eval import evaluate_systems
+from uqfusion.eval.hysteresis import ADOPTED_VETO_FILTER, filter_veto, raw_veto_flags, temporal_order
 from uqfusion.eval.matching import load_gt
 from uqfusion.uq.mahalanobis import MahalanobisScorer
 from uqfusion.uq.reliability import ReliabilityConstants, fit_constants, per_box_uncertainty
@@ -87,8 +97,17 @@ class FusionContext:
     conditions: tuple[str, ...]
     iou_thr: float
     veto: float | None
+    veto_filter: tuple[str, int] | None = None   # (mode, k) hysteresis on the switch
     cap_note: str = ""
     _sel: dict = field(default_factory=dict)
+    _order: dict | None = None
+
+    @property
+    def order(self) -> dict[str, np.ndarray]:
+        """Capture order per run, computed once (needed by the veto filter)."""
+        if self._order is None:
+            self._order = temporal_order(self.vis_by_cond["clean"])
+        return self._order
 
     # ---- frame selectors -------------------------------------------------
     def sel(self, name: str) -> np.ndarray:
@@ -153,7 +172,9 @@ def load_context(
     bright_dir="runs/derived/brightness",
     iou_thr: float = 0.85,
     veto: float | None = 0.5,
-    capability_sel: str | None = "all",
+    capability_sel: str | None = "fit",
+    bright_soft: bool = False,
+    veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
@@ -196,7 +217,8 @@ def load_context(
                 raise SystemExit(f"missing {bp} — run scripts/frame_brightness.py first")
             bright_by_cond[cond] = np.asarray(
                 [f[stat] for f in json.loads(bp.read_text(encoding="utf-8"))["frames"]], dtype=float)
-        c_vis = replace(c_vis, mu_b=bc["mu_b"], tau_b=bc["tau_b"], bright_stat=stat)
+        c_vis = replace(c_vis, mu_b=bc["mu_b"], tau_b=bc["tau_b"], bright_stat=stat,
+                        bright_soft=bright_soft)
 
     h_frames = per_frame_homographies(ROOT / manifest, ROOT / homography)
     gts = [load_gt(r["image_path"], r["image_hw"]) for r in vis_by_cond["clean"]]
@@ -206,7 +228,7 @@ def load_context(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, h_frames=h_frames, gts=gts,
         runs=runs, cap_vis=1.0, cap_ir=1.0, conditions=tuple(conditions),
-        iou_thr=iou_thr, veto=veto)
+        iou_thr=iou_thr, veto=veto, veto_filter=veto_filter)
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -219,12 +241,21 @@ def load_context(
         print(f"[ctx] VIS mu_d={c_vis.mu_d:.2f} tau={c_vis.tau:.2f} mu_b={c_vis.mu_b} tau_b={c_vis.tau_b}")
         print(f"[ctx] capability prior: VIS {ctx.cap_vis:.4f}  IR {ctx.cap_ir:.4f} "
               f"(ratio {ctx.cap_vis / max(ctx.cap_ir, 1e-9):.1f}x)  [{capability_sel}]")
-        print(f"[ctx] iou_thr={iou_thr} veto={veto}  day {len(ctx.sel('day'))} / night {len(ctx.sel('night'))}")
+        print(f"[ctx] iou_thr={iou_thr} veto={veto} filter={veto_filter} "
+              f"bright_soft={bright_soft}  day {len(ctx.sel('day'))} / night {len(ctx.sel('night'))}")
     return ctx
 
 
 def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
-    """`evaluate_systems` under the adopted configuration, for one condition."""
+    """`evaluate_systems` under the adopted configuration, for one condition.
+
+    When the context carries a `veto_filter`, the hysteresis is applied here:
+    the instantaneous flags are computed from brightness alone (identical to
+    the fitted path — `raw_veto_flags`), dilated in capture order, and handed
+    to `evaluate_systems` as `veto_override`. Passing your own `veto_override`
+    or `veto_below` in `overrides` bypasses the filter entirely, so ablation
+    scripts that study the raw switch keep meaning what they say.
+    """
     kw = dict(
         h_ir_to_vis=ctx.h_frames, scorer_ir=ctx.scorer_ir, constants_ir=ctx.c_ir,
         capability_vis=ctx.cap_vis, capability_ir=ctx.cap_ir, gts=ctx.gts,
@@ -234,6 +265,16 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
     kw.update(overrides)
     vis = kw.pop("vis_records", ctx.vis_by_cond[condition])
     ir = kw.pop("ir_records", ctx.ir_clean)
+    if (ctx.veto_filter is not None and ctx.veto is not None
+            and "veto_override" not in overrides and "veto_below" not in overrides
+            and kw.get("veto_on", "r_bright") == "r_bright"
+            and ctx.c_vis.mu_b is not None):
+        mode, k = ctx.veto_filter
+        vv = raw_veto_flags(kw["brightness_vis"], ctx.c_vis.mu_b, ctx.c_vis.tau_b or 1e-9,
+                            ctx.veto, len(vis))
+        vv = filter_veto(vv, ctx.order, k, mode)
+        kw["veto_override"] = (vv, [False] * len(vis))   # IR is never vetoed by design
+        kw["veto_below"] = None
     return evaluate_systems(vis, ir, ctx.scorer_vis, ctx.c_vis, **kw)
 
 

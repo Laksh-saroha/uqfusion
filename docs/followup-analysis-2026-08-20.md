@@ -127,8 +127,10 @@ fog/night, the cell §4.5 leaves open; guard is clean/day.
 | dilate | 61 | 0.0809 | +0.0020 | [+0.0007, +0.0029] | 0.3341 |
 
 The guard cell does not move by a single digit at any setting. The mechanism is
-visible in the veto rate: fog/night goes from **29% -> 89%** VIS-vetoed under
-`dilate 15`. The per-frame rule was simply under-firing on that run, and the right
+visible in the veto rate: fog/night goes from **29% -> 71%** VIS-vetoed under
+`dilate 15` *(this line originally said 89%, a transcription error against
+`x_veto_hysteresis.json`'s 0.7074; caught 2026-08-20 when
+`eval_final_system.py` independently reproduced 71% and mAP 0.0809 exactly)*. The per-frame rule was simply under-firing on that run, and the right
 answer was to veto almost always.
 
 `dilate 15` brings fog/night to 0.0809 against `ir_only`'s 0.0810 — **equal, not
@@ -317,3 +319,16 @@ Shared: `src/uqfusion/eval/ctx.py`, `src/uqfusion/eval/apmetrics.py`
 
 **Note:** `runs/` is gitignored, so none of the result files above are under
 version control.
+
+---
+
+## 12. Disposition
+
+The consequences of this round are frozen in
+[`architecture-final-2026-08-20.md`](architecture-final-2026-08-20.md)
+(decisions D27–D30): veto-only photometric term, dilate-15 hysteresis,
+run-disjoint capability prior, p2feat IR recipe, and the sensor-selection
+reframing. The four open items in §10: item 1 and the soft-weight ablation are
+measured by `scripts/eval_final_system.py` (`runs/eval/final_system.md`); item
+2 waits on the GPU; item 3 is dropped-unless-controlled; item 4 is fixed
+(`resolve_gpu_python`).
