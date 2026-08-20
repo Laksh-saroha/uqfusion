@@ -13,6 +13,43 @@ The frozen architecture in one line: *per-modality yolo26s σ-head detectors
 entirely whenever its content brightness says no photons arrived (p05 < mu_b,
 dilated over 15 frames in capture order).*
 
+## The architecture, in plain language
+
+**Two detectors, one merge rule, one kill switch.**
+
+- **Two detectors.** VIS and IR each get their own yolo26s + Gaussian σ head
+  (IR with the p2feat neck — the one screening change that clearly mattered,
+  +34% at night). Each also scores how *strange* the current frame looks
+  against its own clean training data (Mahalanobis on pooled neck features).
+- **One merge rule.** IR boxes are mapped into the VIS image (per-run
+  homography) and merged by WBF (`iou_thr` 0.85, σ-weighted coordinates).
+  Each sensor's weight ≈ *how good it is on a clear day* (capability prior,
+  computed on the daytime runs only) × *how normal the frame looks to it*
+  (Mahalanobis × r_box).
+- **One kill switch.** Before merging, ask of the VIS frame: *did any light
+  reach the sensor?* The 5th-percentile brightness of the image content — a
+  statistic glare and fog cannot fake upward — is compared to a threshold
+  placed in the empty gap between dark and lit frames (`mu_b` = 10.5, margin
+  rule, no optimizer). Below it, VIS **leaves the merge entirely** rather than
+  being down-weighted. The switch is sticky: if any frame in the last 15 was
+  dark, VIS stays out (darkness is a property of a stretch of recording, not
+  one frame). IR is never vetoed — a dark thermal frame is cold water, which
+  is IR's job.
+
+**Why a switch instead of weights:** down-weighting cannot save a blind
+stream — weights renormalize, WBF rescales scores instead of dropping boxes,
+and mAP is rank-based — so a blind camera drags the working one down at any
+weight. The governing rule: *a signal gets switch authority only if it is
+monotone in sensor health.* Brightness is; the Mahalanobis score is not (glare
+looks strange while the detector still works), so it may only nudge weights.
+
+**What each piece earns** (`runs/eval/final_system.md`): the veto carries
+every night cell (up to −0.017 without it); the Mahalanobis soft weight
+recovers the fog frames the switch misses (−0.003 without it); and glare/day
+is the one cell where fusion beats *both* single sensors (+0.0022 over VIS,
+CI excluding zero). The retired parts — soft brightness term, score
+calibration, top-k caps — were measured to do nothing.
+
 ---
 
 ## A. Blocking the full-scale launch

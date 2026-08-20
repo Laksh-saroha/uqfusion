@@ -25,6 +25,34 @@ an honest analysis of when selection, weighting, and neither help.
 
 ---
 
+## 0. The change, in plain language
+
+The system is **two detectors, one merge rule, one kill switch**: per-modality
+yolo26s σ-head detectors (IR = p2feat @640); WBF in the VIS frame with each
+sensor weighted by *clear-day capability × how normal the frame looks to it*;
+and a hard veto that removes VIS from the merge whenever its content
+brightness says no photons arrived. What this finalization changed against the
+2026-08-19 system:
+
+| | 2026-08-19 system | Finalized (this doc) | Why |
+|---|---|---|---|
+| Photometric term | in the soft weight (`min`) AND the veto | **veto only** | the soft copy is redundant — `veto_only` equals gate+veto in every cell (followup §3) |
+| Veto timing | per-frame, instantaneous | **sticky: dilate-15 in capture order** | darkness doesn't flicker; fog made the switch flicker and lose fog/night — now closed to parity (followup §4) |
+| Capability prior | computed over all paired frames (incl. the held-out night run) | **daytime/fit runs only** | removes the leak; also turned clean/day and glare/day from apparent losses vs VIS into a tie and a win (followup §7; `final_system.md`) |
+| IR detector | stock yolo26s neck | **p2feat neck** | +34% IR night, the one screening lever that mattered (followup §2) |
+| Headline claim | "gated fusion beats IR-only at night" | **sensor selection: the veto recovers the working sensor; night is parity; glare/day beats both single streams** | the night delta spans zero and inverts under the better IR detector (followup §1–§2) |
+| Mahalanobis D | soft weight | soft weight, **kept by measurement** | removal costs fog/night −0.0028 (the frames the switch misses); still never holds the switch |
+| GPU launching | `sys.executable` | **`resolve_gpu_python()`, CUDA-probed** | the 19.8× CPU-torch incident (followup §9) |
+
+The governing principle that survived everything: **a signal may hold the
+switch only if it is monotone in sensor health.** Brightness is (no photons →
+no detections, always). Mahalanobis strangeness is not (glare looks strange
+while the detector still works), so it may only nudge weights — giving it the
+switch costs glare/day −43%. And weights alone can never rescue a blind
+stream: they renormalize, WBF rescales scores instead of dropping boxes, and
+mAP is rank-based, so exclusion — not down-weighting — is the correct
+mechanism.
+
 ## 1. The finalized decision layer
 
 | Component | Frozen setting | Status vs 2026-08-19 | Evidence |
