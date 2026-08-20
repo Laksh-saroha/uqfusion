@@ -712,3 +712,15 @@ Stating these in advance is worth more than any additional confirmation.
 control. The convention predates this work, but it does mean this document and the
 handoff cite files that a fresh clone will not contain. A `!runs/eval/*.md`
 negation in `.gitignore` would fix it cheaply — they are small text files.
+
+---
+
+## 11. Follow-up round (2026-08-20)
+
+Seven further tests, the p2feat IR upgrade pushed into fusion, and the stage-3/4
+training arms are recorded in `docs/followup-analysis-2026-08-20.md`. It revises
+this document in three places: the night claim in §4 spans zero under a paired
+bootstrap and inverts under a better IR detector; the photometric gate in §3 is
+redundant once the veto is present; and the A2 per-run registration plan in §9.2
+does not hold, because the within-run drift exceeds the between-run swing that
+killed the global correction.

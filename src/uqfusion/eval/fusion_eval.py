@@ -62,6 +62,7 @@ def evaluate_systems(
     veto_below: float | None = None,
     veto_on: str = "r_bright",
     sigma_weighted: bool = False,
+    veto_override: tuple[list, list] | None = None,
 ) -> dict:
     """mAP@50-95 (and mAP@50) per system over the paired frame set. Also returns
     per-frame gate weights and R_sys for the B3 abstain analysis.
@@ -124,6 +125,17 @@ def evaluate_systems(
     asserts the sigma path reduces to stock WBF exactly when sigma is constant,
     so the A/B measures sigma and not a second fusion implementation.
 
+    `veto_override` supplies the two per-frame boolean lists directly, bypassing
+    the `r_bright < veto_below` test while leaving the SOFT gate untouched. It
+    exists for the temporal-hysteresis question: the adopted veto is decided
+    per frame from an instantaneous brightness reading, but darkness is a
+    property of a contiguous stretch of a recording, not of one frame. Fog lifts
+    p05 above mu_b on 71% of night frames, so the switch flickers on a condition
+    that does not (§4.5). Smoothing `brightness_vis` instead would also move
+    `r_bright` inside the soft weight, which would make the arm a test of two
+    changes; this overrides only the switch. The both-vetoed case is still
+    collapsed to neither, exactly as in the fitted path.
+
     Both the veto and sigma weighting apply to GATED fusion only. Naive 0.5/0.5
     is the fixed-weight control and must stay untouched, or it stops being a
     control.
@@ -146,18 +158,29 @@ def evaluate_systems(
     b_ir = [None] * n if brightness_ir is None else [float(x) for x in brightness_ir]
     if len(b_vis) != n or len(b_ir) != n:
         raise ValueError("brightness arrays must be index-aligned with the paired caches")
+    if veto_override is not None:
+        ov_v, ov_i = ([bool(x) for x in veto_override[0]], [bool(x) for x in veto_override[1]])
+        if len(ov_v) != n or len(ov_i) != n:
+            raise ValueError("veto_override lists must be index-aligned with the paired caches")
+    else:
+        ov_v = ov_i = None
     fused_gated, fused_naive, fused_learned = [], [], []
     w_vis_gated, r_sys_all, r_bright_all = [], [], []
     rf_vis_all, rf_ir_all, veto_vis_all, veto_ir_all = [], [], [], []
     r_prev_vis = r_prev_ir = None
-    for rv, ri, dv, di, h, bv, bi in zip(vis_records, ir_records, d_vis, d_ir, h_frames, b_vis, b_ir):
+    for fi_, (rv, ri, dv, di, h, bv, bi) in enumerate(
+            zip(vis_records, ir_records, d_vis, d_ir, h_frames, b_vis, b_ir)):
         rel_v = compute_reliability(rv, dv, constants, bv)
         rel_i = compute_reliability(ri, di, constants_ir, bi)
         r_bright_all.append(rel_v["r_bright"])
         rf_vis_all.append(rel_v["r_frame"])
         rf_ir_all.append(rel_i["r_frame"])
         veto_v = veto_i = False
-        if veto_below is not None:
+        if ov_v is not None:
+            veto_v, veto_i = ov_v[fi_], ov_i[fi_]
+            if veto_v and veto_i:          # same abstain rule as the fitted path
+                veto_v = veto_i = False
+        elif veto_below is not None:
             if veto_on not in ("r_bright", "r_frame"):
                 raise ValueError(f"veto_on must be 'r_bright' or 'r_frame', got {veto_on!r}")
             # A modality with no photometric term (IR) has r_bright None and is
