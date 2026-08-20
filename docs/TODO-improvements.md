@@ -1,5 +1,10 @@
 # TODO — score improvements not yet run
 
+> **SUPERSEDED 2026-08-20.** The current list is
+> [`TODO-2026-08-20-full-scale.md`](TODO-2026-08-20-full-scale.md); open items
+> here were carried over with their old IDs in brackets. This file stays as the
+> 2026-08-19 record.
+
 **Created:** 2026-08-19, after the end-to-end architecture test
 ([`handoff-2026-08-19-fusion.md`](handoff-2026-08-19-fusion.md)).
 

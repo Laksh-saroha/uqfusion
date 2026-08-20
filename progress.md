@@ -28,6 +28,7 @@
 | `docs/ir-handoff-2026-08.md` | IR modality state |
 | `docs/fusion-gate-experiment-record.md` + `docs/followup-analysis-2026-08-20.md` | The 2026-08-19/20 fusion screening rounds: everything tried, refuted, and kept |
 | `docs/architecture-final-2026-08-20.md` | **The frozen full-scale architecture** (D27–D30), pending gates, baseline policy, publication framing |
+| `docs/TODO-2026-08-20-full-scale.md` | **The current TODO list** — launch blockers, pre-publication checks, the training matrix, integrity items. Supersedes `TODO-improvements.md` |
 | `archive/phase1/README.md` | What survives of the two server pulls, and why each file is kept |
 
 ## Working agreement (from kickoff, 2026-07-07)
