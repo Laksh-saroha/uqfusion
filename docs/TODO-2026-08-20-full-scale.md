@@ -54,12 +54,35 @@ calibration, top-k caps — were measured to do nothing.
 
 ## A. Blocking the full-scale launch
 
-- [ ] **A-1. Stage-3 per-class ship AP** (`scripts/perclass_ap.py` on
-  `runs/screen3/s3_p2feat_640_b10/weights/best.pt`). GPU, minutes — **blocked
-  until `s4_vis_rect` finishes** (was 20/25 epochs on 2026-08-20). Decides the
-  IR class set by the pre-registered rule: **adopt nc=1 iff ship-AP delta
-  (last-5 mean) > +0.003** vs `s4_ir_shiponly`'s 0.1272. If adopted, remap the
-  IR ship class index to match the VIS label space before fusion.
+- [ ] **A-1. The ship-AP measurement** — the one number that decides the IR
+  class set. GPU, one val pass, minutes — **blocked until `s4_vis_rect`
+  finishes** (was 20/25 epochs on 2026-08-20).
+
+  ```bash
+  "C:/Users/lasa2/AppData/Local/Programs/Python/Python313/python.exe" scripts/perclass_ap.py runs/screen3/s3_p2feat_640_b10
+  ```
+
+  (GPU interpreter, not `.venv` — D30. Prints `all | ship | buoy` for
+  `best.pt` on `data_ir_stride2.yaml`.)
+
+  **What it decides.** `s4_ir_shiponly` trained with nc=1, so its mAP *is*
+  ship AP: **best 0.1359 / last-5 0.1272**. The stage-3 2-class checkpoint's
+  headline (best 0.0659 / last-5 0.0607) is macro-averaged with a ~0.0002
+  buoy class, so its ship AP is implied ≈ 2×mAP ≈ **0.121** — but implied is
+  not measured, and this pass measures it.
+
+  **Pre-registered rule (D28): adopt nc=1 for IR iff**
+  `ship AP(s4_ir_shiponly) − ship AP(s3_p2feat_640_b10) > +0.003`
+  (the CLAHE-null magnitude is the noise yardstick). Compare best-vs-best —
+  the per-class number only exists via this val pass, so use the same
+  statistic on both sides and say so. Expected delta if the implied estimate
+  holds: ≈ +0.006 → adopt; if the measured stage-3 ship AP comes in ≥ 0.133,
+  keep nc=2.
+
+  **If adopted:** remap the IR ship class index to match the VIS label space
+  before fusion (IR then simply emits no buoys — which it effectively never
+  did, buoy AP 0.00022), and regenerate the IR data yamls for the C-1 matrix
+  from the ship-only lists (`runs/derived/data_ir_shiponly*.yaml`, stride 1).
 - [ ] **A-2. Laksh sign-off** (architecture-final §8):
   - [ ] matrix stays on `yolo26s`; `26m`/full-res becomes one follow-up arm
         (narrows D25)
