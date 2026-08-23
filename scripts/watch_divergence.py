@@ -167,6 +167,79 @@ def request_pause(queue_dir: Path, say: Tee) -> None:
             f"alarm stands")
 
 
+def request_skip_and_continue(queue_dir: Path, skip_ids: list[str], say: Tee,
+                              timeout: float = 3600.0, poll: float = 10.0) -> bool:
+    """Drop the condemned run(s) and let the queue advance to the next arm.
+
+    `run_queue.py` offers no "abandon this run" signal, but it does offer two
+    that compose into one. `control.json`'s `skip` list is consulted at the top
+    of every run iteration (cmd_run), and `paused` stops the trainer at
+    `on_model_save`, right after `last.pt`. So:
+
+        1. write `skip` and `paused` together,
+        2. wait for the runner to actually park (state.json status == paused),
+        3. clear `paused`, leaving `skip` in place.
+
+    On resume `cmd_run` re-enters the *same* index, hits the skip check, marks
+    those ids `skipped` and walks forward to the next arm. Nothing is killed and
+    no checkpoint is lost.
+
+    Step 2 is not optional. Clearing `paused` before the runner has parked would
+    let it sail on training the very run we are trying to abandon.
+
+    Returns True if the queue was released, False if it never parked — in which
+    case `paused` is deliberately LEFT SET, so the failure mode is a halted queue
+    awaiting a human rather than a diverged run quietly continuing.
+    """
+    path = queue_dir / "control.json"
+    state_path = queue_dir / "state.json"
+
+    def read(p, default):
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return default
+
+    def write_control(**kw):
+        cur = read(path, {})
+        cur.update(kw)
+        cur["updated"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        cur["paused_by"] = "watch_divergence"
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(cur, indent=2), encoding="utf-8")
+        tmp.replace(path)
+
+    merged = list(dict.fromkeys(list(read(path, {}).get("skip") or []) + skip_ids))
+    try:
+        write_control(skip=merged, paused=True)
+    except OSError as exc:
+        say(f"!! could not write {path} ({exc}) — NOTHING was changed, alarm stands")
+        return False
+    say(f"skip list = {merged}; queue paused, waiting for the runner to park "
+        f"(this takes until the end of the current epoch)")
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        runs = read(state_path, {}).get("runs", {})
+        parked = [r for r in skip_ids if runs.get(r, {}).get("status") == "paused"]
+        if parked or read(state_path, {}).get("queue_status") == "paused":
+            try:
+                write_control(paused=False)
+            except OSError as exc:
+                say(f"!! runner parked but could not clear paused ({exc}) — "
+                    f"clear it by hand to let the queue advance")
+                return False
+            say(f"runner parked ({parked or 'between runs'}); paused cleared. "
+                f"The queue will mark {skip_ids} skipped and move to the next arm.")
+            return True
+        time.sleep(poll)
+
+    say(f"!! runner did not park within {timeout / 60:.0f} min. Leaving the queue "
+        f"PAUSED on purpose — a halted queue is recoverable, a diverged run "
+        f"burning GPU overnight is not. Clear it by hand once you have looked.")
+    return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -183,6 +256,15 @@ def main() -> int:
     ap.add_argument("--map-frac", type=float, default=DEFAULTS["map_frac"],
                     help=f"mAP50-95 fraction of best (default {DEFAULTS['map_frac']})")
     ap.add_argument("--no-pause", action="store_true", help="alarm only, never touch control.json")
+    ap.add_argument("--on-alarm", choices=("pause", "skip"), default="pause",
+                    help="pause: halt the queue for a human (default). "
+                         "skip: abandon --skip-ids and let the queue advance to the next arm")
+    ap.add_argument("--skip-ids", nargs="+", metavar="ID",
+                    help="run ids to abandon with --on-alarm skip (the diverging run "
+                         "and any stage continuing from it)")
+    ap.add_argument("--skip-timeout", type=float, default=3600.0,
+                    help="seconds to wait for the runner to park before giving up "
+                         "and leaving the queue paused (default 3600)")
     ap.add_argument("--log", type=Path, help="append to this log (default <run-dir>/divergence-watch.log)")
     ap.add_argument("--stall-factor", type=float, default=3.0,
                     help="warn if an epoch takes this multiple of the running average (default 3)")
@@ -200,12 +282,24 @@ def main() -> int:
     sentinel = results.parent / "DIVERGENCE-ALARM.txt"
 
     pausing = bool(args.queue_dir) and not args.no_pause
+    if args.on_alarm == "skip":
+        if not args.queue_dir:
+            ap.error("--on-alarm skip needs --queue-dir")
+        if not args.skip_ids:
+            ap.error("--on-alarm skip needs --skip-ids (be explicit about what is "
+                     "abandoned; guessing the dependency graph is how the wrong arm "
+                     "gets dropped)")
     say(f"watching {results}")
     say(f"rules: {VAL_CLS} > {args.ratio}x trailing-{args.window} median "
         f"(armed after {args.min_history} epochs) | mAP50-95 < {args.map_frac}x best "
         f"| mAP50 == 0")
-    say(f"on alarm: {'pause ' + str(args.queue_dir) if pausing else 'log only'}"
-        f"  |  poll {args.interval:.0f}s")
+    if not pausing:
+        action = "log only"
+    elif args.on_alarm == "skip":
+        action = f"skip {args.skip_ids} and advance the queue ({args.queue_dir})"
+    else:
+        action = f"pause {args.queue_dir}"
+    say(f"on alarm: {action}  |  poll {args.interval:.0f}s")
 
     seen = 0
     fired = False
@@ -232,6 +326,12 @@ def main() -> int:
                         sentinel.write_text(f"{now()}\n{banner}", encoding="utf-8")
                     except OSError:
                         pass
+                    if pausing and args.on_alarm == "skip":
+                        request_skip_and_continue(args.queue_dir, list(args.skip_ids),
+                                                  say, timeout=args.skip_timeout)
+                        say("watcher done — the run it was watching has been "
+                            "abandoned, so there is nothing further to judge")
+                        return 0
                     if pausing:
                         request_pause(args.queue_dir, say)
             # An epoch that is slower than the rest usually means a stalled or
