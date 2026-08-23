@@ -76,15 +76,28 @@ def _ap_from_sorted(tp: np.ndarray, n_gt: int) -> np.ndarray:
     return out
 
 
-def ap_from_parts(parts: list[dict], sel: np.ndarray | None = None) -> dict:
-    """mAP@50-95, mAP@50 and per-class AP over a frame subset. The reference path."""
+def ap_from_parts(parts: list[dict], sel: np.ndarray | None = None,
+                  gt_sel: np.ndarray | None = None) -> dict:
+    """mAP@50-95, mAP@50 and per-class AP over a frame subset. The reference path.
+
+    `gt_sel` decouples the GT denominator from the detection subset: default
+    (None) recomputes it from `sel`, exactly as before. Passing a fixed set of
+    frame indices (e.g. the whole eval set) makes the denominator constant while
+    `sel` still restricts which frames' predictions are pooled — the "fixed-GT"
+    metric a risk-coverage curve needs (B-3): abstained frames stop contributing
+    predictions but their GT boxes still count as unrecovered, instead of the
+    denominator itself shrinking with coverage.
+    """
     idx = np.arange(len(parts)) if sel is None else np.asarray(sel)
+    gt_idx = idx if gt_sel is None else np.asarray(gt_sel)
     n_gt: dict[int, int] = {}
     tps, confs, clss = [], [], []
-    for i in idx:
+    for i in gt_idx:
         p = parts[i]
         for c, k in zip(p["gt_cls"], p["gt_cnt"]):
             n_gt[int(c)] = n_gt.get(int(c), 0) + int(k)
+    for i in idx:
+        p = parts[i]
         if len(p["conf"]):
             tps.append(p["tp"])
             confs.append(p["conf"])
