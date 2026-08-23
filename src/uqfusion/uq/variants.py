@@ -58,6 +58,18 @@ VARIANT_SPECS: dict[str, dict] = {
         "note": "backbone P2/4 strided into the P3 neck feature. Detect stays 3-level, "
                 "so anchor count and every head width are unchanged from yolo26s.",
     },
+    "yolo26m-p2feat": {
+        "yaml": "yolo26m-p2feat.yaml",
+        "base": "yolo26m.pt",
+        "identity_through": 16,
+        "shift": 3,
+        "det_index": 23,
+        "det_level_shift": 0,
+        "min_transfer": 97.0,
+        "note": "same topology as yolo26s-p2feat, scale letter m (A-2: yolo26m is the "
+                "full-scale matrix backbone; p2feat is IR's separate neck decision, "
+                "D28). Index remap is a topology fact, unchanged by scale.",
+    },
 }
 
 

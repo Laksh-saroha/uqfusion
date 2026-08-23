@@ -101,9 +101,18 @@ def snapshot() -> dict:
         stops_by = min(epochs_cfg, best_ep + patience) if (best_ep is not None and patience) else None
         if status not in TERMINAL:
             remaining += 1
+        kind = spec.get("kind", "gaussian")
+        if kind == "gaussian":
+            arm = "sigma" if bool(spec.get("sigma", defaults.get("sigma", True))) else "parity"
+        elif kind == "mc_dropout":
+            arm = "mc-dropout"
+        elif kind == "ensemble":
+            arm = "ensemble"
+        else:
+            arm = kind
         rows.append({
             "id": spec["id"],
-            "sigma": bool(spec.get("sigma", defaults.get("sigma", True))),
+            "arm": arm,
             "data": Path(str(spec.get("data", ""))).name,
             "status": status,
             "epochs_done": done_ep,
@@ -112,6 +121,7 @@ def snapshot() -> dict:
             "patience_gap": rs.get("patience_gap"),
             "stops_by": stops_by,
             "map50_95": rs.get("map50_95"),
+            "best_map50_95": rs.get("best_map50_95"),
             "epoch_time_s": rs.get("epoch_time_s"),
             "started": rs.get("started"),
             "finished": rs.get("finished"),
@@ -193,7 +203,7 @@ PAGE = """<!doctype html>
 <div class="card">
   <table><thead><tr>
     <th>run</th><th>arm</th><th>data</th><th>status</th><th>epochs</th>
-    <th>best</th><th>stops by</th><th>mAP50-95</th><th>min/epoch</th>
+    <th>best</th><th>stops by</th><th>best mAP50-95</th><th>latest mAP50-95</th><th>min/epoch</th>
   </tr></thead><tbody id="rows"></tbody></table>
 </div>
 <div class="sub" id="foot"></div>
@@ -250,13 +260,14 @@ async function tick() {
     '<tr><td><b>' + r.id + '</b>' +
       (r.error ? '<div class="err">' + r.error + '</div>' : '') +
       (r.note ? '<div class="sub">' + r.note + '</div>' : '') + '</td>' +
-    '<td>' + (r.sigma ? '&sigma;' : 'parity') + '</td>' +
+    '<td>' + r.arm + '</td>' +
     '<td class="muted">' + r.data + '</td>' +
     '<td class="st ' + r.status + '">' + r.status + '</td>' +
     '<td>' + fmt(r.epochs_done, '0') + ' / ' + fmt(r.epochs_cfg) + '</td>' +
     '<td>' + fmt(r.best_epoch) + '</td>' +
     '<td>' + fmt(r.stops_by) + '</td>' +
-    '<td>' + fmt(r.map50_95) + '</td>' +
+    '<td><b>' + fmt(r.best_map50_95) + '</b></td>' +
+    '<td class="muted">' + fmt(r.map50_95) + '</td>' +
     '<td>' + (r.epoch_time_s ? (r.epoch_time_s/60).toFixed(1) : '\\u2013') + '</td></tr>').join('');
 
   document.getElementById('foot').textContent =
