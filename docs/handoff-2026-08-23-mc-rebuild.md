@@ -27,7 +27,7 @@ other 24 stand.
 | machine | run | state | notes |
 |---|---|---|---|
 | server `dgxanode01`, PID **18025** | `mc_vis_seed0` | epoch 4/100, **1008 s/epoch** (not 16 min) | first run on the fixed placement. **First anomaly point is epoch 16, ≈17:05 UTC** — see §4 |
-| server, PID **23574** | `watch_divergence.py` | watching `mc_vis_seed0` | added 13:53 UTC. Alarms on `val/cls_loss`, pauses the queue. §4 |
+| server, PID **23650** | `watch_divergence.py` | watching `mc_vis_seed0` | `--on-alarm skip --skip-ids mc_vis_seed0 mc_vis_seed0_ft`. On divergence it abandons both and lets the queue walk on to `ens_vis_seed0` rather than halting. §4 |
 | server, queued | `mc_vis_seed0_ft` | pending | 10 epochs, AdamW `lr0=1.67e-4`, follows automatically |
 | server, queued | `ens_vis_seed0` | **paused at epoch 4/100** | resumes at epoch 5 from `last.pt` once MC finishes; then `ens_vis_seed1-4` |
 | laptop, PID **4696** | `ens_ir_seed4` | epoch 2/100, 3.6 it/s, ~640 s/epoch | started 18:54 IST |
@@ -172,7 +172,24 @@ epoch 22 — six epochs and ~100 minutes of A100 time after the run is gone. The
 detector has to be `val/cls_loss`, which is what this section already said to
 watch but D-12 never encoded.
 
-**The armed rule** (`scripts/watch_divergence.py`, running as PID 23574):
+**What happens when it fires (server, PID 23650).** `--on-alarm skip` abandons
+`mc_vis_seed0` and `mc_vis_seed0_ft` and lets the queue advance to
+`ens_vis_seed0`, instead of halting everything for a human. It composes two
+existing signals: write `control.json`'s `skip` list *and* `paused` together, wait
+until the runner actually parks (`state.json` status `paused`, which happens at
+`on_model_save`, right after `last.pt`), then clear only `paused`. `cmd_run`
+re-enters the same index, hits the skip check, marks both `skipped`, and walks on.
+Nothing is killed and no checkpoint is lost. If the runner never parks the queue is
+left **paused on purpose** — a halted queue is recoverable, a diverged run burning
+GPU overnight is not.
+
+One honest limitation: the sidecar sees epoch N's CSV row a few seconds *after*
+that epoch's `on_model_save` has passed, so the pause lands at the end of epoch
+N+1 — roughly one wasted epoch (~17 min). The in-process alarm does not have this
+gap (it sets `trainer.stop` in the same epoch), but it needs a runner restart to
+take effect, which the server has not had.
+
+**The armed rule** (`scripts/watch_divergence.py`):
 `val/cls_loss` > 1.5× its trailing-5 median, with `mAP50-95 < 0.6 × best` as a
 backstop and `mAP50 == 0` as a floor. The 1.5 is not taste — over epochs 1–15
 of the broken run that ratio never exceeded **1.10**, and at epoch 16 it was
@@ -224,9 +241,16 @@ gone. There is no automatic alarm yet — that is D-12.
 
 ## 5. Deliberately not being re-run
 
-- **`mc_vis_seed1` / `_ft`** stay `failed`. Seed 1 existed only to test whether the
-  divergence was seed luck. It answered that. The matrix needs seed 0, and
-  re-running seed 1 would cost ~20 h to re-answer a settled question.
+- **`mc_vis_seed1` / `_ft`** — **removed from the server `queue.json` on 2026-08-23**
+  (backup at `runs/queue_vis_server/queue.json.bak-20260823`; 16 runs → 14). Seed 1
+  existed only to test whether the divergence was seed luck. It answered that. The
+  matrix needs seed 0, and re-running it would cost ~20 h to re-settle a settled
+  question. Their **`state.json` entries are deliberately kept**: `mc_vis_seed1`'s
+  `error` field is the forensic record ("REPRODUCED … same onset epoch, same
+  magnitude, so the instability is STRUCTURAL, not seed luck"), which is the
+  evidence that justified the whole rebuild. Note the live runner read its specs at
+  startup and still has them in memory, but both are `failed` — hence TERMINAL —
+  so it skips them either way. The removal takes effect on the next restart.
 - **The IR MC arms are INVALID, not merely untidy.** `mc_ir_seed0` and `_ft`
   trained cleanly and never diverged, which is exactly what made them look fine.
   Their checkpoints carry the identical defect (`end2end=True`, 6 on `cv2`/`cv3`,
