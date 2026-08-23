@@ -79,6 +79,15 @@ so `results.csv` can be pulled and diffed against another run with no shell, no
 SSH, and zero contact with the training process — useful when the question is
 "how is it doing" and the answer must not risk the run:
 
+Simplest form — just open the URL in a browser tab and read it, no scripting:
+
+```
+http://172.16.224.131:1002/api/contents/uqfusion/runs/mc_dropout/mc_vis_seed0/results.csv?content=1&type=file&format=text
+```
+
+The JSON comes back with the whole file in its `content` field. Equivalent from
+the page's JS console:
+
 ```js
 await (await fetch('/api/contents/uqfusion/runs/mc_dropout/mc_vis_seed0/' +
   'results.csv?content=1&type=file&format=text', {credentials:'same-origin'})).json()
@@ -88,6 +97,10 @@ await (await fetch('/api/contents/uqfusion/runs/mc_dropout/mc_vis_seed0/' +
 header); `POST /api/terminals` plus a websocket to
 `/terminals/websocket/<name>` drives a shell when one is genuinely needed. That
 is how `watch_divergence.py` got there and was started.
+
+Plain `curl`/PowerShell from the laptop does **not** work — `/lab` answers 200 but
+every `/api/*` call 403s, because the server issues no token and its identity
+cookie is httpOnly. It has to be a browser that already holds the session.
 
 ---
 
