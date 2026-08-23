@@ -228,7 +228,7 @@ native IR is 640x512, so imgsz 960 is pure upsampling. **640 stands.**
 These are 2-class mAP. **Per-class ship AP for the stage-3 checkpoints has not
 been measured** — `perclass_ap.py` needs a GPU val pass and the card is busy.
 
-### 8.2 Stage 4 (`runs/screen4/`) — 3 of 4 complete
+### 8.2 Stage 4 (`runs/screen4/`) — 4 of 4 arms have a reading (s4_vis_rect stopped early, not resumed — see below)
 
 All arms: p2feat, batch 10, 25 epochs, `sigma_width` 32, seed 0, same 11,640
 stride-2 frames, so each differs from `s3_p2feat_640_b10` in exactly one thing.
@@ -238,7 +238,7 @@ stride-2 frames, so each differs from `s3_p2feat_640_b10` in exactly one thing.
 | s4_ir_shiponly | buoy class dropped, nc=1 | 0.12722 | 0.13592 | **not comparable** — see below |
 | s4_ir_clahe | CLAHE before the 8-bit map | 0.06126 | 0.06347 | +0.0006, inside noise |
 | s4_ir_rect | rect=True, no letterbox padding | 0.05471 | 0.05809 | **-0.0060, worse** |
-| s4_vis_rect | rect=True, VIS 896, batch 8 | 0.23768 | 0.24884 | 18/25 epochs, still running |
+| s4_vis_rect | rect=True, VIS 896, batch 8 | 0.23125 | 0.24884 | stopped at 23/25 epochs (by choice, not crash) — see A-3 below |
 
 - **B5 ship-only**: nc=1, so its mAP **is** ship AP and must not be read against a
   2-class mAP. The comparison it needs is stage-3's ship AP, which is the
@@ -251,6 +251,19 @@ stride-2 frames, so each differs from `s3_p2feat_640_b10` in exactly one thing.
   (`.venv/Lib/site-packages/ultralytics/models/yolo/detect/train.py:96`), so the
   arm confounds aspect-ratio with loss of shuffling. **The rect result is not
   clean and should not be read as an aspect-ratio finding.**
+- **A-3 rect (VIS), decided on the partial run — no shuffle-controlled control
+  run.** `s4_vis_rect` was stopped at 23/25 epochs rather than completed or
+  resumed. Per-epoch mAP50-95 peaks at epoch 10 (0.24884) then declines through
+  epoch 23 (last-5 mean 0.23125) — the metric was already past its best and
+  falling, not still climbing toward it. The peak (0.2488) sits at or slightly
+  below the non-rect 640 baseline (`gauss_vis_seed0`, best 0.25049), and the
+  late-epoch decline pushes the effective comparison further negative — same
+  direction as the IR rect arm's clean -0.0060. Both arms share the
+  `shuffle=False` confound, so this can't be read as an aspect-ratio finding
+  either; but there is no positive signal here worth chasing with a controlled
+  896 rerun. **Decision (A-3): drop the rect line entirely, without running
+  the shuffle-controlled control.** VIS stays at imgsz 640, non-rect, per the
+  frozen C-1 recipe.
 
 ---
 

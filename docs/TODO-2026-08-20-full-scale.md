@@ -54,9 +54,10 @@ calibration, top-k caps — were measured to do nothing.
 
 ## A. Blocking the full-scale launch
 
-- [ ] **A-1. The ship-AP measurement** — the one number that decides the IR
-  class set. GPU, one val pass, minutes — **blocked until `s4_vis_rect`
-  finishes** (was 20/25 epochs on 2026-08-20).
+- [x] **A-1. The ship-AP measurement** — the one number that decides the IR
+  class set. GPU, one val pass, minutes — **was blocked on the GPU being busy
+  with `s4_vis_rect`; that run is now stopped (A-3, 23/25 epochs, not
+  resumed), so the GPU is free and this ran.**
 
   ```bash
   "C:/Users/lasa2/AppData/Local/Programs/Python/Python313/python.exe" scripts/perclass_ap.py runs/screen3/s3_p2feat_640_b10
@@ -79,38 +80,139 @@ calibration, top-k caps — were measured to do nothing.
   holds: ≈ +0.006 → adopt; if the measured stage-3 ship AP comes in ≥ 0.133,
   keep nc=2.
 
-  **If adopted:** remap the IR ship class index to match the VIS label space
-  before fusion (IR then simply emits no buoys — which it effectively never
-  did, buoy AP 0.00022), and regenerate the IR data yamls for the C-1 matrix
-  from the ship-only lists (`runs/derived/data_ir_shiponly*.yaml`, stride 1).
+  **Result (`scripts/perclass_ap.py`, best.pt):
+  `s3_p2feat_640_b10` all 0.06584 | ship 0.13149 | buoy 0.00019.** Delta vs
+  `s4_ir_shiponly` ship AP (best 0.1359, also nc=1/best.pt) = **+0.00441 >
+  +0.003**, and measured stage-3 ship AP (0.13149) came in below the 0.133
+  keep-nc=2 line — both framings of the pre-registered rule agree.
+  **Decision: adopt nc=1 for IR.**
+
+  **Now due (were gated on this):** remap the IR ship class index to match
+  the VIS label space before fusion (IR then simply emits no buoys — which it
+  effectively never did, buoy AP 0.00022), and regenerate the IR data yamls
+  for the C-1 matrix from the ship-only lists
+  (`runs/derived/data_ir_shiponly*.yaml`, stride 1).
 - [ ] **A-2. Laksh sign-off** (architecture-final §8):
-  - [ ] matrix stays on `yolo26s`; `26m`/full-res becomes one follow-up arm
-        (narrows D25)
-  - [ ] ensemble M=5 vs M=3, and DGX MIG confirmed as host (OQ-12)
+  - [x] **Backbone: `yolo26m` (not `26s`) at imgsz 640 for the matrix.**
+        `26m`/full-res together stays one follow-up arm afterward, as
+        originally recommended — just with `26m` now also the matrix
+        backbone, not only the follow-up's. Full-res on the laptop was
+        tested and rejected for the matrix itself (see host note below).
+  - [x] **Ensemble M=5**, confirmed.
+  - [x] **Host: laptop, not DGX** — "no option to run on DGX host." This
+        reverses the architecture doc's explicit recommendation
+        (`DGX MIG slice is the only viable host`, OQ-12), which was written
+        because of a specific measured risk: Windows/WDDM pages an
+        over-large batch instead of raising OOM, so a bad batch choice
+        finishes each epoch and silently costs 5–17x the wall-clock instead
+        of erroring. Mitigated, not eliminated, by measuring real batch
+        ceilings below rather than assuming them.
   - [ ] the publication reframing away from "uncertainty-gated fusion wins"
-        (architecture-final §5)
-- [ ] **A-3. `s4_vis_rect` readout.** Exploratory only — it carries the
+        (architecture-final §5) — **still open**, not yet decided.
+
+  **Batch sizes, measured on the laptop (`scripts/tune_batch.py`, real data,
+  real model, ranked by throughput not just "did it run"):**
+  - **IR: batch 10.** Not a memory ceiling — the small-object screen
+    directly tested 16 vs 10 and 10 won on accuracy (+7.0% ship AP,
+    `screen-small-object-2026-08-19.md` §2). Unchanged by this round.
+  - **VIS @ 640: batch 16.** Clean at 50.1 img/s, 9.37 GB torch / 10.53 GB
+    driver peak (1.5 GB headroom). Batch 24 pages (torch reserved 13.53 GB
+    past the 12 GB card, throughput collapsed 5x to 10.1 img/s); batch 32
+    confirmed paging live (17.7–17.8 GB reported, 6–7 s/it) and was killed
+    rather than let finish. **Chosen for throughput, not accuracy** — unlike
+    IR's batch 10, nobody has screened whether 16 is actually mAP-optimal
+    for VIS. Decision: **keep 16**, accept this as an unvalidated limitation
+    rather than spend the hours on an accuracy screen (Laksh's call,
+    2026-08-20).
+  - **VIS @ full-res 1280 (the follow-up arm only): batch 4.** Clean at
+    12.2 img/s, 10.21 GB torch / 11.6 GB driver peak — only 0.4 GB headroom,
+    thinner than the 640 case. Batch 6 already pages (torch reserved
+    14.85 GB, throughput collapsed 7x); batch 8 confirmed paging live at
+    the exact ~17 GB figure `handoff-2026-08-17.md` OQ-12 had estimated.
+
+  **Wall-clock, VIS side, 7 runs (Gaussian + MC-Dropout + M=5 ensemble)
+  sequential on one GPU, no DGX fallback:**
+  | config | epoch time | central (~30 ep, early-stop precedent) | worst case (100 ep) |
+  |---|---|---|---|
+  | `26m` @ 640, batch 16 | ~19–20 min (train measured 16 min + estimated val) | **~3 days** | ~9.7 days |
+  | `26m` @ 1280, batch 4 (follow-up arm) | ~34–36 min | ~5.1 days | ~17 days |
+
+  Epoch-count is the weakest part of this estimate — borrowed from Phase 1's
+  `yolo26m` early-stop precedent (epochs 26/29/33 at a different
+  resolution/dataset), not measured at this config. Val-time is estimated,
+  not directly timed by the probe (which only times train iterations).
+- [x] **A-3. `s4_vis_rect` readout.** Exploratory only — it carries the
   shuffle-off confound (`rect=True` forces `shuffle=False`). Decide: run a
   shuffle-controlled non-rect control at 896, or drop the rect line entirely.
   It does NOT gate the launch.
 
+  **Result (`docs/followup-analysis-2026-08-20.md` §8.2): dropped, on the
+  partial run — no control run.** Stopped at 23/25 epochs by choice. mAP50-95
+  peaked at epoch 10 (0.24884) and declined through epoch 23 (last-5 mean
+  0.23125) — already past its best, not still improving. Peak sits at/below
+  the non-rect 640 baseline (0.25049) and the late decline pushes it further
+  negative, same direction as the IR rect arm's clean -0.0060 (same
+  `shuffle=False` confound). No positive signal to justify a controlled
+  896 rerun. **VIS stays imgsz 640, non-rect, per the frozen C-1 recipe.**
+
 ## B. Cheap CPU, before publication
 
-- [ ] **B-1. Day-only Mahalanobis reference refit** (~20 min). Rebuild the
+- [x] **B-1. Day-only Mahalanobis reference refit** (~20 min). Rebuild the
   reference set from daylight frames only, re-measure D on pohang01.
   Falsification test 1: if this alone fixes night, the story simplifies to
   "mis-composed reference set" and the photometric term becomes a redundancy
   check. Needed for the limitations section either way.
-- [ ] **B-2. Leave-one-fit-run-out on `mu_b`** (~1 h) [was §9.4-20]. One run
+
+  **Result (`scripts/refit_maha_dayonly.py`, `runs/eval/x_maha_dayonly_refit.md`):
+  FIXED, decisively.** Dropping the 973 train-cache frames with p05 < mu_b
+  (10.5) — mostly pohang01 night frames, 771/782 of them — flips the
+  inversion outright: D_night goes from 28.58 (below D_day 30.80, i.e. night
+  reads as *cleaner*) to **88.97** (nearly 3x D_day 30.86, correctly the
+  strangest thing in the set) once the reference set no longer contains
+  darkness. The mis-composed reference set was the whole story: the
+  photometric veto is a redundancy check on a scorer that, correctly fit,
+  would have caught the blind sensor on its own.
+- [x] **B-2. Leave-one-fit-run-out on `mu_b`** (~1 h) [was §9.4-20]. One run
   (pohang03, p05 min 21.0) defines half the margin rule. If dropping it moves
   `mu_b` a lot, the rule needs a floor tied to the clean distribution.
-- [ ] **B-3. Fixed-GT risk–coverage (or AURC) for `R_sys`** (1–2 h) [was 0.6].
+
+  **Result (`scripts/loro_mu_b.py`, `runs/eval/x_loro_mu_b.md`): confirmed
+  unstable.** Dropping pohang00 or pohang02 leaves `mu_b` untouched (still
+  10.500 — pohang03 sets the clean-min endpoint regardless). Dropping
+  **pohang03** swings `mu_b` from 10.500 to **16.000** (+5.5, tau_b
+  2.625→4.000) — exactly the run the TODO flagged. Downstream effect on the
+  guard/target cells is small (fog/night +0.0004, CI excluding zero; clean/day
+  unmoved) because the veto is a hard binary switch and both mu_b values
+  still separate day from dark cleanly, but the margin rule itself (bare
+  min/max over 3 runs) is not self-stabilizing and needs a floor tied to the
+  clean distribution (e.g. a percentile, not a min) before being called robust.
+- [x] **B-3. Fixed-GT risk–coverage (or AURC) for `R_sys`** (1–2 h) [was 0.6].
   The recorded non-monotonicity compares mAP over shifting frame subsets;
   redo against a common denominator before recording abstain as a negative.
-- [ ] **B-4. Dedup-threshold sweep** (1–2 h) [was 0.4]. **No union-label
+
+  **Result (`scripts/eval_risk_coverage_fixed_gt.py`,
+  `runs/eval/x_risk_coverage_fixed_gt.md`): the artifact was real, but so was
+  the negative.** Fixing the GT denominator resolves the non-monotonicity on
+  3/4 conditions (0/4 were monotone under the old shifting-denominator
+  method). But `R_sys`-ordered abstention still loses to a random abstention
+  order on **every** condition (higher fixed-GT AURC than the 20-shuffle
+  random control, all 4 cells) — `R_sys` is not merely noisy-looking due to a
+  measurement bug, it is measurably worse than doing nothing. Abstain as a
+  negative stands.
+- [x] **B-4. Dedup-threshold sweep** (1–2 h) [was 0.4]. **No union-label
   number may be quoted until this runs.** §5.3 all but answers it (only 0.11%
   of VIS boxes reach IoU 0.85 with an IR box), so expect the +76.8% union box
   count to collapse to double-counted objects.
+
+  **Result (`scripts/sweep_dedup_iou.py`, `runs/eval/x_dedup_iou_sweep.md`):
+  confirmed.** Added-box count at dedup_iou 0.10 (3,049, +15.9%) is an 84%
+  drop from dedup_iou 0.85 (18,628, +97.4%); only 8.7% of IR GT boxes have
+  literally zero overlap with any same-class VIS box in frame (the only
+  threshold-independent, unambiguously-new additions). The recorded +76.8%
+  (dedup_iou 0.5) sits in between and is mostly registration slop, not new
+  objects. No single dedup_iou is self-evidently correct — the sweep, not one
+  number, is what the paper can cite until a registration-accuracy argument
+  picks a specific threshold.
 
 ## C. The full-scale matrix itself (GPU; recipe frozen in D28/D29)
 
