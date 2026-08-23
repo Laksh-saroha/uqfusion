@@ -39,8 +39,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))  # repo is not pip-installed in the GPU interpreter
+if str(ROOT / "scripts") not in sys.path:
+    sys.path.insert(0, str(ROOT / "scripts"))  # for watch_divergence, a sibling script
 
 from uqfusion.config import load_config, resolve_data_yaml  # noqa: E402
+
+# The divergence rule lives in the standalone watcher and is imported, not copied.
+# Two definitions of "diverged" would eventually disagree, and the disagreement
+# would surface as one of them failing to fire on a real run. watch_divergence
+# deliberately depends on nothing (stdlib only) so a broken package cannot
+# disarm the alarm; the dependency only points this way.
+from watch_divergence import (  # noqa: E402
+    DEFAULTS as DIVERGENCE_DEFAULTS,
+    check as divergence_check,
+    read_rows as read_results_csv,
+    thresholds as divergence_thresholds,
+)
 
 QUEUE_DIR = ROOT / "runs" / "queue"
 QUEUE_JSON = QUEUE_DIR / "queue.json"
@@ -49,7 +63,10 @@ LIVE_JSON = QUEUE_DIR / "live.json"
 CONTROL_JSON = QUEUE_DIR / "control.json"
 QUEUE_LOG = QUEUE_DIR / "queue.log"
 
-TERMINAL = {"done", "failed", "skipped"}
+# "diverged" is terminal so a restart does not silently re-enter a run the alarm
+# already condemned, and so the `from=` parent guard (which requires "done")
+# refuses to fine-tune off it.
+TERMINAL = {"done", "failed", "skipped", "diverged"}
 HEARTBEAT_S = 1.0
 
 
@@ -276,24 +293,103 @@ def default_queue(cfg: dict, variant: str, batch: int | None, workers: int | Non
     }
 
 
+def full_scale_queue(cfg: dict) -> dict:
+    """The C-1 full-scale training matrix (docs/TODO-2026-08-20-full-scale.md):
+    Gaussian sigma (1) + MC-Dropout (1) + Ensemble seed replicates (M) per
+    modality, at the frozen D28/D29/A-2 recipe — yolo26m, imgsz 640, 100 epochs,
+    patience 20. IR carries the p2feat neck (yolo26m-p2feat, uq/variants.py) on
+    every arm, per D29: baselines inherit every detector-side change, or Table 2
+    would compare architectures instead of UQ methods. Batch sizes are the
+    laptop-measured values from the TODO's A-2 sign-off (VIS 16, IR 10) — not a
+    memory ceiling for IR (screened for accuracy), a throughput pick for VIS
+    (unvalidated for mAP, Laksh's call 2026-08-20).
+
+    Each arm gets the same mosaic-off fine-tune continuation as the Phase 2
+    queue (see `ft` in `default_queue`): patience 20 will almost certainly stop
+    every run before Ultralytics' fixed close_mosaic epoch (epochs -
+    close_mosaic = 90), so without it every model trains entirely on mosaicked
+    frames and is scored on clean ones.
+    """
+    b = cfg["benchmark"]
+    ens_seeds = (cfg.get("baselines") or {}).get("ensemble", {}).get("seeds", [0, 1, 2, 3, 4])
+
+    modalities = {
+        "vis": {"variant": "yolo26m", "data": "runs/derived/data_vis_stride2.yaml", "batch": 16},
+        "ir": {"variant": "yolo26m-p2feat", "data": "runs/derived/data_ir_shiponly.yaml", "batch": 10},
+    }
+    workers = 8
+
+    # Same fine-tune shape as default_queue's `ft` (see its comment for the LR
+    # derivation) — the tail of the standard 100-epoch schedule with mosaic off.
+    ft_overrides = {
+        "epochs": 10,
+        "train_overrides": {
+            "mosaic": 0.0, "close_mosaic": 0, "warmup_epochs": 0.0, "patience": 10,
+            "optimizer": "AdamW", "lr0": 0.000167, "lrf": 0.1, "momentum": 0.9,
+        },
+        "gaussian_overrides": {"warmup_epochs": 0, "ramp_epochs": 0},
+    }
+
+    def stage(run_id: str, kind: str, mod: str, seed: int, sigma: bool | None = None) -> list[dict]:
+        m = modalities[mod]
+        base = {"id": run_id, "kind": kind, "variant": m["variant"], "data": m["data"],
+                "batch": m["batch"], "workers": workers, "seed": seed}
+        ft = {**ft_overrides, "id": f"{run_id}_ft", "kind": kind, "variant": m["variant"],
+              "data": m["data"], "batch": m["batch"], "workers": workers, "seed": seed,
+              "from": run_id}
+        if sigma is not None:
+            base["sigma"], ft["sigma"] = sigma, sigma
+        return [base, ft]
+
+    runs: list[dict] = []
+    for mod in ("vis", "ir"):
+        runs += stage(f"gauss_{mod}_seed0", "gaussian", mod, 0, sigma=True)
+    for mod in ("vis", "ir"):
+        runs += stage(f"mc_{mod}_seed0", "mc_dropout", mod, 0)
+    for mod in ("vis", "ir"):
+        for seed in ens_seeds:
+            runs += stage(f"ens_{mod}_seed{seed}", "ensemble", mod, seed)
+
+    return {
+        "created": now(),
+        "note": "C-1 full-scale matrix: Gaussian + MC-Dropout + Ensemble(M) per "
+                "modality, yolo26m (IR: yolo26m-p2feat), 100 epochs / patience "
+                "20, each arm followed by its mosaic-off fine-tune continuation. "
+                "Order: both Gaussian arms first (everything downstream depends "
+                "on them), then both MC-Dropout arms, then VIS ensemble seeds, "
+                "then IR ensemble seeds.",
+        # Distinct from the Phase 2 queue's "phase2" (train_gaussian's default
+        # out_subdir): that directory already holds a COMPLETED run named
+        # gauss_vis_seed0 (yolo26s/stride5, 2026-08-18) — reusing "phase2" here
+        # would make the Gaussian dispatch "resume" that unrelated finished
+        # checkpoint instead of training the real yolo26m/stride2 model.
+        "out_subdir": "full_scale",
+        "defaults": {"imgsz": b["imgsz"], "epochs": b["epochs"], "patience": b["patience"]},
+        "runs": runs,
+    }
+
+
 def cmd_init(args) -> int:
     cfg = load_config(args.config)
     if QUEUE_JSON.is_file() and not args.force:
         print(f"{QUEUE_JSON} exists — pass --force to overwrite (state.json is kept).")
         return 1
-    q = default_queue(cfg, args.variant, args.batch, args.workers)
+    if args.matrix == "full_scale":
+        q = full_scale_queue(cfg)
+    else:
+        q = default_queue(cfg, args.variant, args.batch, args.workers)
     write_json(QUEUE_JSON, q)
     write_json(CONTROL_JSON, {"paused": False, "updated": now()})
     d = q["defaults"]
-    print(f"wrote {QUEUE_JSON}")
-    print(f"  variant {d['variant']} | imgsz {d['imgsz']} | batch {d['batch']} | "
-          f"workers {d['workers']} | epochs {d['epochs']} | patience {d['patience']}")
+    print(f"wrote {QUEUE_JSON}  (matrix: {args.matrix})")
+    print(f"  imgsz {d.get('imgsz')} | epochs {d.get('epochs')} | patience {d.get('patience')}")
     if "_sizing_source" in d:
         print(f"  batch/workers from {d['_sizing_source']}")
-    else:
-        print("  batch/workers NOT measured on this machine — run scripts/tune_batch.py first.")
     for r in q["runs"]:
-        print(f"  - {r['id']:<20} sigma={str(r['sigma']):<5} {r['data']}")
+        kind = r.get("kind", "gaussian")
+        tag = f"sigma={r['sigma']}" if "sigma" in r else kind
+        print(f"  - {r['id']:<20} {tag:<14} variant={r.get('variant', d.get('variant')):<16} "
+              f"batch={r.get('batch', d.get('batch')):<4} {r.get('data', d.get('data', ''))}")
     return 0
 
 
@@ -319,9 +415,71 @@ def shielded(fn):
     return wrapper
 
 
+def check_divergence(trainer, run_id: str, rs: dict, alarm: dict) -> None:
+    """End the run the first epoch it shows the 2026-08-23 divergence signature.
+
+    Driven off ``results.csv``, not ``trainer.metrics``, for two reasons rooted in
+    Ultralytics' epoch order (``engine/trainer.py``):
+
+    - ``save_metrics`` writes the row at :557, *before* ``on_fit_epoch_end`` runs
+      at :576, so the current epoch is already on disk when we look.
+    - ``on_fit_epoch_end`` fires a **second** time from ``final_eval`` at :903,
+      with ``trainer.epoch`` temporarily incremented and no new row written.
+      Keying off unseen rows makes that call a no-op instead of a phantom epoch.
+
+    ``trainer.stop`` is Ultralytics' own early-stop switch, tested at :585 — i.e.
+    after ``save_model``/``on_model_save`` at :563. Setting it here ends the run at
+    the end of *this* epoch with ``last.pt`` already complete, so nothing is lost.
+
+    The queue is paused as well. Stopping only this run would let a dependent
+    ``_ft`` stage start straight off a diverged parent, which is precisely the
+    outcome the alarm exists to prevent; ``cmd_run`` checks the pause flag before
+    each run, so the halt lands before the next one begins.
+
+    On the first call after a resume the whole existing history is judged, not
+    just new epochs. A run being silently continued past a divergence (trap 3 in
+    the 08-23 handoff §6) is exactly the case worth catching late.
+
+    Note this runs under `shielded`, so a fault here degrades the alarm rather
+    than the run. That is the right trade for a training process, and it is also
+    why `scripts/watch_divergence.py` stays deployed as an independent backstop.
+    """
+    if alarm["fired"]:
+        return
+    csv_path = getattr(trainer, "csv", None) or Path(trainer.save_dir) / "results.csv"
+    rows = read_results_csv(Path(csv_path))
+    if len(rows) <= alarm["seen"]:
+        return  # final_eval's second call, or a torn read — nothing new to judge
+    start, alarm["seen"] = alarm["seen"], len(rows)
+
+    for i in range(start, len(rows)):
+        hits = divergence_check(rows, i, alarm["limits"])
+        if not hits:
+            continue
+        alarm["fired"] = True
+        epoch = rows[i]["epoch"]
+        log(f"!!! {run_id}: DIVERGENCE ALARM at epoch {epoch}")
+        for h in hits:
+            log(f"!!!   {h}")
+        log(f"!!! {run_id}: stopping this run and pausing the queue. last.pt is "
+            f"complete; nothing is lost. Inspect, then "
+            f"`run_queue.py --queue-dir {QUEUE_DIR} resume`")
+        rs["divergence_alarm"] = {"epoch": epoch, "at": now(), "reasons": hits}
+        try:
+            (Path(trainer.save_dir) / "DIVERGENCE-ALARM.txt").write_text(
+                f"{now()}\nDIVERGENCE ALARM at epoch {epoch}\n"
+                + "\n".join(f"  - {h}" for h in hits) + "\n", encoding="utf-8")
+        except OSError:
+            pass  # the state entry and the log already carry it
+        set_control(paused=True)
+        trainer.stop = True
+        return
+
+
 def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
     """Heartbeat + pause callbacks. Deliberately cheap: they run per batch."""
     tick = {"last": 0.0, "i": 0, "n": 0, "t_epoch": time.time()}
+    alarm = {"seen": 0, "fired": False, "limits": divergence_thresholds()}
 
     def on_epoch_start(trainer):
         tick["i"], tick["n"] = 0, len(trainer.train_loader)
@@ -357,13 +515,24 @@ def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
         rs["epochs_done"] = int(trainer.epoch) + 1
         rs["epoch_time_s"] = round(getattr(trainer, "epoch_time", 0.0), 1)
         stopper = getattr(trainer, "stopper", None)
+        is_best_epoch = False
         if stopper is not None:
             rs["best_fitness"] = round(float(stopper.best_fitness), 5)
             rs["best_epoch"] = int(stopper.best_epoch)
             rs["patience_gap"] = int(trainer.epoch) + 1 - int(stopper.best_epoch)
+            is_best_epoch = int(trainer.epoch) == int(stopper.best_epoch)
         metrics = getattr(trainer, "metrics", None) or {}
         rs["map50_95"] = round(float(metrics.get("metrics/mAP50-95(B)", 0.0)), 5)
         rs["map50"] = round(float(metrics.get("metrics/mAP50(B)", 0.0)), 5)
+        # The checkpoint's early-stop criterion is Ultralytics' composite fitness
+        # (~0.9*mAP50-95 + 0.1*mAP50), not raw mAP50-95, so the epoch with the
+        # highest mAP50-95 is not always the epoch saved as best.pt. Record the
+        # mAP50-95 of whichever epoch IS best.pt right now (stopper.best_epoch),
+        # not a separately-tracked max, so the dashboard number matches the
+        # checkpoint that actually exists on disk.
+        if is_best_epoch or "best_map50_95" not in rs:
+            rs["best_map50_95"] = rs["map50_95"]
+        check_divergence(trainer, run_id, rs, alarm)
         save_state(state)
 
     def on_model_save(trainer):
@@ -404,7 +573,12 @@ def cmd_run(args) -> int:
         print(f"no queue at {QUEUE_JSON} — run `python scripts/run_queue.py init` first.")
         return 1
 
+    from uqfusion.uq.ensemble import train_ensemble_member
+    from uqfusion.uq.mc_dropout import train_mc_dropout
     from uqfusion.uq.train_gaussian import train_gaussian
+
+    TRAINERS = {"gaussian": train_gaussian, "mc_dropout": train_mc_dropout,
+                "ensemble": train_ensemble_member}
 
     defaults = queue.get("defaults", {})
     state = load_state()
@@ -418,9 +592,8 @@ def cmd_run(args) -> int:
     if args.only:
         specs = [s for s in specs if s["id"] in set(args.only)]
 
-    log(f"queue: {len(specs)} run(s) | variant {defaults.get('variant')} "
-        f"| batch {defaults.get('batch')} workers {defaults.get('workers')} "
-        f"| epochs {defaults.get('epochs')} patience {defaults.get('patience')}")
+    log(f"queue: {len(specs)} run(s) | epochs {defaults.get('epochs')} "
+        f"patience {defaults.get('patience')}")
 
     interrupted = False
     i = 0
@@ -462,30 +635,42 @@ def cmd_run(args) -> int:
                 continue
             start_weights = candidate
 
+        kind = spec.get("kind", "gaussian")
+        trainer = TRAINERS.get(kind)
+        if trainer is None:
+            rs.update(status="failed", finished=now(), error=f"unknown run kind: {kind!r}")
+            save_state(state)
+            log(f"=== {run_id}: FAILED unknown kind {kind!r}")
+            i += 1
+            continue
+
         rs.update(status="running", started=rs.get("started") or now(), error=None)
         save_state(state)
-        log(f"=== {run_id}: start (sigma={spec['sigma']}, data={spec['data']}"
+        log(f"=== {run_id}: start (kind={kind}, sigma={spec.get('sigma')}, data={spec['data']}"
             + (f", from={parent}" if parent else "") + ")")
 
+        common = dict(
+            data_yaml=resolve_data_yaml(cfg, spec["data"]),
+            variant=spec["variant"],
+            seed=int(spec["seed"]),
+            epochs=int(spec["epochs"]),
+            imgsz=int(spec["imgsz"]),
+            batch=int(spec["batch"]),
+            workers=int(spec["workers"]),
+            run_name=run_id,
+            callbacks=make_callbacks(run_id, state, spec),
+            weights=start_weights,
+            train_overrides=spec.get("train_overrides"),
+        )
         try:
-            best, run_dir = train_gaussian(
-                cfg,
-                resolve_data_yaml(cfg, spec["data"]),
-                variant=spec["variant"],
-                seed=int(spec["seed"]),
-                epochs=int(spec["epochs"]),
-                imgsz=int(spec["imgsz"]),
-                batch=int(spec["batch"]),
-                workers=int(spec["workers"]),
-                run_name=run_id,
-                sigma=bool(spec["sigma"]),
-                out_subdir=queue.get("out_subdir", "phase2"),
-                resume=True,
-                callbacks=make_callbacks(run_id, state, spec),
-                weights=start_weights,
-                train_overrides=spec.get("train_overrides"),
-                gaussian_overrides=spec.get("gaussian_overrides"),
-            )
+            if kind == "gaussian":
+                best, run_dir = train_gaussian(
+                    cfg, sigma=bool(spec.get("sigma", True)),
+                    out_subdir=queue.get("out_subdir", "phase2"), resume=True,
+                    gaussian_overrides=spec.get("gaussian_overrides"), **common,
+                )
+            else:
+                best, run_dir = trainer(cfg, **common)
         except PauseRequested as exc:
             rs.update(status="paused", note=str(exc))
             save_state(state)
@@ -512,9 +697,20 @@ def cmd_run(args) -> int:
             i += 1
             continue
 
-        rs.update(status="done", finished=now(), run_dir=str(run_dir), best_weights=str(best))
-        save_state(state)
-        log(f"=== {run_id}: done -> {best}")
+        # A run the alarm stopped returns normally — Ultralytics' own stop path is
+        # a clean exit, not an exception — so the status has to be corrected here
+        # or a diverged run would be recorded as "done" and fed to its `_ft` stage.
+        if rs.get("divergence_alarm"):
+            rs.update(status="diverged", finished=now(), run_dir=str(run_dir),
+                      best_weights=str(best))
+            save_state(state)
+            log(f"=== {run_id}: DIVERGED at epoch "
+                f"{rs['divergence_alarm']['epoch']} -> {run_dir} (queue paused)")
+        else:
+            rs.update(status="done", finished=now(), run_dir=str(run_dir),
+                      best_weights=str(best))
+            save_state(state)
+            log(f"=== {run_id}: done -> {best}")
         i += 1
 
     state["queue_status"] = "interrupted" if interrupted else "idle"
@@ -574,9 +770,13 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init", help="write runs/queue/queue.json")
-    p_init.add_argument("--variant", default="yolo26s")
-    p_init.add_argument("--batch", type=int, default=None)
-    p_init.add_argument("--workers", type=int, default=None)
+    p_init.add_argument("--matrix", choices=["phase2", "full_scale"], default="phase2",
+                        help="phase2 = the laptop architecture test (default); "
+                             "full_scale = the C-1 matrix (Gaussian+MC-Dropout+Ensemble "
+                             "x VIS/IR, docs/TODO-2026-08-20-full-scale.md)")
+    p_init.add_argument("--variant", default="yolo26s", help="phase2 matrix only")
+    p_init.add_argument("--batch", type=int, default=None, help="phase2 matrix only")
+    p_init.add_argument("--workers", type=int, default=None, help="phase2 matrix only")
     p_init.add_argument("--force", action="store_true")
     p_init.set_defaults(func=cmd_init)
 

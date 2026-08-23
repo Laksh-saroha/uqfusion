@@ -47,10 +47,25 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 VAL_CLS = "val/cls_loss"
 MAP50 = "metrics/mAP50(B)"
 MAP5095 = "metrics/mAP50-95(B)"
+
+# The single definition of the rule. `scripts/run_queue.py` imports these for its
+# in-process alarm, so the sidecar watcher and the epoch callback cannot drift
+# into disagreeing about what "diverged" means. Calibrated on
+# mc_vis_seed0_broken-20260823 (see the module docstring), not chosen by taste.
+DEFAULTS = {"ratio": 1.5, "window": 5, "min_history": 3, "map_frac": 0.6}
+
+
+def thresholds(**overrides) -> SimpleNamespace:
+    """Rule parameters in the shape `check` expects, with optional overrides."""
+    unknown = set(overrides) - set(DEFAULTS)
+    if unknown:
+        raise ValueError(f"unknown threshold(s): {sorted(unknown)}")
+    return SimpleNamespace(**{**DEFAULTS, **overrides})
 
 
 def now() -> str:
@@ -159,10 +174,14 @@ def main() -> int:
     ap.add_argument("--results", type=Path, help="path to results.csv (overrides --run-dir)")
     ap.add_argument("--queue-dir", type=Path, help="queue dir to pause on alarm")
     ap.add_argument("--interval", type=float, default=60.0, help="poll seconds (default 60)")
-    ap.add_argument("--ratio", type=float, default=1.5, help="val/cls_loss median multiple (default 1.5)")
-    ap.add_argument("--window", type=int, default=5, help="trailing median window (default 5)")
-    ap.add_argument("--min-history", type=int, default=3, help="epochs before the loss rule arms (default 3)")
-    ap.add_argument("--map-frac", type=float, default=0.6, help="mAP50-95 fraction of best (default 0.6)")
+    ap.add_argument("--ratio", type=float, default=DEFAULTS["ratio"],
+                    help=f"val/cls_loss median multiple (default {DEFAULTS['ratio']})")
+    ap.add_argument("--window", type=int, default=DEFAULTS["window"],
+                    help=f"trailing median window (default {DEFAULTS['window']})")
+    ap.add_argument("--min-history", type=int, default=DEFAULTS["min_history"],
+                    help=f"epochs before the loss rule arms (default {DEFAULTS['min_history']})")
+    ap.add_argument("--map-frac", type=float, default=DEFAULTS["map_frac"],
+                    help=f"mAP50-95 fraction of best (default {DEFAULTS['map_frac']})")
     ap.add_argument("--no-pause", action="store_true", help="alarm only, never touch control.json")
     ap.add_argument("--log", type=Path, help="append to this log (default <run-dir>/divergence-watch.log)")
     ap.add_argument("--stall-factor", type=float, default=3.0,
