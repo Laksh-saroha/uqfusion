@@ -20,6 +20,12 @@ and 100 minutes of A100 time later. The validation classification loss is the
 leading indicator, exactly as the 08-23 handoff §4 says to watch it, so that is
 the primary rule here and mAP50 == 0 is kept only as a floor.
 
+Both mAP rules ignore the first `warmup` epochs, matching the trainer's LR
+warmup. A run that has not made a detection *yet* is not a run that is gone, and
+the warmup LR peak produces a real mAP crater: healthy `ens_ir_seed2` fell to
+0.44x at epoch 3 and recovered to finish at 0.128. The loss rule needs no such
+guard — its `min_history` window does not fill until the warmup is over.
+
 Thresholds are set from that same run rather than guessed. Over epochs 1-15 the
 ratio of `val/cls_loss` to its own trailing-5 median never exceeded 1.10; at
 epoch 16 it was 2.02. The 1.5 default sits between those with ~35% margin either
@@ -57,7 +63,8 @@ MAP5095 = "metrics/mAP50-95(B)"
 # in-process alarm, so the sidecar watcher and the epoch callback cannot drift
 # into disagreeing about what "diverged" means. Calibrated on
 # mc_vis_seed0_broken-20260823 (see the module docstring), not chosen by taste.
-DEFAULTS = {"ratio": 1.5, "window": 5, "min_history": 3, "map_frac": 0.6}
+DEFAULTS = {"ratio": 1.5, "window": 5, "min_history": 3, "map_frac": 0.6,
+            "warmup": 3}
 
 
 def thresholds(**overrides) -> SimpleNamespace:
@@ -133,15 +140,30 @@ def check(rows: list[dict], i: int, args) -> list[str]:
                     f"{VAL_CLS} {row['val_cls']:.3f} is {ratio:.2f}x its trailing-"
                     f"{len(history)} median {med:.3f} (limit {args.ratio:.2f}x)")
 
-    best = max((r["map5095"] for r in rows[:i]), default=0.0)
-    if best > 0 and row["map5095"] < args.map_frac * best:
+    # Warmup is excluded from BOTH the baseline and the test. Ultralytics ramps
+    # lr0 over `warmup_epochs` (3.0 here) and mAP reliably craters at the peak:
+    # healthy ens_ir_seed2 went 0.0925 -> 0.1217 -> 0.0538 (0.44x) at epoch 3 and
+    # recovered to finish at 0.128. Judged against a warmup-era best, this rule
+    # would have killed it. Post-warmup the tightest healthy margin across 27
+    # real runs is 0.63x, so the 0.60x limit stands on measured ground.
+    post = rows[args.warmup:i]
+    best = max((r["map5095"] for r in post), default=0.0)
+    if best > 0 and i >= args.warmup and row["map5095"] < args.map_frac * best:
         alarms.append(
             f"mAP50-95 {row['map5095']:.4f} fell to "
-            f"{row['map5095'] / best:.2f}x its best {best:.4f} "
+            f"{row['map5095'] / best:.2f}x its post-warmup best {best:.4f} "
             f"(limit {args.map_frac:.2f}x)")
 
-    if row["map50"] == 0:
-        alarms.append("mAP50 is exactly 0 — the run is already gone")
+    # Warmup guard, same constant as the loss rule. Unguarded, this fired on
+    # row 0 of any run whose first epoch has not yet produced a detection —
+    # normal for a short/low-LR/from-scratch start, and it killed the
+    # `smoke_queue_kinds` fine-tune at epoch 1 on 2026-08-24. Production runs
+    # start from COCO weights at mAP50 0.10-0.32, so nothing live was hit, but
+    # "already gone" has to mean gone, not "has not started yet".
+    if row["map50"] == 0 and i >= args.warmup:
+        alarms.append(
+            f"mAP50 is exactly 0 at epoch {row['epoch']}, past the "
+            f"{args.warmup}-epoch warmup — the run is already gone")
 
     return alarms
 
@@ -252,9 +274,13 @@ def main() -> int:
     ap.add_argument("--window", type=int, default=DEFAULTS["window"],
                     help=f"trailing median window (default {DEFAULTS['window']})")
     ap.add_argument("--min-history", type=int, default=DEFAULTS["min_history"],
-                    help=f"epochs before the loss rule arms (default {DEFAULTS['min_history']})")
+                    help="epochs before the loss and zero-mAP rules arm "
+                         f"(default {DEFAULTS['min_history']})")
     ap.add_argument("--map-frac", type=float, default=DEFAULTS["map_frac"],
                     help=f"mAP50-95 fraction of best (default {DEFAULTS['map_frac']})")
+    ap.add_argument("--warmup", type=int, default=DEFAULTS["warmup"],
+                    help="epochs the mAP rules ignore entirely, matching the "
+                         f"trainer's LR warmup (default {DEFAULTS['warmup']})")
     ap.add_argument("--no-pause", action="store_true", help="alarm only, never touch control.json")
     ap.add_argument("--on-alarm", choices=("pause", "skip"), default="pause",
                     help="pause: halt the queue for a human (default). "
@@ -291,8 +317,9 @@ def main() -> int:
                      "gets dropped)")
     say(f"watching {results}")
     say(f"rules: {VAL_CLS} > {args.ratio}x trailing-{args.window} median "
-        f"(armed after {args.min_history} epochs) | mAP50-95 < {args.map_frac}x best "
-        f"| mAP50 == 0")
+        f"(armed after {args.min_history} epochs) "
+        f"| mAP50-95 < {args.map_frac}x post-warmup best | mAP50 == 0 "
+        f"(both mAP rules ignore the first {args.warmup} epochs)")
     if not pausing:
         action = "log only"
     elif args.on_alarm == "skip":
