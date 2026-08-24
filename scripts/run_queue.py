@@ -520,7 +520,11 @@ def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
             rs["best_fitness"] = round(float(stopper.best_fitness), 5)
             rs["best_epoch"] = int(stopper.best_epoch)
             rs["patience_gap"] = int(trainer.epoch) + 1 - int(stopper.best_epoch)
-            is_best_epoch = int(trainer.epoch) == int(stopper.best_epoch)
+            # stopper.best_epoch is 1-based: trainer.py calls stopper(epoch + 1, ...).
+            # trainer.epoch is 0-based, so the current epoch's 1-based index is +1.
+            # Comparing the two directly matched one epoch LATE, which recorded the
+            # epoch AFTER best.pt into best_map50_95 for every run up to 2026-08-24.
+            is_best_epoch = int(trainer.epoch) + 1 == int(stopper.best_epoch)
         metrics = getattr(trainer, "metrics", None) or {}
         rs["map50_95"] = round(float(metrics.get("metrics/mAP50-95(B)", 0.0)), 5)
         rs["map50"] = round(float(metrics.get("metrics/mAP50(B)", 0.0)), 5)
