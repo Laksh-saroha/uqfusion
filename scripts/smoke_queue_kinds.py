@@ -129,9 +129,12 @@ def run_one_kind(kind: str, variant: str, run_id: str, config_path: Path, out_ro
     }, indent=2), encoding="utf-8")
     set_paused(kind_dir, False)
 
-    # Deterministic per-kind run_dir (mirrors uq/mc_dropout.py, uq/ensemble.py).
-    run_dir = ((out_root / "mc_dropout" / run_id) if kind == "mc_dropout"
-               else (out_root / "benchmark" / "runs" / run_id))
+    # Deterministic per-kind run_dir. Both trainers now use the same shape,
+    # `outputs_root/<kind>/<name>` (uq/mc_dropout.py:164, uq/ensemble.py:59), so
+    # this is one expression rather than a per-kind literal. The old branch still
+    # said `benchmark/runs` for ensemble — the path members were deliberately
+    # moved OUT of (uq/ensemble.py:8) — and the gate failed on the real layout.
+    run_dir = out_root / kind / run_id
 
     state_path = kind_dir / "state.json"
     proc = subprocess.Popen(
