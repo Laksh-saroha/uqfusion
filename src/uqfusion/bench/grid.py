@@ -298,9 +298,25 @@ def run_grid(
                 # No live trainer (resume that had nothing left to do): take best.pt off disk.
                 best = runs_dir / name / "weights" / "best.pt"
             eval_model = YOLO(str(best)) if Path(str(best)).is_file() else model
+            # workers=0 is load-bearing, not a tuning knob. `model.trainer` is still
+            # referenced three lines up, so its `workers` val loaders are alive when
+            # this call builds its own. Omitting workers here took Ultralytics'
+            # default of 8, so peak was workers+8 loader processes against a 1.0 GB
+            # /dev/shm that queue.json had already measured as fatal at 8 alone.
+            # It won that race for five runs and lost it on ens_vis_seed0_ft
+            # (2026-08-25), which then poisoned four more. Loading in-process removes
+            # the overlap entirely. Measured metric-neutral: ens_vis_seed0's best.pt
+            # scored 0.25200973629816487 mAP50-95 at both workers=8 and workers=0,
+            # bit-identical to the row recorded before this change -- val has no
+            # augmentation and yields batches in index order at any worker count.
+            # Costs ~1.6 min per run (9.8 -> 4.2 it/s) against an ~8 h train.
+            # Do NOT "fix" shm pressure by lowering the TRAINING workers instead:
+            # ultralytics seeds worker w with base_seed+w and sample i is handled by
+            # worker i%nw (data/build.py seed_worker), so changing nw rewrites every
+            # augmentation draw and breaks comparability across the family.
             metrics = eval_model.val(
                 data=str(data_yaml), imgsz=imgsz, device=device, split="val",
-                classes=classes,
+                classes=classes, workers=0,
                 project=str(runs_dir), name=f"{name}_val", exist_ok=True,
             )
 
