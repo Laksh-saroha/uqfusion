@@ -1,0 +1,4 @@
+# Shell scripts run on the Linux training box. A CRLF checkout on Windows makes
+# bash fail with ": command not found" -- which would break the documented
+# container-restart recovery path exactly when it is needed.
+*.sh text eol=lf
