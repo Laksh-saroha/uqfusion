@@ -430,6 +430,96 @@ def ir_benchmark_queue(cfg: dict) -> dict:
     }
 
 
+# Phase 1's own measured parameter counts at imgsz 640, nc=2
+# (phase1_benchmark/results.csv, params_m). The queue is ordered by this: the
+# biggest models train first, so an interrupted or abandoned sweep still leaves
+# the expensive end of the ladder finished rather than the cheap end.
+VARIANT_PARAMS_M = {
+    "yolov8x": 68.23, "yolo12x": 59.22, "yolo26x": 58.99, "yolov9e": 58.21,
+    "yolo11x": 56.97, "yolov8l": 43.69, "yolov10x": 31.81, "yolo12l": 26.45,
+    "yolo26l": 26.30, "yolov10l": 25.89, "yolov8m": 25.90, "yolov9c": 25.59,
+    "yolo11l": 25.37, "yolo26m": 21.90, "yolov10b": 20.57, "yolov9m": 20.22,
+    "yolo12m": 20.20, "yolo11m": 20.11, "yolov10m": 16.58, "yolov8s": 11.17,
+    "yolo26s": 10.01, "yolo11s": 9.46, "yolo12s": 9.29, "yolov10s": 8.13,
+    "yolov9s": 7.32, "yolov8n": 3.16, "yolov10n": 2.78, "yolo11n": 2.62,
+    "yolo12n": 2.60, "yolo26n": 2.57, "yolov9t": 2.13,
+}
+
+
+def vis_benchmark_queue(cfg: dict) -> dict:
+    """VIS-modality benchmark: the full 31-variant Phase 1 ladder x 3 seeds at
+    train_stride=4, trained on BOTH classes (ship + buoy).
+
+    This is the 2-class Table 1 that docs/TODO-2026-08-26-phase1-classset.md §4.2
+    describes, widened from that memo's 9 `main` variants to the whole 31-variant
+    ladder and moved from stride 2 to stride 4 (Laksh, 2026-08-26). It is a
+    *cold restart from COCO*, not a fine-tune of the ship-only Phase 1
+    checkpoints — §2 of that memo rules the warm-start route out, and this queue
+    is what replaces it.
+
+    Two things separate it from Phase 1's `results.csv` rows, and both must be
+    stated wherever a number from it is published:
+
+    - **Class set.** Phase 1 passed `--classes 0` through `bench/grid.py`, so all
+      93 of its rows are ship-only. This path (`train_gaussian`, sigma=False)
+      passes no `classes` filter at all, so it trains and scores on the yaml's
+      full `names` map -- 0 ship, 1 buoy. Macro-averaged mAP therefore is NOT
+      comparable to a Phase 1 row; per-class AP is.
+    - **Train stride.** Phase 1 trained on `data_vis_stride2.yaml`; this trains on
+      stride 4, i.e. half the frames per epoch.
+
+    Order is by parameter count, descending, seeds inner (VARIANT_PARAMS_M): 93
+    runs is weeks of GPU time, so the ordering decides what exists if it is ever
+    cut short, and it keeps each variant's three seeds together so a variant that
+    finishes has error bars rather than a lone point.
+
+    Sizing is for the dgxanode01 A100 MIG 3g.40gb slice: `batch=16` is Phase 1's
+    own largest-common-fit on a 40 GB slice (its record has yolo12x completing at
+    16 and failing at 24/32), and `workers=6` is the /dev/shm ceiling measured on
+    that box (workers 8 dies with "insufficient shared memory" partway into epoch
+    1; 2/4/6 measure 1.8/1.9/1.9 it/s, so 6 costs nothing).
+    """
+    b = cfg["benchmark"]
+    variants = list(b["variants"])
+    unknown = set(variants) - set(VARIANT_PARAMS_M)
+    if unknown:
+        # The ordering is the point of this queue; silently appending variants of
+        # unknown size would break it in exactly the way nobody would notice.
+        raise ValueError(f"no measured params for {sorted(unknown)} — add them to "
+                         "VARIANT_PARAMS_M (phase1_benchmark/results.csv) before "
+                         "building this queue")
+    ordered = sorted(variants, key=lambda v: (-VARIANT_PARAMS_M[v], v))
+    seeds = [0, 1, 2]
+
+    runs = [
+        {"id": f"vis_bench_{variant}_seed{seed}", "kind": "gaussian", "sigma": False,
+         "variant": variant, "data": "runs/derived/data_vis_stride4.yaml", "seed": seed}
+        for variant in ordered
+        for seed in seeds
+    ]
+
+    return {
+        "created": now(),
+        "note": "VIS 2-class benchmark: 31 variants (config.yaml benchmark.variants) "
+                "x seeds {0,1,2} on data_vis_stride4.yaml (train stride 4, val/test "
+                "the full VIS split), cold-started from COCO weights. BOTH classes "
+                "(ship + buoy) -- unlike Phase 1's results.csv, which is ship-only "
+                "(classes=0) at stride 2, so macro mAP from the two is not "
+                "comparable; report per-class AP. Single-stage, no mosaic-off ft "
+                "continuation -- a ranking sweep, not a final recipe. Ordered by "
+                "parameter count, largest first, seeds inner. 93 runs, sized for "
+                "the dgxanode01 A100 MIG 3g.40gb slice (batch 16 = Phase 1's "
+                "largest-common-fit on a 40 GB slice; workers 6 = the /dev/shm "
+                "ceiling measured on that box).",
+        "out_subdir": "vis_benchmark_stride4",
+        "defaults": {
+            "imgsz": b["imgsz"], "epochs": b["epochs"], "patience": b["patience"],
+            "batch": 16, "workers": 6,
+        },
+        "runs": runs,
+    }
+
+
 def cmd_init(args) -> int:
     cfg = load_config(args.config)
     if QUEUE_JSON.is_file() and not args.force:
@@ -439,6 +529,8 @@ def cmd_init(args) -> int:
         q = full_scale_queue(cfg)
     elif args.matrix == "ir_benchmark":
         q = ir_benchmark_queue(cfg)
+    elif args.matrix == "vis_benchmark":
+        q = vis_benchmark_queue(cfg)
     else:
         q = default_queue(cfg, args.variant, args.batch, args.workers)
     write_json(QUEUE_JSON, q)
@@ -845,11 +937,15 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init", help="write runs/queue/queue.json")
-    p_init.add_argument("--matrix", choices=["phase2", "full_scale", "ir_benchmark"], default="phase2",
+    p_init.add_argument("--matrix",
+                        choices=["phase2", "full_scale", "ir_benchmark", "vis_benchmark"],
+                        default="phase2",
                         help="phase2 = the laptop architecture test (default); "
                              "full_scale = the C-1 matrix (Gaussian+MC-Dropout+Ensemble "
                              "x VIS/IR, docs/TODO-2026-08-20-full-scale.md); "
-                             "ir_benchmark = 31-variant x3-seed IR benchmark @ train_stride=4")
+                             "ir_benchmark = 31-variant x3-seed IR benchmark @ train_stride=4; "
+                             "vis_benchmark = the same ladder on VIS, BOTH classes, "
+                             "largest model first (docs/TODO-2026-08-26-phase1-classset.md)")
     p_init.add_argument("--variant", default="yolo26s", help="phase2 matrix only")
     p_init.add_argument("--batch", type=int, default=None, help="phase2 matrix only")
     p_init.add_argument("--workers", type=int, default=None, help="phase2 matrix only")
