@@ -254,6 +254,13 @@ calibration, top-k caps — were measured to do nothing.
   B6/B7]. Screen on one arm only if the matrix under-delivers.
 - [ ] **D-5. OQ-11 (full-res / imgsz 1280 VIS)** — excluded from the matrix;
   revisit only as a follow-up arm with D-2.
+- [ ] **D-6. Close the `p2feat` missing cell** [screen §8 item 1,
+  `docs/screen-small-object-2026-08-19.md`] — run `p2feat` @ 640 @ batch 10,
+  25 ep (~75 min). Decides whether the `p2feat`+960 ceiling (0.15440 ship AP)
+  needs 960 specifically or projects from batch alone (§2 projects ≈0.152
+  without it). Not blocking — IR imgsz is already frozen at 640 in the matrix
+  — but it's the validation that the frozen choice isn't leaving ceiling on
+  the table before the number goes in the paper.
 
 ## E. Evaluation integrity, standing (carry into the manuscript)
 
