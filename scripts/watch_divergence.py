@@ -23,14 +23,35 @@ the primary rule here and mAP50 == 0 is kept only as a floor.
 Both mAP rules ignore the first `warmup` epochs, matching the trainer's LR
 warmup. A run that has not made a detection *yet* is not a run that is gone, and
 the warmup LR peak produces a real mAP crater: healthy `ens_ir_seed2` fell to
-0.44x at epoch 3 and recovered to finish at 0.128. The loss rule needs no such
-guard — its `min_history` window does not fill until the warmup is over.
+0.44x at epoch 3 and recovered to finish at 0.128.
+
+The loss rule ignores them too, as of 2026-08-26. It used to be argued that it
+needed no such guard because its `min_history` window "does not fill until the
+warmup is over". That was off by exactly one epoch, in the worst possible
+direction: with `min_history` 3 and `warmup` 3 the window fills for the first
+time at row 3 — the LR peak itself — and the baseline it is judged against is
+then made entirely of the steeply-descending warmup epochs. See `check`.
 
 Thresholds are set from that same run rather than guessed. Over epochs 1-15 the
 ratio of `val/cls_loss` to its own trailing-5 median never exceeded 1.10; at
 epoch 16 it was 2.02. The 1.5 default sits between those with ~35% margin either
 way. The mAP backstop (fall to 0.6x the best seen) fires at epoch 19 — later
 than the loss rule, which is why it is a backstop.
+
+The mAP backstop requires TWO consecutive epochs below the 0.6x line
+(`map_confirm`), not one. 2026-08-26: `ir_bench_yolov8n_seed0` (IR benchmark
+queue) fired the backstop on a single epoch — mAP50-95 fell to 0.13x its best
+at epoch 9 — while train/box_loss, train/cls_loss and train/dfl_loss stayed
+smooth and monotonically improving through that same epoch, and val/cls_loss
+only reached 1.41x its trailing median (below the 1.5x loss-rule limit). That
+signature (train healthy, one noisy val epoch) is a single bad validation pass,
+not the multi-epoch monotonic decay `mc_vis_seed0_broken` actually showed. The
+loss rule needs no such guard — it is already a ratio against a trailing
+median, so one noisy epoch barely moves it — but the backstop was reading a
+single instant, so one bad epoch was indistinguishable from the real thing.
+Requiring two epochs in a row costs at most one extra epoch of GPU time on a
+real divergence, and would have let this run train one more epoch before
+judging it instead of condemning it on a single noisy validation pass.
 
 On alarm the watcher can request a queue pause. That is deliberately a *pause*
 and not a kill: `run_queue.py` reads `control.json` live on every batch and stops
@@ -64,7 +85,7 @@ MAP5095 = "metrics/mAP50-95(B)"
 # into disagreeing about what "diverged" means. Calibrated on
 # mc_vis_seed0_broken-20260823 (see the module docstring), not chosen by taste.
 DEFAULTS = {"ratio": 1.5, "window": 5, "min_history": 3, "map_frac": 0.6,
-            "warmup": 3}
+            "warmup": 3, "map_confirm": 2}
 
 
 def thresholds(**overrides) -> SimpleNamespace:
@@ -126,11 +147,29 @@ def read_rows(path: Path) -> list[dict]:
     return rows
 
 
+def _map_crashed(rows: list[dict], i: int, warmup: int, map_frac: float) -> bool:
+    """True if row `i`'s mAP50-95 is below `map_frac` of the post-warmup best
+    strictly before `i` — i.e. judged against what was known at that row, not
+    against the best seen anywhere in the run."""
+    best = max((r["map5095"] for r in rows[warmup:i]), default=0.0)
+    return best > 0 and rows[i]["map5095"] < map_frac * best
+
+
 def check(rows: list[dict], i: int, args) -> list[str]:
     """Rules for row `i`. Returns a list of alarm strings (empty = healthy)."""
     row, alarms = rows[i], []
 
-    history = [r["val_cls"] for r in rows[max(0, i - args.window):i]]
+    # Warmup is excluded from the baseline AND the test, for the same reason the
+    # mAP rules exclude it below. 2026-08-26: `ir_bench_yolov8l_seed1` (IR
+    # benchmark queue, 93 runs) was killed at epoch 4 of 100 on val/cls_loss
+    # 4.389 against a trailing median of 2.774 — a median built from epochs 1-3
+    # (3.626, 2.774, 2.226), i.e. from the warmup ramp alone, and compared
+    # against the first epoch at peak LR (lr/pg0 0.00055 -> 0.00110 -> 0.00163 ->
+    # 0.00162, warmup_epochs 3.0). train/box_loss, train/cls_loss and
+    # train/dfl_loss all fell monotonically through that same epoch. Starting the
+    # window at `warmup` costs at most 3 epochs of GPU time on a real
+    # divergence: mc_vis_seed0_broken's first hit was epoch 16.
+    history = [r["val_cls"] for r in rows[max(args.warmup, i - args.window):i]]
     if len(history) >= args.min_history:
         med = statistics.median(history)
         if med > 0:
@@ -146,13 +185,24 @@ def check(rows: list[dict], i: int, args) -> list[str]:
     # recovered to finish at 0.128. Judged against a warmup-era best, this rule
     # would have killed it. Post-warmup the tightest healthy margin across 27
     # real runs is 0.63x, so the 0.60x limit stands on measured ground.
-    post = rows[args.warmup:i]
-    best = max((r["map5095"] for r in post), default=0.0)
-    if best > 0 and i >= args.warmup and row["map5095"] < args.map_frac * best:
-        alarms.append(
-            f"mAP50-95 {row['map5095']:.4f} fell to "
-            f"{row['map5095'] / best:.2f}x its post-warmup best {best:.4f} "
-            f"(limit {args.map_frac:.2f}x)")
+    #
+    # A single row below the line is not enough (see `map_confirm` in the module
+    # docstring, 2026-08-26): `_map_crashed` is re-evaluated against the
+    # `map_confirm` rows immediately before `i`, each judged against the best
+    # known AT THAT ROW (not today's best), so a real monotonic decay still
+    # confirms on schedule while one noisy epoch that recovers does not.
+    if i >= args.warmup and _map_crashed(rows, i, args.warmup, args.map_frac):
+        confirm_from = i - args.map_confirm + 1
+        if confirm_from >= args.warmup and all(
+            _map_crashed(rows, j, args.warmup, args.map_frac)
+            for j in range(confirm_from, i)
+        ):
+            best = max((r["map5095"] for r in rows[args.warmup:i]), default=0.0)
+            alarms.append(
+                f"mAP50-95 {row['map5095']:.4f} fell to "
+                f"{row['map5095'] / best:.2f}x its post-warmup best {best:.4f} "
+                f"(limit {args.map_frac:.2f}x) for {args.map_confirm} epoch(s) "
+                f"in a row")
 
     # Warmup guard, same constant as the loss rule. Unguarded, this fired on
     # row 0 of any run whose first epoch has not yet produced a detection —
@@ -281,6 +331,9 @@ def main() -> int:
     ap.add_argument("--warmup", type=int, default=DEFAULTS["warmup"],
                     help="epochs the mAP rules ignore entirely, matching the "
                          f"trainer's LR warmup (default {DEFAULTS['warmup']})")
+    ap.add_argument("--map-confirm", type=int, default=DEFAULTS["map_confirm"],
+                    help="consecutive epochs the mAP backstop must crash before "
+                         f"firing (default {DEFAULTS['map_confirm']})")
     ap.add_argument("--no-pause", action="store_true", help="alarm only, never touch control.json")
     ap.add_argument("--on-alarm", choices=("pause", "skip"), default="pause",
                     help="pause: halt the queue for a human (default). "
@@ -318,7 +371,8 @@ def main() -> int:
     say(f"watching {results}")
     say(f"rules: {VAL_CLS} > {args.ratio}x trailing-{args.window} median "
         f"(armed after {args.min_history} epochs) "
-        f"| mAP50-95 < {args.map_frac}x post-warmup best | mAP50 == 0 "
+        f"| mAP50-95 < {args.map_frac}x post-warmup best for {args.map_confirm} "
+        f"epoch(s) running | mAP50 == 0 "
         f"(both mAP rules ignore the first {args.warmup} epochs)")
     if not pausing:
         action = "log only"

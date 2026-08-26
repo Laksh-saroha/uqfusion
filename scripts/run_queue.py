@@ -369,6 +369,67 @@ def full_scale_queue(cfg: dict) -> dict:
     }
 
 
+def ir_benchmark_queue(cfg: dict) -> dict:
+    """IR-modality benchmark: the full Phase 1 variant ladder x 3 seeds, at
+    train_stride=4 (docs/... none yet -- this is a fresh ask, not a pre-registered
+    matrix). Mirrors the *original* Phase 1 grid's shape (single-stage, no
+    mosaic-off continuation) rather than phase2_queue/full_scale_queue's two-stage
+    one, because this is a ranking sweep across architectures (like Table 1), not
+    a final training recipe -- and it matches the 2026-08-25 ad hoc pilot
+    (queue_ir_m_stride, since discarded) that first proved this data/kind
+    combination trains cleanly.
+
+    Reuses the plain-detector path already wired into the queue (kind="gaussian",
+    sigma=False -- the D17/§12.1 "parity" trainer, a stock DetectionTrainer) so
+    this benchmark gets pause/resume/heartbeat/divergence-alarm for free instead
+    of a new code path. batch is hardcoded to the local RTX 4080's measured-safe
+    value (5.08 GB reserved for yolo26m @ batch 8 on IR stride 4, 2026-08-25
+    pilot) rather than config.yaml's H100-sized benchmark.batch (32) -- this
+    queue is laptop-only by design (2026-08-26, Laksh).
+
+    workers=16 (not the repo-wide default of 8): measured via `scripts/tune_batch.py
+    --data runs/derived/data_ir_stride4.yaml --variant yolo26m --batches 8
+    --workers 8 12 16 24 --plain` (2026-08-26; raw results in
+    runs/tune/tune_workers_ir_stride4.json), i.e. the real IR-stride4 data, batch
+    8, and the stock DetectionTrainer -- matching this queue's actual code path,
+    not the earlier yolo26s/VIS/batch-24/gaussian-trainer sweep already on file
+    (runs/tune/tune_workers.json). Measured throughput: 8->42.6 img/s, 12->40.0
+    (noise -- single short probe, not re-measured), 16->44.7, 24->44.5. 16 is the
+    best measured point and 24 shows no further gain, so 24's extra thread count
+    buys nothing; the VRAM cost of going 8->16 is small (driver peak 7.22->7.41
+    GB of 12 GB) and the ~5% throughput gain is worth taking for free across 93
+    runs.
+    """
+    b = cfg["benchmark"]
+    variants = b["variants"]  # full 31-variant ladder, same as the Phase 1 VIS grid
+    seeds = [0, 1, 2]
+
+    runs = [
+        {"id": f"ir_bench_{variant}_seed{seed}", "kind": "gaussian", "sigma": False,
+         "variant": variant, "data": "runs/derived/data_ir_stride4.yaml", "seed": seed}
+        for variant in variants
+        for seed in seeds
+    ]
+
+    return {
+        "created": now(),
+        "note": "IR benchmark: 31 variants (config.yaml benchmark.variants) x "
+                "seeds {0,1,2} on data_ir_stride4.yaml (train stride 4, val/test "
+                "full IR split). Single-stage, no mosaic-off ft continuation -- "
+                "a ranking sweep, not a final recipe. Local RTX 4080 only, "
+                "sequential. 93 runs total. workers=16 per the 2026-08-26 "
+                "tune_batch.py sweep (runs/tune/tune_workers_ir_stride4.json): "
+                "8->42.6, 12->40.0 (noise), 16->44.7, 24->44.5 img/s -- 16 is the "
+                "best measured point, 24 gains nothing further.",
+        "out_subdir": "ir_benchmark_stride4",
+        "defaults": {
+            "imgsz": b["imgsz"], "epochs": b["epochs"], "patience": b["patience"],
+            "batch": 8, "workers": 16,
+        },
+        "runs": runs,
+    }
+
+
 def cmd_init(args) -> int:
     cfg = load_config(args.config)
     if QUEUE_JSON.is_file() and not args.force:
@@ -376,6 +437,8 @@ def cmd_init(args) -> int:
         return 1
     if args.matrix == "full_scale":
         q = full_scale_queue(cfg)
+    elif args.matrix == "ir_benchmark":
+        q = ir_benchmark_queue(cfg)
     else:
         q = default_queue(cfg, args.variant, args.batch, args.workers)
     write_json(QUEUE_JSON, q)
@@ -431,10 +494,17 @@ def check_divergence(trainer, run_id: str, rs: dict, alarm: dict) -> None:
     after ``save_model``/``on_model_save`` at :563. Setting it here ends the run at
     the end of *this* epoch with ``last.pt`` already complete, so nothing is lost.
 
-    The queue is paused as well. Stopping only this run would let a dependent
-    ``_ft`` stage start straight off a diverged parent, which is precisely the
-    outcome the alarm exists to prevent; ``cmd_run`` checks the pause flag before
-    each run, so the halt lands before the next one begins.
+    The queue is NOT paused. Stopping only this run used to look like it would
+    let a dependent ``_ft`` stage start straight off a diverged parent, but that
+    risk is already covered independently: ``cmd_run``'s ``from=`` parent guard
+    (around line 690) refuses to start any stage whose parent status is not
+    "done", diverged included, and fails that stage loudly rather than silently
+    training from COCO weights. Pausing the whole queue on top of that guard was
+    redundant, and it meant a single noisy epoch on an unrelated, independent run
+    (2026-08-26: ``ir_bench_yolov8n_seed0`` of the 93-run, single-stage IR
+    benchmark queue, no ``_ft`` stages at all) halted 92 other runs overnight
+    waiting on a human. Now the run is marked ``diverged`` and the queue moves on
+    to the next index exactly as it would after ``done`` or ``failed``.
 
     On the first call after a resume the whole existing history is judged, not
     just new epochs. A run being silently continued past a divergence (trap 3 in
@@ -461,9 +531,11 @@ def check_divergence(trainer, run_id: str, rs: dict, alarm: dict) -> None:
         log(f"!!! {run_id}: DIVERGENCE ALARM at epoch {epoch}")
         for h in hits:
             log(f"!!!   {h}")
-        log(f"!!! {run_id}: stopping this run and pausing the queue. last.pt is "
-            f"complete; nothing is lost. Inspect, then "
-            f"`run_queue.py --queue-dir {QUEUE_DIR} resume`")
+        log(f"!!! {run_id}: stopping this run. The queue continues to the next "
+            f"run. This checkpoint cannot be resumed (Ultralytics strips "
+            f"epoch/optimizer state on trainer.stop) — rerunning it by hand "
+            f"(`run_queue.py --queue-dir {QUEUE_DIR} run --only {run_id} --redo`) "
+            f"restarts it from epoch 0, it does not continue from epoch {epoch}.")
         rs["divergence_alarm"] = {"epoch": epoch, "at": now(), "reasons": hits}
         try:
             (Path(trainer.save_dir) / "DIVERGENCE-ALARM.txt").write_text(
@@ -471,7 +543,6 @@ def check_divergence(trainer, run_id: str, rs: dict, alarm: dict) -> None:
                 + "\n".join(f"  - {h}" for h in hits) + "\n", encoding="utf-8")
         except OSError:
             pass  # the state entry and the log already carry it
-        set_control(paused=True)
         trainer.stop = True
         return
 
@@ -709,7 +780,7 @@ def cmd_run(args) -> int:
                       best_weights=str(best))
             save_state(state)
             log(f"=== {run_id}: DIVERGED at epoch "
-                f"{rs['divergence_alarm']['epoch']} -> {run_dir} (queue paused)")
+                f"{rs['divergence_alarm']['epoch']} -> {run_dir} (queue continues)")
         else:
             rs.update(status="done", finished=now(), run_dir=str(run_dir),
                       best_weights=str(best))
@@ -774,10 +845,11 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_init = sub.add_parser("init", help="write runs/queue/queue.json")
-    p_init.add_argument("--matrix", choices=["phase2", "full_scale"], default="phase2",
+    p_init.add_argument("--matrix", choices=["phase2", "full_scale", "ir_benchmark"], default="phase2",
                         help="phase2 = the laptop architecture test (default); "
                              "full_scale = the C-1 matrix (Gaussian+MC-Dropout+Ensemble "
-                             "x VIS/IR, docs/TODO-2026-08-20-full-scale.md)")
+                             "x VIS/IR, docs/TODO-2026-08-20-full-scale.md); "
+                             "ir_benchmark = 31-variant x3-seed IR benchmark @ train_stride=4")
     p_init.add_argument("--variant", default="yolo26s", help="phase2 matrix only")
     p_init.add_argument("--batch", type=int, default=None, help="phase2 matrix only")
     p_init.add_argument("--workers", type=int, default=None, help="phase2 matrix only")

@@ -122,6 +122,33 @@ def restore_early_stopping(trainer) -> None:
                 f"at epoch {best_epoch} (patience {stopper.patience})")
 
 
+def _is_resumable_checkpoint(path: Path) -> bool:
+    """True if `path` still carries mid-training state (epoch >= 0, optimizer set).
+
+    Ultralytics strips both whenever a run ends via `trainer.stop = True` — the
+    divergence alarm's mechanism (`run_queue.check_divergence`), and also normal
+    early-stopping or reaching max epochs. `final_eval()` calls
+    `strip_optimizer()`, which sets `epoch=-1` and `optimizer=None` on the saved
+    checkpoint. Only a run that exited via the `PauseRequested` exception (raised
+    from `on_model_save`, before that finalization runs) keeps a genuinely
+    resumable one.
+
+    Without this check, `train_gaussian` would hand a stripped checkpoint to
+    `model.train(resume=True, ...)` and Ultralytics silently trains from *its own
+    defaults* instead of raising: no `data`/`project`/`name` survive the
+    checkpoint's missing `train_args`-driven resume path the way they would on a
+    real resume, so the run lands in `runs/detect/train-N` on `coco8.yaml`
+    instead of this run's actual data (2026-08-26, `ir_bench_yolov8n_seed0`,
+    redone after its divergence alarm — a warning printed but nothing failed).
+    """
+    try:
+        import torch
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception:
+        return False
+    return ckpt.get("epoch", -1) >= 0 and ckpt.get("optimizer") is not None
+
+
 def reseed_at_train_start(seed: int, deterministic: bool):
     """on_train_start: re-seed every RNG just before the first batch is drawn.
 
@@ -180,6 +207,13 @@ def train_gaussian(
     close_mosaic, cache, val, plots, ...) can be changed, so the rest is passed
     only on a fresh start.
 
+    Whether a resume is actually possible is decided by
+    `_is_resumable_checkpoint`, not merely by `last.pt` existing: a checkpoint
+    from a run that ended via `trainer.stop = True` (the divergence alarm
+    included) has had its epoch/optimizer state stripped and is treated exactly
+    like "no checkpoint" — a genuine fresh start with this call's own data,
+    project and name, not a silent misfire into Ultralytics' own defaults.
+
     `weights` starts from an existing checkpoint instead of the COCO weights —
     the §7.2 option (C) mosaic stage trains a run, lets it early-stop, then
     continues from its own `best.pt` with `train_overrides={"mosaic": 0.0}`.
@@ -200,7 +234,7 @@ def train_gaussian(
     run_dir = out_root / name
 
     last_ckpt = run_dir / "weights" / "last.pt"
-    resuming = bool(resume) and last_ckpt.is_file()
+    resuming = bool(resume) and last_ckpt.is_file() and _is_resumable_checkpoint(last_ckpt)
 
     extra = dict(train_overrides or {})
     # Split the overrides: on resume Ultralytics only honours a short allow-list,
