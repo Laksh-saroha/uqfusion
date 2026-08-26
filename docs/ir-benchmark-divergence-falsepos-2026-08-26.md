@@ -142,3 +142,62 @@ Total GPU time is unchanged — only the ordering differs.
 - Still open from the same session: the IR benchmark is **2-class** while the IR
   fusion path is `nc=1` ship-only — see
   `TODO-2026-08-26-phase1-classset.md` §5. Decide before the sweep finishes.
+
+---
+
+## 6. Confirmed in production, and synced to the server — 2026-08-26 ~23:15 IST
+
+### The re-run cleared the window, and proves the diagnosis
+
+`ir_bench_yolov8l_seed1` restarted from epoch 0 and reproduced epochs 1-4
+**bit-identically** — train/box_loss 2.65368 / 2.3449 / 2.15096 / 1.99969, and
+the same epoch-4 `val/cls_loss` spike — then kept going:
+
+| epoch | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|
+| mAP50-95 | 0.02326 | 0.03512 | 0.04607 | 0.03868 |
+
+Same training, same spike, only the rule differed. That is the cleanest possible
+confirmation: the run was never diverging, and epoch 4 was a warmup artifact.
+
+### Server sync (`dgxanode01`)
+
+The server runs `watch_divergence.py` as a **standalone sidecar** (PID 23650),
+so this fix matters there independently of `run_queue.py`. Both changed files
+were byte-verified as unmodified copies of `ac86cd6` before being overwritten,
+then rebuilt in place and verified by read-back:
+
+| file | before | after | verified |
+|---|---|---|---|
+| `scripts/watch_divergence.py` | `ac86cd6`, LF | `630cbd5` | 21,961 B, fnv1a64 `856ded74f9b98911` = local HEAD |
+| `src/uqfusion/uq/train_gaussian.py` | `ac86cd6`, CRLF | `630cbd5`, LF | 15,001 B, fnv1a64 `e92072ffb465285b` = local HEAD |
+
+Method: JupyterLab Contents API `PUT` from the browser pane (no SSH, no git
+remote). Rather than shipping whole files, each was rebuilt from the server's own
+copy by exact string substitution — every anchor asserted to match exactly once,
+and the result hashed against the local blob before the write. A mismatch aborts
+without writing.
+
+**`scripts/run_queue.py` was deliberately NOT synced.** The server's copy has no
+`check_divergence` at all — it is the fork §6 of `handoff-2026-08-26.md` warns
+about ("Server `run_queue.py` deliberately has no in-process divergence alarm;
+the sidecar covers it. Don't 'fix' that."). Overwriting it with the laptop's
+would install an in-process alarm the server is designed not to have. That fork
+needs a decision, not a sync.
+
+### Still to do on the server
+
+**The sidecar (PID 23650) is still running the old code** — Python loaded it at
+start, so the new file does nothing until the watcher is restarted. It is a
+read-only process (it polls `results.csv` and can request a queue pause), so
+restarting costs nothing and risks nothing, but its exact launch arguments are
+not recoverable without `ps`: there is no `divergence-watch.log` in
+`runs/ensemble/ens_vis_seed3/`, so it was started with an explicit `--log`
+elsewhere.
+
+**No live exposure right now.** `ens_vis_seed3` is at epoch 7 with `val/cls_loss`
+flat at 2.37-2.54 (peak ratio ~1.06x against its own trailing median, far under
+the 1.5x limit) and mAP50-95 climbing 0.212 -> 0.238. The ensemble stages start
+from warm weights, so they never show the cold-start warmup crater that produced
+the false positive. The remaining exposure is `ens_vis_seed4`, the last cold
+start in the queue.
