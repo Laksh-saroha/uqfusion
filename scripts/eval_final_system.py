@@ -47,6 +47,28 @@ from uqfusion.eval.ctx import load_context, run_systems  # noqa: E402
 
 VARIANTS = ("adopted", "no_maha", "cap_only", "no_veto")
 
+# Class indices in the VIS label space, which is the frame everything is scored
+# in: `runs/derived/data_vis_stride2.yaml` -> {0: ship, 1: buoy}. IR is nc=1 with
+# ship at 0 (`data_ir_shiponly.yaml`), so the index means the same thing on both
+# sides and the D28/A-1 "remap IR into the VIS label space" is the identity.
+# Asserted against the yaml at startup rather than trusted — a silent reindex
+# would swap which class this report calls the headline.
+SHIP, BUOY = 0, 1
+
+
+def _assert_class_indices() -> None:
+    import yaml
+
+    y = ROOT / "runs" / "derived" / "data_vis_stride2.yaml"
+    if not y.is_file():  # not every host carries the derived yamls; skip quietly
+        return
+    names = (yaml.safe_load(y.read_text(encoding="utf-8")) or {}).get("names") or {}
+    got = {int(k): str(v).lower() for k, v in names.items()}
+    assert got.get(SHIP) == "ship" and got.get(BUOY) == "buoy", (
+        f"class indices moved: {y.name} says {got}, this report assumes "
+        f"{{{SHIP}: 'ship', {BUOY}: 'buoy'}}. Fix SHIP/BUOY before reading the table."
+    )
+
 
 def variant_ctx(ctx, name: str):
     """The soft-weight ablations, as context copies. The veto (and its
@@ -71,6 +93,7 @@ def main() -> int:
     ap.add_argument("--conditions", nargs="+", default=None,
                     help="restrict the sweep (pre-flight uses --conditions clean)")
     args = ap.parse_args()
+    _assert_class_indices()
 
     t0 = time.time()
     ctx = load_context(**({"conditions": tuple(args.conditions)} if args.conditions else {}))
@@ -93,15 +116,30 @@ def main() -> int:
                         np.mean(np.asarray(res["veto_vis"])[sel]))
         print(f"[final] {cond}: variants done ({time.time() - t0:.0f}s)", flush=True)
 
-    def cell(p, sel):
-        return ap_from_parts(p, sel)["map50_95"]
+    def cell(p, sel, cls=None):
+        r = ap_from_parts(p, sel)
+        if cls is None:
+            return r["map50_95"]
+        e = r["per_class"].get(cls)
+        return float(e["ap50_95"]) if e else 0.0
 
     # ---- table 1: the finalized system, with CIs vs ir_only ----------------
+    # Reported per class, ship first. `map50_95` here is macro-averaged over ship
+    # and buoy, and the two classes are not symmetric: IR is nc=1 ship-only
+    # (D28/A-1), so buoys can only ever come from VIS. That distorts this exact
+    # comparison in two directions at once — in day cells the gated row gains a
+    # buoy contribution `ir_only` structurally cannot have, inflating the delta
+    # with "VIS can see buoys" rather than "fusion helps"; in vetoed cells the
+    # gated row loses buoys entirely and the macro is halved. Ship AP is the only
+    # class both streams can produce, so it is the honest headline; the macro row
+    # is kept for continuity with the record.
     rows_main = []
     for cond in ctx.conditions:
         for sname, sel in splits.items():
             b = bootstrap_delta(parts[("adopted", cond)], ir_parts[cond], sel,
                                 n_boot=args.n_boot)
+            bs = bootstrap_delta(parts[("adopted", cond)], ir_parts[cond], sel,
+                                 n_boot=args.n_boot, cls=SHIP)
             rows_main.append({
                 "condition": cond, "split": sname,
                 "visible_only": cell(vis_parts[cond], sel),
@@ -109,6 +147,15 @@ def main() -> int:
                 "delta_vs_ir": b["delta"], "ci": [b["ci_lo"], b["ci_hi"]],
                 "spans_zero": b["spans_zero"], "flip": b["p_sign_flip"],
                 "veto_rate": veto_rates[(cond, sname)],
+                # ship (cls 0) — the fusable class, and the headline
+                "ship_visible_only": cell(vis_parts[cond], sel, SHIP),
+                "ship_ir_only": bs["b"], "ship_gated": bs["a"],
+                "ship_delta_vs_ir": bs["delta"], "ship_ci": [bs["ci_lo"], bs["ci_hi"]],
+                "ship_spans_zero": bs["spans_zero"], "ship_flip": bs["p_sign_flip"],
+                # buoy (cls 1) — VIS-only by construction; shown to explain the gap
+                "buoy_visible_only": cell(vis_parts[cond], sel, BUOY),
+                "buoy_gated": cell(parts[("adopted", cond)], sel, BUOY),
+                "buoy_ir_only": cell(ir_parts[cond], sel, BUOY),
             })
     print(f"[final] gated-vs-ir bootstrap done ({time.time() - t0:.0f}s)", flush=True)
 
@@ -117,9 +164,14 @@ def main() -> int:
     for cond in ctx.conditions:
         b = bootstrap_delta(parts[("adopted", cond)], vis_parts[cond], splits["day"],
                             n_boot=args.n_boot)
+        bs = bootstrap_delta(parts[("adopted", cond)], vis_parts[cond], splits["day"],
+                             n_boot=args.n_boot, cls=SHIP)
         rows_vis.append({"condition": cond, "gated": b["a"], "visible_only": b["b"],
                          "delta": b["delta"], "ci": [b["ci_lo"], b["ci_hi"]],
-                         "spans_zero": b["spans_zero"], "flip": b["p_sign_flip"]})
+                         "spans_zero": b["spans_zero"], "flip": b["p_sign_flip"],
+                         "ship_gated": bs["a"], "ship_visible_only": bs["b"],
+                         "ship_delta": bs["delta"], "ship_ci": [bs["ci_lo"], bs["ci_hi"]],
+                         "ship_spans_zero": bs["spans_zero"], "ship_flip": bs["p_sign_flip"]})
     print(f"[final] gated-vs-vis bootstrap done ({time.time() - t0:.0f}s)", flush=True)
 
     # ---- table 3: soft-weight ablation, deltas vs adopted ------------------
@@ -129,13 +181,21 @@ def main() -> int:
             for sname, sel in splits.items():
                 a = cell(parts[(name, cond)], sel)
                 ref = cell(parts[("adopted", cond)], sel)
+                a_s = cell(parts[(name, cond)], sel, SHIP)
+                ref_s = cell(parts[("adopted", cond)], sel, SHIP)
                 row = {"variant": name, "condition": cond, "split": sname,
-                       "map": a, "delta": a - ref}
+                       "map": a, "delta": a - ref,
+                       "ship_map": a_s, "ship_delta": a_s - ref_s}
                 if abs(a - ref) > 1e-12:
                     b = bootstrap_delta(parts[(name, cond)], parts[("adopted", cond)],
                                         sel, n_boot=args.n_boot)
                     row.update({"ci": [b["ci_lo"], b["ci_hi"]],
                                 "spans_zero": b["spans_zero"]})
+                if abs(a_s - ref_s) > 1e-12:
+                    bs = bootstrap_delta(parts[(name, cond)], parts[("adopted", cond)],
+                                         sel, n_boot=args.n_boot, cls=SHIP)
+                    row.update({"ship_ci": [bs["ci_lo"], bs["ci_hi"]],
+                                "ship_spans_zero": bs["spans_zero"]})
                 rows_abl.append(row)
         print(f"[final] ablation {name} done ({time.time() - t0:.0f}s)", flush=True)
 
@@ -149,19 +209,53 @@ def main() -> int:
          f"Caches: the record's yolo26s checkpoints (the full-scale retrain "
          f"replaces them; this table freezes the architecture, not the numbers).",
          "",
-         "## 1. Eight cells, gated vs `ir_only` (and `visible_only` for reference)",
+         "## 1. Eight cells, gated vs `ir_only` — SHIP AP (the headline)",
          "",
-         "| cell | visible_only | ir_only | gated | delta vs ir | 95% CI | flips | VIS veto |",
+         "Ship is the only class both streams can produce: IR is nc=1 ship-only "
+         "(D28/A-1 — IR buoy AP measured 0.00019). Read this table, not the macro "
+         "one below. The macro delta is `(delta_ship + delta_buoy) / 2`, mixing "
+         "the class fusion acts on with one only VIS can supply, so it answers no "
+         "single question: it dilutes a large ship gain (where delta_buoy < "
+         "delta_ship), inflates a small one (where VIS buoy AP is high and the "
+         "ship gain is not), and in a vetoed cell carries a buoy zero the system "
+         "was never able to avoid. None of those apply here.",
+         "",
+         "| cell | VIS ship | IR ship | gated ship | delta vs ir | 95% CI | flips | VIS veto |",
          "|---|---:|---:|---:|---:|---|---:|---:|"]
+    for r in rows_main:
+        L.append(f"| {r['condition']}/{r['split']} | {r['ship_visible_only']:.4f} | "
+                 f"{r['ship_ir_only']:.4f} | {r['ship_gated']:.4f} | "
+                 f"{r['ship_delta_vs_ir']:+.4f} | "
+                 f"[{r['ship_ci'][0]:+.4f}, {r['ship_ci'][1]:+.4f}]"
+                 f"{' (spans 0)' if r['ship_spans_zero'] else ''} | "
+                 f"{r['ship_flip']:.1%} | {r['veto_rate']:.0%} |")
+
+    L += ["", "### 1b. The same cells, macro mAP over both classes (continuity with the record)",
+          "",
+          "`buoy gated` is VIS-only by construction; where it drops to ~0 the veto "
+          "has removed VIS from the merge, and the macro column below is carrying "
+          "that zero. This table exists so earlier macro-quoted numbers stay "
+          "comparable — it is not the result.",
+          "",
+          "| cell | visible_only | ir_only | gated | delta vs ir | 95% CI | buoy gated | buoy VIS |",
+          "|---|---:|---:|---:|---:|---|---:|---:|"]
     for r in rows_main:
         L.append(f"| {r['condition']}/{r['split']} | {r['visible_only']:.4f} | "
                  f"{r['ir_only']:.4f} | {r['gated']:.4f} | {r['delta_vs_ir']:+.4f} | "
                  f"[{r['ci'][0]:+.4f}, {r['ci'][1]:+.4f}]"
                  f"{' (spans 0)' if r['spans_zero'] else ''} | "
-                 f"{r['flip']:.1%} | {r['veto_rate']:.0%} |")
+                 f"{r['buoy_gated']:.4f} | {r['buoy_visible_only']:.4f} |")
 
     L += ["", "## 2. Gated vs `visible_only`, day frames (the record's open item 1)", "",
-          "| condition | visible_only | gated | delta | 95% CI | flips |",
+          "Ship AP is the headline column here too; macro follows for continuity.", "",
+          "| condition | VIS ship | gated ship | delta | 95% CI | flips |",
+          "|---|---:|---:|---:|---|---:|"]
+    for r in rows_vis:
+        L.append(f"| {r['condition']}/day | {r['ship_visible_only']:.4f} | "
+                 f"{r['ship_gated']:.4f} | {r['ship_delta']:+.4f} | "
+                 f"[{r['ship_ci'][0]:+.4f}, {r['ship_ci'][1]:+.4f}]"
+                 f"{' (spans 0)' if r['ship_spans_zero'] else ''} | {r['ship_flip']:.1%} |")
+    L += ["", "| condition | visible_only | gated | delta (macro) | 95% CI | flips |",
           "|---|---:|---:|---:|---|---:|"]
     for r in rows_vis:
         L.append(f"| {r['condition']}/day | {r['visible_only']:.4f} | {r['gated']:.4f} | "
@@ -172,13 +266,16 @@ def main() -> int:
           "`no_maha`: r_frame forced to 1. `cap_only`: additionally r_box forced "
           "to 1, so weights are the pure capability prior. `no_veto`: the soft "
           "system alone.", "",
-          "| variant | cell | mAP | delta vs adopted | 95% CI |",
-          "|---|---|---:|---:|---|"]
+          "| variant | cell | ship AP | ship delta | ship 95% CI | mAP | delta (macro) | 95% CI |",
+          "|---|---|---:|---:|---|---:|---:|---|"]
     for r in rows_abl:
         ci = (f"[{r['ci'][0]:+.4f}, {r['ci'][1]:+.4f}]"
               + (" (spans 0)" if r.get("spans_zero") else "")) if "ci" in r else "identical"
-        L.append(f"| {r['variant']} | {r['condition']}/{r['split']} | {r['map']:.4f} | "
-                 f"{r['delta']:+.4f} | {ci} |")
+        sci = (f"[{r['ship_ci'][0]:+.4f}, {r['ship_ci'][1]:+.4f}]"
+               + (" (spans 0)" if r.get("ship_spans_zero") else "")) if "ship_ci" in r else "identical"
+        L.append(f"| {r['variant']} | {r['condition']}/{r['split']} | "
+                 f"{r['ship_map']:.4f} | {r['ship_delta']:+.4f} | {sci} | "
+                 f"{r['map']:.4f} | {r['delta']:+.4f} | {ci} |")
 
     out = ROOT / args.out
     out.parent.mkdir(parents=True, exist_ok=True)

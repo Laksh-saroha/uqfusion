@@ -78,6 +78,27 @@ def main() -> int:
         assert d <= TOL, f"A pooled {k}: {mine[k]} vs {ref[k]} (d={d:.3e})"
     print(f"[smoke] A pooled: map50-95 {mine['map50_95']:.8f} == reference OK")
 
+    # A2: the per-class breakdowns must agree too, key for key. Table 3 is read
+    # per class (IR is nc=1 ship-only, so buoy AP comes from VIS alone and a macro
+    # mean hides it), and two AP implementations that disagree per class while
+    # agreeing on the mean would be undetectable in the headline number.
+    assert set(ref["per_class"]) == set(mine["per_class"]), (
+        f"A2 per-class keys differ: matching {sorted(ref['per_class'])} vs "
+        f"apmetrics {sorted(mine['per_class'])}"
+    )
+    assert ref["per_class"], "A2 fixture produced no classes — the check is vacuous"
+    for c in sorted(ref["per_class"]):
+        for k in ("ap50_95", "ap50"):
+            d = abs(ref["per_class"][c][k] - mine["per_class"][c][k])
+            assert d <= TOL, f"A2 class {c} {k}: {mine['per_class'][c][k]} vs {ref['per_class'][c][k]} (d={d:.3e})"
+        for k in ("n_gt", "n_pred"):
+            assert ref["per_class"][c][k] == mine["per_class"][c][k], (
+                f"A2 class {c} {k}: {mine['per_class'][c][k]} vs {ref['per_class'][c][k]}"
+            )
+    print("[smoke] A2 per-class: " + ", ".join(
+        f"cls{c} ap50-95 {ref['per_class'][c]['ap50_95']:.6f} (n_gt {ref['per_class'][c]['n_gt']})"
+        for c in sorted(ref["per_class"])) + " == reference OK")
+
     rng = np.random.default_rng(7)
     for t in range(5):
         sel = np.sort(rng.choice(len(parts), size=len(parts) // 2, replace=False))

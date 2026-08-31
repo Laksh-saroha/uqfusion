@@ -107,7 +107,28 @@ def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.nda
 
 
 def map50_95(records: list[dict], gts: list[dict]) -> dict:
-    """COCO-style mAP@50-95 and mAP@50 over a frame set (101-point interpolation)."""
+    """COCO-style mAP@50-95 and mAP@50 over a frame set (101-point interpolation).
+
+    Also returns `per_class` — `{cls: {ap50_95, ap50, n_gt, n_pred}}`, the same
+    shape `apmetrics.ap_from_parts` returns, pinned equal by `smoke_apmetrics.py`.
+
+    **Read the per-class rows before believing any macro delta.** `map50_95` is
+    macro-averaged over ship and buoy, and the two classes are not symmetric here:
+    IR is nc=1 ship-only (D28/A-1 — IR buoy AP was 0.00019 against 29,131 buoy
+    detections for 596 GT boxes), so buoys can only ever come from VIS and fusion
+    acts on the ship half alone. A macro delta is therefore
+    `(delta_ship + delta_buoy) / 2` — a mixture that answers no single question. It
+    dilutes a large ship gain, inflates a small one when VIS buoy AP is high, and
+    on a frame where the photometric veto drops VIS from the merge the fused output
+    structurally cannot contain buoys at all: `n_gt_per_class` counts them from the
+    ground truth regardless, that class scores AP 0, and the macro is roughly halved
+    for a class the system was never able to emit. Properties of the metric, not of
+    the gate.
+
+    Measured instance (`eval_final_system.py`, clean/day, gated vs `visible_only`):
+    macro +0.0006 CI [-0.0013, +0.0027], spanning zero; ship AP +0.0031 CI
+    [+0.0015, +0.0052], not spanning zero. Same frames, opposite conclusion.
+    """
     tps, confs, pcls = [], [], []
     n_gt_per_class: dict[int, int] = {}
     for rec, gt in zip(records, gts):
@@ -123,9 +144,16 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
 
     recall_grid = np.linspace(0, 1, 101)
     ap = np.zeros((len(n_gt_per_class), len(IOU_LEVELS)))
+    per_class: dict[int, dict] = {}
     for ci, (c, n_gt) in enumerate(sorted(n_gt_per_class.items())):
         mask = cls == c
         if not mask.any() or n_gt == 0:
+            # Still recorded, at AP 0: this is exactly the case the docstring warns
+            # about (a class present in GT that the system emitted nothing for), and
+            # it is invisible in the macro mean. It stays in `ap`, so the macro value
+            # is unchanged from before this breakdown existed.
+            per_class[int(c)] = {"ap50_95": 0.0, "ap50": 0.0,
+                                 "n_gt": int(n_gt), "n_pred": int(mask.sum())}
             continue
         order = np.argsort(-conf[mask])
         tpc = tp[mask][order]
@@ -139,7 +167,10 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
             for i in range(len(prec) - 2, -1, -1):  # precision envelope
                 prec[i] = max(prec[i], prec[i + 1])
             ap[ci, k] = np.interp(recall_grid, recall[:, k], prec, left=prec[0] if len(prec) else 0, right=0).mean()
+        per_class[int(c)] = {"ap50_95": float(ap[ci].mean()), "ap50": float(ap[ci, 0]),
+                             "n_gt": int(n_gt), "n_pred": int(mask.sum())}
 
     if ap.size == 0:
-        return {"map50_95": 0.0, "map50": 0.0}
-    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean())}
+        return {"map50_95": 0.0, "map50": 0.0, "per_class": {}}
+    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()),
+            "per_class": per_class}

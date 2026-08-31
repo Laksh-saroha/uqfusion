@@ -256,16 +256,34 @@ def ablate_gate_rules(
                 "combination": comb, "alpha": alpha,
                 "gated_map50_95": res["gated_fusion"]["map50_95"],
                 "gated_map50": res["gated_fusion"]["map50"],
+                # Macro mAP averages ship and buoy, and only ship can be fused (IR
+                # is nc=1 ship-only, D28/A-1) — so a real ship gain reaches the
+                # macro column already halved, and a VIS veto zeroes the buoy row
+                # outright. Rank these rules on the per-class AP, not the macro.
+                "gated_per_class": res["gated_fusion"]["per_class"],
                 "mean_w_vis": float(np.mean(res["w_vis_gated"])),
             })
     return rows
 
 
 def format_ablation_table(rows: list[dict]) -> str:
-    lines = ["| Combination | α | Gated mAP@50–95 | Gated mAP@50 | mean w_vis |", "|---|---|---|---|---|"]
+    """Ablation table with per-class AP beside the macro mean.
+
+    Rank on the per-class columns — see `matching.map50_95` for why the macro
+    column understates every fusion effect on this class set. Rows produced
+    before `gated_per_class` existed still render, with the columns blank.
+    """
+    classes = sorted({int(c) for r in rows for c in (r.get("gated_per_class") or {})})
+    head = ["Combination", "α", "Gated mAP@50–95"]
+    head += [f"AP@50–95 cls{c}" for c in classes]
+    head += ["Gated mAP@50", "mean w_vis"]
+    lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for r in rows:
-        lines.append(
-            f"| {r['combination']} | {r['alpha']} | {r['gated_map50_95']:.3f} "
-            f"| {r['gated_map50']:.3f} | {r['mean_w_vis']:.3f} |"
-        )
+        pc = r.get("gated_per_class") or {}
+        cells = [str(r["combination"]), str(r["alpha"]), f"{r['gated_map50_95']:.3f}"]
+        for c in classes:
+            e = pc.get(c, pc.get(str(c)))
+            cells.append(f"{e['ap50_95']:.3f}" if e else "—")
+        cells += [f"{r['gated_map50']:.3f}", f"{r['mean_w_vis']:.3f}"]
+        lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
