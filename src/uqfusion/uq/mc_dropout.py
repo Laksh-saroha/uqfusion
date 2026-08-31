@@ -41,6 +41,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from ultralytics.models.yolo.detect import DetectionTrainer
 from ultralytics.utils import DEFAULT_CFG
 
@@ -70,18 +71,63 @@ def deployed_head_branches(head) -> tuple[str, ...]:
     return ("cv2", "cv3")
 
 
+class MCDropoutConv2d(nn.Conv2d):
+    """A head's final conv, with MC-Dropout applied to its own input.
+
+    **Why a subclass and not an inserted layer (2026-08-31).** The original
+    implementation rebuilt each branch as
+    `nn.Sequential(*children[:-1], nn.Dropout2d(p), children[-1])`. That renumbers
+    the final conv -- `one2one_cv2.0.2.weight` becomes `one2one_cv2.0.3.weight` --
+    so every deployed-branch key in the state_dict shifts by one.
+
+    Ultralytics' *training-time* load (`DetectionTrainer.get_model` ->
+    `BaseModel.load`) builds a plain model from yaml and matches the checkpoint
+    **by key name**, intersecting silently. Reloading an MC checkpoint therefore
+    dropped exactly 12 tensors -- the box (`cv2`) and class (`cv3`) output convs at
+    all three scales, 62,460 parameters. 0.28% of the model, and 100% of the output
+    layer: it arrived randomly initialised. That decapitated `mc_vis_seed0_ft`
+    (parent 0.24667 -> 0.15123) and `mc_ir_seed0_ft` (0.12973 -> 0.11894). The
+    inference path was never affected -- `YOLO()` restores the pickled module, so
+    no key matching happens -- which is why it surfaced only in the fine-tunes.
+
+    Subclassing keeps `weight` and `bias` at exactly the indices a plain model has,
+    so an MC checkpoint stays structurally interchangeable with a stock one and
+    every load path -- training reload, resume, eval -- works.
+
+    `mc_armed` exists because MC inference needs dropout active while the model is
+    in eval mode; the old code achieved that by calling `.train()` on the Dropout
+    modules, which has no equivalent here.
+    """
+
+    mc_p: float = 0.15
+    mc_armed: bool = False
+
+    def forward(self, x):
+        if self.training or self.mc_armed:
+            x = F.dropout2d(x, self.mc_p, training=True)
+        return super().forward(x)
+
+
 def insert_head_dropout(model, p: float = 0.15):
-    """Insert Dropout2d before the last conv of each DEPLOYED head branch. Idempotent."""
+    """Arm the last conv of each DEPLOYED head branch with MC-Dropout. Idempotent.
+
+    Does not change the module tree -- see `MCDropoutConv2d` for why that matters.
+    """
     head = _detect_head(model)
     for branch_name in deployed_head_branches(head):
         branch = getattr(head, branch_name, None)
         if branch is None:
             continue
-        for i, seq in enumerate(branch):
-            children = list(seq.children())
-            if any(isinstance(c, nn.Dropout2d) for c in children):
-                continue  # already inserted (resume path)
-            branch[i] = nn.Sequential(*children[:-1], nn.Dropout2d(p), children[-1])
+        for seq in branch:
+            conv = seq[-1]
+            if not isinstance(conv, nn.Conv2d):
+                raise TypeError(
+                    f"{branch_name}: expected the branch to end in nn.Conv2d, got "
+                    f"{type(conv).__name__}. The dropout placement rule (B6-3) is "
+                    "defined relative to that final conv."
+                )
+            conv.__class__ = MCDropoutConv2d  # same C layout; parameters untouched
+            conv.mc_p = float(p)
     return model
 
 
@@ -94,16 +140,26 @@ def enable_mc_dropout(model) -> int:
     discarded branch — the failure that cost two VIS runs (handoff §1.5).
     """
     head = _detect_head(model)
+
+    def _armable(mod):
+        # MCDropoutConv2d is the current placement; nn.Dropout* is the pre-2026-08-31
+        # inserted-layer form, still carried by mc_vis_seed0 / mc_ir_seed0, whose
+        # detection training was sound and which must keep working unretrained.
+        return isinstance(mod, (MCDropoutConv2d, nn.Dropout, nn.Dropout2d))
+
     on_path = 0
     for branch_name in deployed_head_branches(head):
         branch = getattr(head, branch_name, None)
         if branch is None:
             continue
-        on_path += sum(1 for m in branch.modules() if isinstance(m, (nn.Dropout, nn.Dropout2d)))
+        on_path += sum(1 for m in branch.modules() if _armable(m))
 
     n = 0
     for m in model.modules():
-        if isinstance(m, (nn.Dropout, nn.Dropout2d)):
+        if isinstance(m, MCDropoutConv2d):
+            m.mc_armed = True
+            n += 1
+        elif isinstance(m, (nn.Dropout, nn.Dropout2d)):
             m.train()
             n += 1
 

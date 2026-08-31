@@ -31,7 +31,12 @@ from uqfusion.uq.gaussian import GaussianDetect, GaussianDetectionModel
 def _register_safe_globals() -> None:
     """Allow-list our classes for torch weights_only checkpoint loading."""
     try:
-        torch.serialization.add_safe_globals([GaussianDetect, GaussianDetectionModel])
+        # Imported here, not at module scope: uq.mc_dropout imports this module.
+        from uqfusion.uq.mc_dropout import MCDropoutConv2d
+
+        torch.serialization.add_safe_globals(
+            [GaussianDetect, GaussianDetectionModel, MCDropoutConv2d]
+        )
     except Exception:  # noqa: BLE001 - older torch or already registered
         pass
 
