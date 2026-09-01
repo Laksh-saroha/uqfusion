@@ -60,10 +60,28 @@ def content_rows(modality: str, canvas: int = 640) -> tuple[int, int]:
 
 
 def frame_stats(gray: np.ndarray) -> dict:
-    """Photometric summary of one content region, all on the 0-255 scale."""
+    """Photometric summary of one content region, all on the 0-255 scale.
+
+    `lap_var` is the odd one out: every other statistic here is a HISTOGRAM
+    property, and a veil-type corruption is invisible to all of them. Measured on
+    the paired val set, fog/day is the BRIGHTEST, cleanest-looking cell by every
+    one of them (p05 58 vs clean/day's 35, std 52 vs 57) while VIS mAP collapses
+    from 0.3683 to 0.0020 -- 180x worse on frames a histogram calls pristine. Fog
+    is a low-pass veil: it destroys structure at object scale and leaves the global
+    distribution alone, so the gate needs one term that reads structure directly.
+
+    Variance of the Laplacian is the standard focus/blur measure and separates the
+    two cleanly: fog/day 18 and fog/night 39, against >=1336 for every non-fog day
+    or night cell. It is not a fog detector -- any veil, defocus, or heavy blur
+    lands in the same place, which is the point. It measures whether edges survive,
+    not what removed them.
+    """
+    import cv2
+
     g = gray.astype(np.float32)
     p05, p50, p95 = np.percentile(g, [5, 50, 95])
     return {
+        "lap_var": float(cv2.Laplacian(g, cv2.CV_32F, ksize=3).var()),
         "mean": float(g.mean()),
         "p05": float(p05),
         "p50": float(p50),

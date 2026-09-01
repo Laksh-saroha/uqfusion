@@ -177,6 +177,8 @@ def fuse_detections(
     veto_vis: bool = False,
     veto_ir: bool = False,
     sigma_weighted: bool = False,
+    score_scale: tuple[float, float] | None = None,
+    single_passthrough: bool = False,
 ) -> dict:
     """Weighted Boxes Fusion of two modality records in the VIS frame.
 
@@ -200,6 +202,41 @@ def fuse_detections(
     cluster coordinates by inverse variance so the Gaussian head's sigma finally
     influences the fused output (TODO A1). False keeps stock `ensemble_boxes`
     WBF, under which sigma is inert.
+
+    `score_scale` is the SOFT alternative to `veto_*`, and it exists because the
+    argument that forced the hard veto is narrower than it looks. WBF computes a
+    cluster score as ``mean(score_i * w_i) * min(n_models, n_cluster) /
+    sum(weights)``, which is invariant to rescaling the whole weight vector — so
+    with `w` normalized to sum 1, as `fusion_weights` returns it, a stream's
+    weight only ever expresses its share RELATIVE to the other stream. Two frames
+    where VIS is 36x better than IR and where VIS is dead both come out near the
+    same `w_vis`, because normalization discards exactly the absolute level the
+    gate spent its effort estimating. That, not some property of down-weighting
+    itself, is why "down-weighting cannot remove a failed stream".
+
+    Passing ``(a_vis, a_ir)`` multiplies each stream's confidences by its own
+    ABSOLUTE trust before fusion and then hands WBF equal weights, so the
+    normalization has nothing left to cancel. Every cluster score is then
+    proportional to the trust of the stream(s) that produced it, across frames as
+    well as within one — which is what a rank-based metric like AP needs, since it
+    pools detections from every frame into a single ordering. The hard veto is the
+    ``a_m -> 0`` limit of this, up to the ranks that zero-scored boxes still
+    occupy at the very bottom of that ordering.
+
+    None keeps the normalized-weight path exactly as it was.
+
+    `single_passthrough` returns the surviving stream's detections unchanged when
+    the veto has left only one. Measured, that is not a no-op: WBF over a single
+    input list still clips every box to the canvas, still merges boxes that
+    overlap above `iou_thr`, and still replaces a merged cluster's scores with
+    their mean. On the paired val set an IR-only day cell scores 0.0177 as raw
+    mapped boxes and 0.0166 once passed through single-list WBF -- so a fully
+    vetoed day cell carries a -0.0011 floor that has nothing to do with the gate
+    and nothing to do with fusion, since there is nothing left to fuse. (At night
+    the same post-process is worth +0.0003, because merging genuinely helps a
+    stream that emits duplicates there. Both directions are the same artifact.)
+
+    Default False, because the adopted table was measured with it off.
     """
     from ensemble_boxes import weighted_boxes_fusion
 
@@ -211,16 +248,29 @@ def fuse_detections(
 
     if veto_vis and veto_ir:            # every sensor vetoed -> abstain, do not blank the frame
         veto_vis = veto_ir = False
-    streams = [(vis_boxes, vis_record, max(w_vis, _EPS), veto_vis),
-               (ir_boxes, ir_record, max(w_ir, _EPS), veto_ir)]
+    # Under `score_scale` the trust rides on the SCORES and the weights are equal,
+    # so WBF's `1 / sum(weights)` rescale has nothing to normalize away.
+    scale = (1.0, 1.0) if score_scale is None else (float(score_scale[0]), float(score_scale[1]))
+    streams = [(vis_boxes, vis_record, max(w_vis, _EPS), veto_vis, scale[0]),
+               (ir_boxes, ir_record, max(w_ir, _EPS), veto_ir, scale[1])]
+
+    if single_passthrough:
+        alive = [(b, r, a) for b, r, _, v, a in streams if not v]
+        if len(alive) == 1:
+            b, record, a = alive[0]
+            return {"boxes_xyxy": np.asarray(b, dtype=np.float64).reshape(-1, 4),
+                    "conf": np.asarray(record["conf"], dtype=np.float64) * a,
+                    "cls": np.asarray(record["cls"]).astype(int)}
 
     boxes_list, scores_list, labels_list, weights, sigmas_list = [], [], [], [], []
-    for boxes, record, weight, vetoed in streams:
+    for boxes, record, weight, vetoed, a in streams:
         if vetoed:
             continue
+        if score_scale is not None:
+            weight = 1.0
         b = np.clip(boxes / norm, 0.0, 1.0)
         boxes_list.append(b.tolist())
-        scores_list.append(np.asarray(record["conf"], dtype=np.float64).tolist())
+        scores_list.append((np.asarray(record["conf"], dtype=np.float64) * a).tolist())
         labels_list.append(np.asarray(record["cls"], dtype=np.float64).tolist())
         weights.append(weight)
         if sigma_weighted:

@@ -41,7 +41,8 @@ import numpy as np
 from uqfusion.config import load_config
 from uqfusion.eval.cache import load_cache
 from uqfusion.eval.fusion_eval import evaluate_systems
-from uqfusion.eval.hysteresis import ADOPTED_VETO_FILTER, filter_veto, raw_veto_flags, temporal_order
+from uqfusion.eval.hysteresis import (ADOPTED_VEIL_FILTER, ADOPTED_VETO_FILTER, filter_veto,
+                                      raw_veto_flags, temporal_order)
 from uqfusion.eval.matching import load_gt
 from uqfusion.uq.mahalanobis import MahalanobisScorer
 from uqfusion.uq.reliability import ReliabilityConstants, fit_constants, per_box_uncertainty
@@ -89,6 +90,7 @@ class FusionContext:
     c_vis: ReliabilityConstants          # photometric constants already merged in
     c_ir: ReliabilityConstants
     bright_by_cond: dict[str, np.ndarray]
+    struct_by_cond: dict[str, np.ndarray]   # lap_var per frame; {} disables the veil term
     h_frames: list
     gts: list[dict]
     runs: np.ndarray
@@ -98,6 +100,8 @@ class FusionContext:
     iou_thr: float
     veto: float | None
     veto_filter: tuple[str, int] | None = None   # (mode, k) hysteresis on the switch
+    tau_lap: float | None = None                # veil veto threshold; None disables it
+    veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER   # denoise, not dilate
     cap_note: str = ""
     _sel: dict = field(default_factory=dict)
     _order: dict | None = None
@@ -175,6 +179,8 @@ def load_context(
     capability_sel: str | None = "fit",
     bright_soft: bool = False,
     veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
+    veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
+    tau_lap: float | None = None,
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
@@ -207,16 +213,29 @@ def load_context(
         else:
             c_ir = obj
 
-    bright_by_cond = {}
+    bright_by_cond, struct_by_cond = {}, {}
     if brightness_constants:
         bc = json.loads((ROOT / brightness_constants).read_text(encoding="utf-8"))["vis"]
         stat = bc["stat"]
+        # Resolved BEFORE the loop, not after: the loop below only reads `lap_var`
+        # when a threshold exists, so loading tau_lap afterwards left struct_by_cond
+        # empty and the veil term silently inert -- an eval that ran to completion and
+        # reproduced the photometric-only numbers exactly, which is the worst way for
+        # a bug to present. The `[ctx]` line now prints the veil state for that reason.
+        if tau_lap is None:
+            tau_lap = bc.get("tau_lap")
         for cond in conditions:
             bp = ROOT / bright_dir / f"gauss_vis_paired_{cond}.json"
             if not bp.is_file():
                 raise SystemExit(f"missing {bp} — run scripts/frame_brightness.py first")
-            bright_by_cond[cond] = np.asarray(
-                [f[stat] for f in json.loads(bp.read_text(encoding="utf-8"))["frames"]], dtype=float)
+            frames = json.loads(bp.read_text(encoding="utf-8"))["frames"]
+            bright_by_cond[cond] = np.asarray([f[stat] for f in frames], dtype=float)
+            # The veil term is opt-in on the data: brightness files written before
+            # 2026-09-01 carry no `lap_var`, and a missing column must reproduce the
+            # photometric-only gate exactly rather than silently veto nothing at a
+            # threshold it cannot evaluate.
+            if tau_lap is not None and all("lap_var" in f for f in frames):
+                struct_by_cond[cond] = np.asarray([f["lap_var"] for f in frames], dtype=float)
         c_vis = replace(c_vis, mu_b=bc["mu_b"], tau_b=bc["tau_b"], bright_stat=stat,
                         bright_soft=bright_soft)
 
@@ -226,9 +245,11 @@ def load_context(
 
     ctx = FusionContext(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
-        c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, h_frames=h_frames, gts=gts,
+        c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
+        h_frames=h_frames, gts=gts,
         runs=runs, cap_vis=1.0, cap_ir=1.0, conditions=tuple(conditions),
-        iou_thr=iou_thr, veto=veto, veto_filter=veto_filter)
+        iou_thr=iou_thr, veto=veto, veto_filter=veto_filter, veil_filter=veil_filter,
+        tau_lap=tau_lap)
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -243,6 +264,13 @@ def load_context(
               f"(ratio {ctx.cap_vis / max(ctx.cap_ir, 1e-9):.1f}x)  [{capability_sel}]")
         print(f"[ctx] iou_thr={iou_thr} veto={veto} filter={veto_filter} "
               f"bright_soft={bright_soft}  day {len(ctx.sel('day'))} / night {len(ctx.sel('night'))}")
+        if ctx.tau_lap is not None and ctx.struct_by_cond:
+            print(f"[ctx] veil term ACTIVE: lap_var < {ctx.tau_lap:.1f}, filter={veil_filter}, "
+                  f"conditions {sorted(ctx.struct_by_cond)}")
+        else:
+            why = ("no tau_lap in brightness_constants.json" if ctx.tau_lap is None
+                   else "no lap_var column in the brightness files")
+            print(f"[ctx] veil term OFF ({why}) - photometric-only gate")
     return ctx
 
 
@@ -269,10 +297,24 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
             and "veto_override" not in overrides and "veto_below" not in overrides
             and kw.get("veto_on", "r_bright") == "r_bright"
             and ctx.c_vis.mu_b is not None):
+        # The two veto axes are filtered SEPARATELY and OR-ed after, never OR-ed and
+        # then filtered together -- see hysteresis.ADOPTED_VEIL_FILTER for the
+        # measurement that forces this. Dilating the combined switch costs the
+        # glare/day guard cell 4.8% of its frames.
         mode, k = ctx.veto_filter
-        vv = raw_veto_flags(kw["brightness_vis"], ctx.c_vis.mu_b, ctx.c_vis.tau_b or 1e-9,
-                            ctx.veto, len(vis))
-        vv = filter_veto(vv, ctx.order, k, mode)
+        n = len(vis)
+        vv = np.asarray(filter_veto(
+            raw_veto_flags(kw["brightness_vis"], ctx.c_vis.mu_b, ctx.c_vis.tau_b or 1e-9,
+                           ctx.veto, n), ctx.order, k, mode), dtype=bool)
+        struct = ctx.struct_by_cond.get(condition)
+        if struct is not None and ctx.tau_lap is not None:
+            veil = raw_veto_flags(None, 0.0, 1.0, ctx.veto, n,
+                                  structure=struct, tau_lap=ctx.tau_lap)
+            if ctx.veil_filter is not None:
+                vmode, vk = ctx.veil_filter
+                veil = filter_veto(veil, ctx.order, vk, vmode)
+            vv = vv | np.asarray(veil, dtype=bool)
+        vv = vv.tolist()
         kw["veto_override"] = (vv, [False] * len(vis))   # IR is never vetoed by design
         kw["veto_below"] = None
     return evaluate_systems(vis, ir, ctx.scorer_vis, ctx.c_vis, **kw)

@@ -63,6 +63,8 @@ def evaluate_systems(
     veto_on: str = "r_bright",
     sigma_weighted: bool = False,
     veto_override: tuple[list, list] | None = None,
+    trust_override: tuple[list, list] | None = None,
+    single_passthrough: bool = False,
 ) -> dict:
     """mAP@50-95 (and mAP@50) per system over the paired frame set. Also returns
     per-frame gate weights and R_sys for the B3 abstain analysis.
@@ -136,6 +138,27 @@ def evaluate_systems(
     changes; this overrides only the switch. The both-vetoed case is still
     collapsed to neither, exactly as in the fitted path.
 
+    `trust_override` is the SOFT counterpart of `veto_override`: two per-frame
+    arrays of ABSOLUTE trust, one per modality, which are divided by their
+    per-frame maximum and handed to `fuse_detections` as `score_scale`. The
+    stream the gate trusts most on a frame therefore keeps its confidences
+    untouched and the other is suppressed in proportion, across frames as well as
+    within one.
+
+    That cross-frame part is the whole point, and it is what the normalized
+    weights cannot express. `fusion_weights` returns `w_vis + w_ir = 1`, and WBF's
+    score formula divides by `sum(weights)`, so only the RATIO survives: a frame
+    where VIS is merely 36x better than IR and a frame where VIS is blind produce
+    similar `w_vis`, and the gate's estimate of how good this frame is in absolute
+    terms is discarded at the last step. AP pools every frame's detections into
+    one ranking, so that discarded quantity is exactly the one that decides
+    whether a blind stream's boxes outrank a working stream's.
+
+    Supplying both `trust_override` and `veto_override` is allowed and means what
+    it says: the veto still removes a stream outright, and the survivors are
+    scaled. The hard veto is the `trust -> 0` limit, so the two are a continuum
+    and not rival designs.
+
     Both the veto and sigma weighting apply to GATED fusion only. Naive 0.5/0.5
     is the fixed-weight control and must stay untouched, or it stops being a
     control.
@@ -164,6 +187,21 @@ def evaluate_systems(
             raise ValueError("veto_override lists must be index-aligned with the paired caches")
     else:
         ov_v = ov_i = None
+    if trust_override is not None:
+        tv = np.asarray(trust_override[0], dtype=np.float64)
+        ti = np.asarray(trust_override[1], dtype=np.float64)
+        if len(tv) != n or len(ti) != n:
+            raise ValueError("trust_override arrays must be index-aligned with the paired caches")
+        if (tv < 0).any() or (ti < 0).any():
+            raise ValueError("trust must be non-negative")
+        # Normalized by the per-frame MAX, not the sum: the best stream on a frame
+        # keeps its own confidences and only the other is pushed down, so a frame
+        # where both streams are healthy is not globally demoted relative to one
+        # where only one is.
+        m = np.maximum(np.maximum(tv, ti), 1e-12)
+        tv, ti = tv / m, ti / m
+    else:
+        tv = ti = None
     fused_gated, fused_naive, fused_learned = [], [], []
     w_vis_gated, r_sys_all, r_bright_all = [], [], []
     rf_vis_all, rf_ir_all, veto_vis_all, veto_ir_all = [], [], [], []
@@ -201,7 +239,10 @@ def evaluate_systems(
         hw = rv["image_hw"]
         fused_gated.append(fuse_detections(rv, ri, w["w_vis"], w["w_ir"], hw, h, iou_thr_wbf,
                                           skip_box_thr, veto_vis=veto_v, veto_ir=veto_i,
-                                          sigma_weighted=sigma_weighted))
+                                          sigma_weighted=sigma_weighted,
+                                          single_passthrough=single_passthrough,
+                                          score_scale=(None if tv is None
+                                                       else (float(tv[fi_]), float(ti[fi_])))))
         fused_naive.append(fuse_detections(rv, ri, 0.5, 0.5, hw, h, iou_thr_wbf, skip_box_thr))
         if gate is not None:
             wl = gate.predict_w_vis(rv, ri, dv, di)
