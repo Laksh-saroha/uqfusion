@@ -61,8 +61,15 @@ def fit_scorer(cache_path: Path) -> MahalanobisScorer:
 
 
 def constants_for(records, scorer, alpha, combination) -> ReliabilityConstants:
-    u = np.concatenate([per_box_uncertainty(r["sigma_ltrb"], r["boxes_xyxy"])
-                        for r in records if len(r["conf"])])
+    parts = [per_box_uncertainty(r["sigma_ltrb"], r["boxes_xyxy"])
+             for r in records if len(r["conf"])]
+    if not parts:
+        # A stream can be destroyed badly enough to emit nothing at all (IR under
+        # noise s2 is exactly that, on all 2,232 frames). That is a legitimate
+        # condition to evaluate, not a reason to abort: lam is a clean-data
+        # calibration constant and a stream with no boxes has no r_box to scale.
+        raise ValueError("no detections to fit reliability constants on")
+    u = np.concatenate(parts)
     d = np.asarray([scorer.score(r["feat"]) for r in records])
     return fit_constants(u, d, alpha=alpha, combination=combination)
 
@@ -109,6 +116,7 @@ class FusionContext:
     ir_bound: float = 0.0                 # merge bound: above this, IR leaves the fusion
     ir_bound_switch: float = 0.0          # authority bound (tighter): above this, IR may not veto
     q_vis_by_cond: dict[str, np.ndarray] = field(default_factory=dict)   # VIS absolute health
+    order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     single_passthrough: bool = False
@@ -120,7 +128,13 @@ class FusionContext:
     def order(self) -> dict[str, np.ndarray]:
         """Capture order per run, computed once (needed by the veto filter)."""
         if self._order is None:
-            self._order = temporal_order(self.vis_by_cond["clean"])
+            # Not `vis_by_cond["clean"]`: a caller may be evaluating a single
+            # non-clean condition, and capture order is a property of the frame
+            # list, which every condition shares.
+            self._order = temporal_order(
+                self.order_records
+                if self.order_records is not None
+                else next(iter(self.vis_by_cond.values())))
         return self._order
 
     # ---- frame selectors -------------------------------------------------
@@ -192,10 +206,12 @@ def load_context(
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
     tau_lap: float | None = None,
     preset: str = "adopted",
+    ir_condition: str | None = None,
     ir_nms: float | None = None,
+    cap_ir_scale: float | None = None,
     structure_dir="runs/derived/structure",
     structure_constants="runs/eval/structure_constants.json",
-    ir_bright="runs/derived/brightness/gauss_ir_paired_clean.json",
+    ir_bright=None,
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
@@ -238,6 +254,18 @@ def load_context(
     combination = str(cfg["reliability"]["combination"])
 
     ir_clean, _ = load_cache(cache_dir / "gauss_ir_paired_clean.pkl")
+    # `ir_condition` degrades the IR STREAM while leaving everything fitted on IR
+    # fitted on the clean one. That split is the whole point: the capability prior,
+    # the IR health model and the night threshold are all calibration, and
+    # calibration does not get to see the damage it is supposed to detect. Only the
+    # records the system consumes at inference change.
+    ir_prior_records = ir_clean
+    if ir_condition:
+        ir_clean, _ = load_cache(cache_dir / f"gauss_ir_paired_{ir_condition}.pkl")
+        if len(ir_clean) != len(ir_prior_records):
+            raise SystemExit(f"IR condition {ir_condition!r} has {len(ir_clean)} frames, "
+                             f"clean has {len(ir_prior_records)} — the paired caches must "
+                             f"stay index-aligned")
     if ir_nms is None and preset == "crossmodal":
         ir_nms = 0.70
     if ir_nms:
@@ -256,16 +284,32 @@ def load_context(
         # `single_passthrough`, five of the eight cells simply ARE this stream.
         from uqfusion.eval.irdedup import nms_records
         ir_clean = nms_records(ir_clean, float(ir_nms))
+        ir_prior_records = (ir_clean if not ir_condition
+                            else nms_records(ir_prior_records, float(ir_nms)))
     vis_by_cond = {}
     for cond in conditions:
         name = "gauss_vis_paired_clean.pkl" if cond == "clean" else f"gauss_vis_paired_{cond}.pkl"
         vis_by_cond[cond], _ = load_cache(cache_dir / name)
 
+    # The CLEAN VIS stream, always loaded, whatever conditions were asked for. Same
+    # rule as the IR side: `c_vis` and the capability prior are calibration, and
+    # calibration is fitted on clean data by definition -- so a caller evaluating
+    # only `blur_s3` must still get constants fitted on `clean`, not on blur.
+    vis_prior_records = vis_by_cond.get("clean")
+    if vis_prior_records is None:
+        vis_prior_records, _ = load_cache(cache_dir / "gauss_vis_paired_clean.pkl")
+
     scorer_vis = fit_scorer(cache_dir / "gauss_vis_train_clean.pkl")
     scorer_ir = fit_scorer(cache_dir / "gauss_ir_train_clean.pkl")
 
-    c_vis = constants_for(vis_by_cond["clean"], scorer_vis, alpha, combination)
-    c_ir = constants_for(ir_clean, scorer_ir, alpha, combination)
+    c_vis = constants_for(vis_prior_records, scorer_vis, alpha, combination)
+    # Fitted on the CLEAN IR stream, always. These are calibration constants, and
+    # calibration does not get to see the damage it exists to measure -- the same
+    # rule the capability prior and the health models follow. Before this was
+    # explicit, an `ir_condition` silently refitted lam on the corrupted stream,
+    # and IR under noise s2 (zero detections on all 2,232 frames) turned that into
+    # a crash rather than a wrong number, which is the lucky version.
+    c_ir = constants_for(ir_prior_records, scorer_ir, alpha, combination)
     # The D-6 ladder fit. Not optional: without it the D5/B5 fallback silently
     # changes gated glare from 0.2058 to 0.0641 (§6.2).
     fitted = json.loads((ROOT / constants).read_text(encoding="utf-8"))
@@ -306,8 +350,8 @@ def load_context(
                         bright_soft=bright_soft)
 
     h_frames = per_frame_homographies(ROOT / manifest, ROOT / homography)
-    gts = [load_gt(r["image_path"], r["image_hw"]) for r in vis_by_cond["clean"]]
-    runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_by_cond["clean"]])
+    gts = [load_gt(r["image_path"], r["image_hw"]) for r in vis_prior_records]
+    runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_prior_records])
 
     gini_by_cond, ir_night_flag, sconst = {}, None, {}
     ir_d2, ir_bound, ir_bound_switch, q_vis_by_cond = None, 0.0, 0.0, {}
@@ -325,8 +369,14 @@ def load_context(
                             json.loads(fp.read_text(encoding="utf-8"))["frames"]], dtype=float)
             gini_by_cond[cond] = g
         ir_thr = float(sconst["axes"]["ir_p05"]["threshold"])
+        # The gate reads the statistics of the IR frames it is actually being given.
+        ir_tag = ir_condition or "clean"
+        irb = ROOT / (ir_bright or f"runs/derived/brightness/gauss_ir_paired_{ir_tag}.json")
+        if not irb.is_file():
+            raise SystemExit(f"missing {irb} — run scripts/frame_brightness.py "
+                             f"--cache runs/cache/gauss_ir_paired_{ir_tag}.pkl --modality ir")
         ir_p05 = np.asarray([f["p05"] for f in json.loads(
-            (ROOT / ir_bright).read_text(encoding="utf-8"))["frames"]], dtype=float)
+            irb.read_text(encoding="utf-8"))["frames"]], dtype=float)
         # IR SELF-CHECK. `runs/eval/ir_night_robustness.md`: applied to a FOGGED IR
         # sensor the bare `ir_p05` test misreads 75-96% of day frames as night, and a
         # false night vetoes a VIS stream scoring 0.3683 in favour of one scoring
@@ -337,10 +387,10 @@ def load_context(
         # frames. With it, IR-fog false nights go 96% -> 0%.
         hm = sconst["axes"].get("ir_health")
         band = sconst["axes"].get("ir_lap_over_var", {}).get("band")
-        isp = ROOT / structure_dir / "gauss_ir_paired_clean.json"
+        isp = ROOT / structure_dir / f"gauss_ir_paired_{ir_tag}.json"
         if (hm is not None or band is not None) and not isp.is_file():
             raise SystemExit(f"missing {isp} — run scripts/frame_structure.py "
-                             f"--cache runs/cache/gauss_ir_paired_clean.pkl --modality ir")
+                             f"--cache runs/cache/gauss_ir_paired_{ir_tag}.pkl --modality ir")
         if hm is not None:
             # The multivariate check supersedes the single-axis band: a corruption
             # moves the JOINT distribution of frame statistics even when it moves no
@@ -410,6 +460,7 @@ def load_context(
         iou_thr=iou_thr, veto=veto, veto_filter=veto_filter, veil_filter=veil_filter,
         tau_lap=tau_lap, gini_by_cond=gini_by_cond, ir_night=ir_night_flag,
         struct_const=sconst,
+        order_records=vis_prior_records,
         veto_rule="gini+ir_night" if preset == "crossmodal" else "photometric+veil",
         single_passthrough=(preset == "crossmodal"),
         ir_d2=(ir_d2 if preset == "crossmodal" else None),
@@ -420,14 +471,37 @@ def load_context(
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
         ctx.cap_vis, ctx.cap_ir = capability_prior(
-            vis_by_cond["clean"], ir_clean, gts, h_frames, sel)
+            vis_prior_records, ir_prior_records, gts, h_frames, sel)
+        # The fitted prior is each stream's clean mAP, which answers "how good is
+        # this sensor?" -- not "how should its boxes rank against the other's". The
+        # two differ, and the sweep shows it: IR's weight wants to be ~4x smaller
+        # than its clean capability implies. At the saturating end IR contributes
+        # essentially no detections yet fusion still beats VIS alone, so what the
+        # weight is really buying on a day frame is WBF's consensus boost --
+        # re-ranking VIS's boxes by agreeing with them.
+        #
+        # This was left at 1.0 as long as the benchmark could not PRICE it: the
+        # ratio only matters where VIS is unvetoed, and on the original eight cells
+        # every such cell had VIS ~36x ahead, so raising it was free. The extended
+        # grid supplies the missing cells and does charge for it -- blur_s3/clean,
+        # rain_s2/clean and blur_s3/glare_s2 all lose a little -- while the
+        # corrupted-IR cells gain more, and the worst cell goes -0.0015 -> +0.0000.
+        # 4.0 is the SMALLEST multiplier reaching that best worst-cell value; the
+        # tie-break toward the fitted prior is deliberate, since larger values only
+        # deepen the losses on the cells that now do the pricing.
+        if cap_ir_scale is None:
+            cap_ir_scale = 4.0 if preset == "crossmodal" else 1.0
+        ctx.cap_ir = ctx.cap_ir / float(cap_ir_scale)
         ctx.cap_note = f"capability prior over {capability_sel} frames"
 
     if verbose:
-        print(f"[ctx] {len(ir_clean)} paired frames | conditions {', '.join(conditions)}")
+        print(f"[ctx] {len(ir_clean)} paired frames | VIS conditions "
+              f"{', '.join(conditions)} | IR stream {ir_condition or 'clean'}"
+              + (f" (NMS {ir_nms})" if ir_nms else ""))
         print(f"[ctx] VIS mu_d={c_vis.mu_d:.2f} tau={c_vis.tau:.2f} mu_b={c_vis.mu_b} tau_b={c_vis.tau_b}")
         print(f"[ctx] capability prior: VIS {ctx.cap_vis:.4f}  IR {ctx.cap_ir:.4f} "
-              f"(ratio {ctx.cap_vis / max(ctx.cap_ir, 1e-9):.1f}x)  [{capability_sel}]")
+              f"(ratio {ctx.cap_vis / max(ctx.cap_ir, 1e-9):.1f}x, IR scaled "
+              f"1/{cap_ir_scale:g})  [{capability_sel}]")
         print(f"[ctx] iou_thr={iou_thr} veto={veto} filter={veto_filter} "
               f"bright_soft={bright_soft}  day {len(ctx.sel('day'))} / night {len(ctx.sel('night'))}")
         if ctx.tau_lap is not None and ctx.struct_by_cond:
