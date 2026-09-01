@@ -163,7 +163,7 @@ def sigma_weighted_fusion(
         if not sigma_score_alpha or not len(sg):
             rel.append(np.ones(len(sg)))
             continue
-        u = np.sqrt(np.maximum(sg, 0.0) ** 2).mean(axis=1)
+        u = np.abs(sg).mean(axis=1)
         med = np.median(u[u > 0]) if (u > 0).any() else 1.0
         rel.append((med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha))
 
@@ -417,8 +417,9 @@ def fuse_detections(
             b, record, a = alive[0]
             c_ = np.asarray(record["conf"], dtype=np.float64) * a
             if sigma_score_alpha and "sigma_ltrb" in record and len(c_):
-                sg = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
-                u = sg.mean(axis=1)
+                from uqfusion.uq.reliability import per_box_uncertainty
+                u = per_box_uncertainty(np.asarray(record["sigma_ltrb"]).reshape(-1, 4),
+                                        np.asarray(b, dtype=np.float64).reshape(-1, 4))
                 med = np.median(u[u > 0]) if (u > 0).any() else 1.0
                 c_ = c_ * (med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha)
             return _with_carried(
@@ -441,7 +442,24 @@ def fuse_detections(
             # lines up with (x1, y1, x2, y2); divide by the same norm as boxes.
             s = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
             sigmas_list.append(s / norm)
-        elif consensus_beta != 1.0 or consensus_distinct or support_gamma or sigma_score_alpha:
+        elif sigma_score_alpha:
+            # The REAL sigma, even though `sigma_weighted` is off: this arm scores
+            # on sigma without letting it move coordinates, and feeding the dummy
+            # column below would make the whole term silently inert -- which is
+            # exactly what it did on the first run, leaving every day cell
+            # byte-identical across alpha while only the passthrough path moved.
+            #
+            # Divided by the BOX, not by the canvas. `per_box_uncertainty` -- the
+            # statistic the 3.00x lift was measured on -- is size-normalised, and a
+            # canvas-normalised sigma is not the same quantity: a large box has a
+            # larger absolute sigma for the same relative precision, so scoring on
+            # it just penalises large boxes. That substitution is what sent the
+            # first run's night cells the wrong way.
+            sg = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
+            bw = np.clip(boxes[:, 2] - boxes[:, 0], _EPS, None)
+            bh = np.clip(boxes[:, 3] - boxes[:, 1], _EPS, None)
+            sigmas_list.append(sg / np.stack([bw, bh, bw, bh], axis=1))
+        elif consensus_beta != 1.0 or consensus_distinct or support_gamma:
             # The local implementation needs a sigma column even when it will not
             # use one; ones make `_fuse_cluster` reduce to the stock coordinate mean.
             sigmas_list.append(np.ones_like(b))

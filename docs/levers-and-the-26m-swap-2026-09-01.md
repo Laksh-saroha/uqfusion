@@ -251,3 +251,138 @@ Nothing under `runs/cache/`, `runs/derived/`, or `runs/eval/` was overwritten.
 4. **The learned gate** is still in no headline table.
 5. **`cap_ir_scale` x4** was selected under the pre-§5 discipline and has not been
    re-selected under it.
+
+---
+
+## 9. Re-pricing the other veto axes (added later the same day)
+
+§2's lesson was that a veto axis measures the **image** while the decision attached
+to it is a claim about the **detector**. Fog was where that broke loudest; the other
+five axes had never been re-asked. `reprice_veto_axes.py` applies two instruments to
+all six on twelve cells, and it took **both** to find everything.
+
+### 9.1 The claim test — cheap, and it catches the fog failure mode
+
+On exactly the frames an axis fires, score both streams: `margin = AP(kept) −
+AP(removed)`. Negative means the axis deletes the better sensor. No fusion run.
+
+| axis | fires on | margin | status |
+|---|---|---:|---|
+| `veil (grad_gini)` | fog/day | **−0.0632** | repaired in §2. Also **+0.0555 on blur_s3**, which the repair disables at no measured cell cost |
+| `ir_p05` raw | corrupted-IR day cells | **−0.3769** | already neutralised by `ir_ok` and the two-of-two vote |
+| `photometric` | lowlight/day | **−0.0243** | false claim, but it can only fire behind the night arm, so it never reaches the decision |
+| `ir_health` merge | corrupted IR | +0.32…+0.37 | claim holds — and see §9.2 |
+| `ir_health` authority, `vis_health` | — | n/a (gates, not deletions) | priced by ablation only |
+
+### 9.2 The ablation — and the axis the claim test structurally could not catch
+
+`veto_ir`'s claim is **true** and the veto is still a net loss. Removing it improves
+four of twelve cells and costs one 0.0004: **+0.0128 summed day, +0.0047 held-out**.
+
+> A subset AP asks *"is this stream worse?"* A veto needs *"is this stream a net
+> **negative**?"* A stream 30× worse alone is still **additive** at the tail of a
+> pooled ranking, because AP orders every frame's detections together and a few true
+> positives at the bottom still raise it.
+
+Under capability-only weights IR enters at `w_ir` ≈ 0.007, so a damaged IR was
+already nearly harmless and the bound was deleting free recall. **Now off.**
+
+The authority bound is **completely inert** on all twelve cells — it can only be
+priced on fog × corrupted-IR night cells, which no grid contained.
+
+### 9.3 A pre-existing bug the corrupted-IR grid never surfaced
+
+`clean/glare_s2` and `lowlight/glare_s2` are **−0.0093 at night under `crossmodal`
+as well** — the authority bound disarms the night switch and blind VIS stays in the
+fusion. Nothing to do with the fog repair; it had simply never been looked at,
+because the original eight cells never damage IR and the extended grid's headline
+was the day column.
+
+`night_weak_fallback` lets a disarmed IR be **confirmed** rather than believed. What
+counts as confirmation decides everything:
+
+| fallback keyed on | lowlight/glare_s2 day | clean/glare_s2 night | fog/blur_s2 night |
+|---|---:|---:|---:|
+| nothing (`veil AND night` alone) | +0.0038 | −0.0093 | −0.0296 |
+| `VIS dark` | **−0.0072** | +0.0000 | −0.0141 |
+| **`lap_over_var`** | **+0.0035** | **+0.0000** | **−0.0141** |
+
+Keying it on darkness re-opens §7.2 through the back door: lowlight/day `p05` is 0,
+*darker* than the real night run, so a dark **sensor** and a dark **world** look
+identical. `lap_over_var` — concentrated highlights on an empty field, an axis
+already fitted and never used by any preset — tells them apart. Where fog destroys
+it, `dark AND veil` stands in.
+
+No global photometric threshold can do better, and this is a proof rather than a
+tuning limit: fogged **night** `p05` reaches 34 while clean **day** `p05` starts at
+21, so any threshold high enough to catch the first vetoes clear daylight.
+
+### 9.4 The repaired grid
+
+Both changes together, on all ten extended cells (`final_26m_grid_v2.md`):
+
+| | day | night |
+|---|---|---|
+| gains | +0.0056, +0.0038, +0.0022, +0.0016 | **+0.0093, +0.0093**, +0.0012 |
+| costs | −0.0004, −0.0002 | — |
+| worst cell | +0.0000 → **−0.0004** | −0.0093 → **−0.0081** |
+
+Better on seven cells, worse on two by ≤0.0004. **"Every cell at or above the bar"
+no longer holds exactly**: `clean × IR fog_s2` sits at −0.0004, which is the price of
+dropping `veto_ir` against +0.0126 summed elsewhere. Saying so is the point of
+having the column.
+
+---
+
+## 10. Two new instruments, and what they found
+
+### 10.1 The lift screen — seconds, not hours
+
+`lift = P(TP | signal) / P(TP | no signal)`, per box, on day frames. No fusion run,
+no bootstrap, no held-out split. **A signal at lift 1.0 cannot help whatever weight
+it is given**, because re-scoring by something uninformative preserves the ranking AP
+is computed from.
+
+| signal | fires | lift@50 | lift@75 | corr(conf) |
+|---|---:|---:|---:|---:|
+| conf above its frame median | 48.5% | 4.80× | 4.92× | 0.72 |
+| **sigma below its frame median** | 48.4% | **3.00×** | **3.39×** | 0.55 |
+| cross-modal support IoU 0.30 | 32.3% | 2.08× | 2.63× | 0.31 |
+| temporal support k2 IoU 0.30 | 74.2% | **1.00×** | 1.29× | 0.02 |
+
+### 10.2 Temporal support is a null, and the reason generalises
+
+The exact cross-modal term with the modality axis swapped for time — and on this
+dataset that axis is *abundant*: the paired val frames are genuinely consecutive
+(`pohang00_L_006767`, `_006768`, …) and the term fires on 74% of boxes. It is worth
+**~0.0000**, against cross-modal support's +0.0090.
+
+> A persistent false positive — a dock edge, a reflection, a wake — is exactly what
+> survives from frame to frame. Temporal consistency selects for **stable**
+> detections, and in a fixed scene the false positives are the most stable things
+> there are. A thermal signature is different physics; a reflection has no heat.
+>
+> **The value of a redundancy axis is its independence, not its abundance.**
+
+That kills tracking, temporal smoothing and any spatio-temporal evidence field
+before any of them is built, and it reframes this project's headline positively:
+fusion's small gain is not a failure to exploit an abundant signal. It is the honest
+ceiling of the only *independent* signal available, which the registration geometry
+then limits to a score-level hint.
+
+### 10.3 The lead: sigma is the second-strongest signal and fusion ignores it
+
+`sigma below its frame median` lifts **3.00×**, and **3.39× on TP@0.75** — stronger
+on *localisation* than on *presence*, which is what AP@50-95 pays for and what a
+per-side sigma head is supposed to know. IR's own sigma lifts **10.86×** at night.
+
+Fusion ranks on it **not at all**: `sigma_weighted` moves coordinates and is
+documented inert, and `r_box` was computed and then flattened to 0.86–0.95 by its own
+calibration. `sigma_score_alpha` puts it in the score.
+
+Two wiring bugs had to be found first, and both are the same kind: a lever that is
+silently inert looks exactly like a lever that does not help. The first fed the local
+WBF a **dummy sigma column of ones**, leaving every day cell byte-identical across α;
+the second used a **canvas-normalised** sigma where the 3.00× was measured on the
+**size-normalised** `per_box_uncertainty`, which merely penalises large boxes. Smoke
+check L now asserts the term is exactly inert at α=0 and demonstrably live above it.

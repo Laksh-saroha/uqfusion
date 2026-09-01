@@ -18,6 +18,7 @@ state, not the on one.
   H  sigma survives the class filter with its own box (the irdedup bug, again)
   I  support_gamma=0 is exactly stock WBF
   J  support boosts a loosely-confirmed box and does NOT move its coordinates
+  L  sigma_score_alpha=0 is exactly inert, and >0 actually reaches the scores
 
 Usage:  python scripts/smoke_new_levers.py
 """
@@ -211,6 +212,24 @@ def k_():
     return "passthrough still fires; the IR ship scores are untouched"
 
 
+def l_():
+    # The bug this guards: the non-`sigma_weighted` path fed the local WBF a DUMMY
+    # sigma column of ones, so `sigma_score_alpha` computed a reliability of 1.0 for
+    # every box and the term was silently inert -- every day cell byte-identical
+    # across alpha, with only the passthrough branch moving. A lever that is inert
+    # when it should be live looks exactly like a lever that does not help.
+    base = fuse_detections(V, I, 0.7, 0.3, HW, None, 0.55)
+    off = fuse_detections(V, I, 0.7, 0.3, HW, None, 0.55, sigma_score_alpha=0.0)
+    same(base, off, "L off", TOL)
+    live = fuse_detections(V, I, 0.7, 0.3, HW, None, 0.55, sigma_score_alpha=1.0)
+    d = float(np.max(np.abs(np.sort(base["conf"]) - np.sort(live["conf"]))))
+    assert d > 1e-3, f"sigma_score_alpha=1 must move the scores, moved {d:.2e}"
+    # Coordinates must NOT move: this arm scores on sigma, it does not weight by it.
+    assert np.max(np.abs(np.sort(base["boxes_xyxy"], 0)
+                         - np.sort(live["boxes_xyxy"], 0))) < TOL,         "sigma_score must not move a coordinate -- that is sigma_weighted's job"
+    return f"off is exact; alpha=1 moves scores by {d:.3f} and no coordinate"
+
+
 def main() -> int:
     fails = []
     print("smoke: new fusion levers")
@@ -224,7 +243,8 @@ def main() -> int:
                      ("H sigma survives the class filter", h),
                      ("I support_gamma=0 is stock WBF", i_),
                      ("J support boosts without moving coordinates", j_),
-                     ("K carry-through keeps single_passthrough intact", k_)):
+                     ("K carry-through keeps single_passthrough intact", k_),
+                     ("L sigma_score is inert at 0 and live above it", l_)):
         try:
             note = fn()
             print(f"  [ok] {name}" + (f" -- {note}" if note else ""))
