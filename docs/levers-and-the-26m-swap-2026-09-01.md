@@ -386,3 +386,27 @@ WBF a **dummy sigma column of ones**, leaving every day cell byte-identical acro
 the second used a **canvas-normalised** sigma where the 3.00× was measured on the
 **size-normalised** `per_box_uncertainty`, which merely penalises large boxes. Smoke
 check L now asserts the term is exactly inert at α=0 and demonstrably live above it.
+
+**And then the result is negative, for a reason worth keeping.** Applied to both
+streams it is rejected outright: tune −0.0101 [−0.0114, −0.0086], held-out +0.0010
+spanning zero. Split per stream, the two halves separate cleanly —
+
+| arm | day | night |
+|---|---:|---:|
+| sigma **VIS** only α0.1 | **−0.0102**…+0.0005 | +0.0000 |
+| sigma **IR** only α0.25 | −0.0003…+0.0001 | **+0.0021** |
+
+— so VIS's sigma is the entire cost and IR's is the entire benefit. Sigma is largely
+redundant with confidence on VIS (corr 0.55, and conf already ranks that stream
+well) and nearly orthogonal to it on IR, whose confidence carries little.
+
+But the night gain is **not a fusion gain**, and the control says so: applying the
+same scoring to `ir_only` takes it from 0.0850 to **0.0871** at α0.25 — *exactly* the
+fused system's number. The bar moves with it and the gap stays at +0.0000.
+
+**Sigma-in-score is a detector post-process, not a fusion improvement.** It belongs
+beside `ir_nms` in the IR stream's post-processing, where it is worth +0.0021 at
+night and +0.0015 on day, and it is not adopted into the fusion preset. This is the
+same control the temporal-support script carried from the start (§10.2, "the bar is
+recomputed on the boosted streams"); it had to be run separately here, and it
+reversed the conclusion.

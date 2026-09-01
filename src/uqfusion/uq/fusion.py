@@ -157,15 +157,18 @@ def sigma_weighted_fusion(
     # Within-frame and per input list: sigma's absolute scale drifts with the
     # condition and with the detector, and what survives both is which boxes in
     # THIS frame are tightly localised relative to their neighbours.
+    alphas = ([float(sigma_score_alpha)] * len(sigmas_list)
+              if np.isscalar(sigma_score_alpha) or isinstance(sigma_score_alpha, float)
+              else [float(a) for a in sigma_score_alpha])
     rel = []
-    for sg in sigmas_list:
+    for li, sg in enumerate(sigmas_list):
         sg = np.asarray(sg, dtype=np.float64).reshape(-1, 4)
-        if not sigma_score_alpha or not len(sg):
+        if not alphas[li] or not len(sg):
             rel.append(np.ones(len(sg)))
             continue
         u = np.abs(sg).mean(axis=1)
         med = np.median(u[u > 0]) if (u > 0).any() else 1.0
-        rel.append((med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha))
+        rel.append((med / np.maximum(u, 1e-12)) ** alphas[li])
 
     # --- prefilter: one row per surviving box, grouped by label --------------
     by_label: dict[int, list] = {}
@@ -258,6 +261,18 @@ def _fuse_cluster(members: list, use_sigma: bool) -> np.ndarray:
     total = a.sum(axis=0)
     total = np.where(total <= 0, _EPS, total)
     return (coords * a).sum(axis=0) / total
+
+
+def _sig_on(a) -> bool:
+    """True when any stream's sigma-score exponent is non-zero.
+
+    A plain truth test would read `(0.0, 0.5)` as on and `(0.0, 0.0)` as on too,
+    since a non-empty tuple is truthy -- the second is the inert case and must
+    reproduce stock WBF exactly.
+    """
+    if np.isscalar(a) or isinstance(a, float):
+        return bool(a)
+    return any(float(x) for x in a)
 
 
 def fuse_detections(
@@ -416,12 +431,15 @@ def fuse_detections(
         if len(alive) == 1:
             b, record, a = alive[0]
             c_ = np.asarray(record["conf"], dtype=np.float64) * a
-            if sigma_score_alpha and "sigma_ltrb" in record and len(c_):
+            a_sig = (float(sigma_score_alpha)
+                     if np.isscalar(sigma_score_alpha) or isinstance(sigma_score_alpha, float)
+                     else float(sigma_score_alpha[0 if record is vis_record else 1]))
+            if a_sig and "sigma_ltrb" in record and len(c_):
                 from uqfusion.uq.reliability import per_box_uncertainty
                 u = per_box_uncertainty(np.asarray(record["sigma_ltrb"]).reshape(-1, 4),
                                         np.asarray(b, dtype=np.float64).reshape(-1, 4))
                 med = np.median(u[u > 0]) if (u > 0).any() else 1.0
-                c_ = c_ * (med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha)
+                c_ = c_ * (med / np.maximum(u, 1e-12)) ** a_sig
             return _with_carried(
                 {"boxes_xyxy": np.asarray(b, dtype=np.float64).reshape(-1, 4),
                  "conf": c_, "cls": np.asarray(record["cls"]).astype(int)}, carried)
@@ -442,7 +460,7 @@ def fuse_detections(
             # lines up with (x1, y1, x2, y2); divide by the same norm as boxes.
             s = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
             sigmas_list.append(s / norm)
-        elif sigma_score_alpha:
+        elif _sig_on(sigma_score_alpha):
             # The REAL sigma, even though `sigma_weighted` is off: this arm scores
             # on sigma without letting it move coordinates, and feeding the dummy
             # column below would make the whole term silently inert -- which is
@@ -465,7 +483,7 @@ def fuse_detections(
             sigmas_list.append(np.ones_like(b))
 
     if (sigma_weighted or consensus_beta != 1.0 or consensus_distinct
-            or support_gamma or sigma_score_alpha):
+            or support_gamma or _sig_on(sigma_score_alpha)):
         fused_boxes, fused_scores, fused_labels = sigma_weighted_fusion(
             boxes_list, scores_list, labels_list, sigmas_list, weights,
             iou_thr=iou_thr, skip_box_thr=skip_box_thr, use_sigma=sigma_weighted,
