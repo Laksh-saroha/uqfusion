@@ -39,6 +39,10 @@ Checks (A-D need only the constants file; E-H load the caches):
   G  the crossmodal weights are constant across frames (capability prior alone).
   H  `preset="adopted"` still produces the adopted veto rates, unchanged: the new
      preset must not have moved the old one.
+  N  the IR stream carries the detector-side NMS under `crossmodal` and NOT under
+     `adopted`, and every record's boxes/conf/cls/sigma stay the same length --
+     a collapsed box list with an uncollapsed sigma is a shape mismatch that only
+     shows up the first time something asks for `r_box`.
 """
 
 from __future__ import annotations
@@ -234,6 +238,18 @@ def main() -> int:
                              f"was {ADOPTED_VETO[cell]:.0%}")
     print(f"[smoke] H adopted preset veto rates unmoved  "
           f"{'FAIL' if any(f.startswith('H') for f in fails) else 'OK'}")
+
+    na = float(np.mean([len(r["conf"]) for r in ad.ir_clean]))
+    nc = float(np.mean([len(r["conf"]) for r in cm.ir_clean]))
+    if not (nc < na):
+        fails.append(f"N crossmodal IR stream not deduped ({nc:.1f} vs adopted {na:.1f})")
+    for r in cm.ir_clean:
+        if not (len(r["conf"]) == len(r["boxes_xyxy"]) == len(r["cls"])
+                == len(r["sigma_ltrb"])):
+            fails.append("N deduped IR record has mismatched box/sigma lengths")
+            break
+    print(f"[smoke] N IR NMS live: {na:.1f} -> {nc:.1f} boxes/frame, shapes consistent  "
+          f"{'FAIL' if any(f.startswith('N') for f in fails) else 'OK'}")
 
     for f in fails:
         print(f"[smoke] FAIL {f}")

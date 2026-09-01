@@ -4,7 +4,7 @@ Raw outputs, all under gitignored `runs/`, which is why the tables are reproduce
 here: `runs/eval/final_system_crossmodal.md`, `final_system_adopted_regress.md`,
 `architecture_v3.md`, `gate_lab_twosided.md`, `gate_lab_scalefree.md`,
 `probe_structure_full.md`, `probe_detector_evidence.md`,
-`runs/eval/structure_constants.json`, `ir_night_robustness*.md`, `final_system_crossmodal_hardened.md`, `both_degraded.md`, `final_system_crossmodal_rsys.md`.
+`runs/eval/structure_constants.json`, `ir_night_robustness*.md`, `final_system_crossmodal_hardened.md`, `both_degraded.md`, `final_system_crossmodal_rsys.md`, `crossmodal_tuning*.md`, `ir_dedup.md`, `final_system_crossmodal_irnms.md`.
 
 **This document does not modify `docs/gated-fusion-handoff.md`** beyond a pointer
 added at its head, following the convention set by
@@ -20,16 +20,24 @@ homography, same WBF, same `iou_thr` 0.85. Paired frame-level bootstrap, n=1000,
 seed 0. `bar` = max(VIS, IR): the score the fusion has to beat to have earned its
 place.
 
-| cell | VIS | IR | bar | adopted | **crossmodal** | gap to bar | Δ vs adopted | 95% CI |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| clean/day | 0.3683 | 0.0177 | 0.3683 | 0.3715 | **0.3717** | **+0.0034** | +0.0003 | [+0.0002, +0.0003] |
-| clean/night | 0.0000 | 0.0810 | 0.0810 | 0.0813 | **0.0810** | **+0.0000** | −0.0003 | spans 0 |
-| fog/day | 0.0020 | 0.0177 | 0.0177 | 0.0166 | **0.0177** | **+0.0000** | +0.0011 | [+0.0004, +0.0018] |
-| fog/night | 0.0000 | 0.0810 | 0.0810 | 0.0813 | **0.0810** | **+0.0000** | −0.0003 | spans 0 |
-| lowlight/day | 0.0346 | 0.0177 | 0.0346 | 0.0166 | **0.0381** | **+0.0035** | **+0.0215** | [+0.0184, +0.0246] |
-| lowlight/night | 0.0000 | 0.0810 | 0.0810 | 0.0813 | **0.0810** | **+0.0000** | −0.0003 | spans 0 |
-| glare/day | 0.2892 | 0.0177 | 0.2892 | 0.2928 | **0.2960** | **+0.0068** | +0.0032 | [+0.0024, +0.0041] |
-| glare/night | 0.0000 | 0.0810 | 0.0810 | 0.0813 | **0.0810** | **+0.0000** | −0.0003 | spans 0 |
+| cell | VIS | IR | bar | adopted | **crossmodal** | gap to bar |
+|---|---:|---:|---:|---:|---:|---:|
+| clean/day | 0.3683 | 0.0181 | 0.3683 | 0.3715 | **0.3719** | **+0.0035** |
+| clean/night | 0.0000 | 0.0829 | 0.0829 | 0.0813 | **0.0829** | **+0.0000** |
+| fog/day | 0.0020 | 0.0181 | 0.0181 | 0.0166 | **0.0181** | **+0.0000** |
+| fog/night | 0.0000 | 0.0829 | 0.0829 | 0.0813 | **0.0829** | **+0.0000** |
+| lowlight/day | 0.0346 | 0.0181 | 0.0346 | 0.0166 | **0.0383** | **+0.0037** |
+| lowlight/night | 0.0000 | 0.0829 | 0.0829 | 0.0813 | **0.0829** | **+0.0000** |
+| glare/day | 0.2892 | 0.0181 | 0.2892 | 0.2928 | **0.2961** | **+0.0069** |
+| glare/night | 0.0000 | 0.0829 | 0.0829 | 0.0813 | **0.0829** | **+0.0000** |
+
+The `IR` column carries the detector-side NMS of §3c, so it is the IR stream the
+system actually uses and the bar it is actually held to. Against the *original*
+raw-IR numbers the deltas vs the adopted system are: lowlight/day **+0.0215**
+[+0.0184, +0.0246], glare/day +0.0032 [+0.0024, +0.0041], fog/day +0.0011
+[+0.0004, +0.0018], clean/day +0.0003 [+0.0002, +0.0003], and −0.0003 (spans zero)
+on each night cell — measured in `final_system_crossmodal.md` before the IR stream
+changed.
 
 **Worst cell: +0.0000.** This is the first configuration in the project's record
 with no cell below `max(VIS, IR)`. The adopted system's worst cell is −0.0180.
@@ -69,6 +77,7 @@ veto      grad_gini < 0.4826                     dilate15(p05 < 10.5)
                AND vis_p05 < mu_b )
 filters   none on either axis                    dilate-15 and majority-15
 fusion    single_passthrough=True                single-list WBF on vetoed frames
+IR        detector-side NMS @ IoU 0.70           raw IR stream
 ```
 
 Both are reachable from `load_context(preset=...)`; `"adopted"` remains the
@@ -364,6 +373,90 @@ L and M.
 
 ---
 
+## 3c. Everything else that was swept, and what survived
+
+Three fusion parameters were inherited from the old system and never re-checked
+after the weights changed, plus two new levers. **Selection on the clean frames of
+the fit runs only** (n=1200); the eight-cell columns are a report. Across 8 cells ×
+~20 arms, choosing on them would find something spurious with near-certainty.
+
+| lever | best on selection set | verdict |
+|---|---|---|
+| `iou_thr` 0.55–0.95 | 0.85 (inherited) | **keep** — every alternative is worse; 0.55 costs −0.0138 |
+| `sigma_weighted` | −0.0000 | **reject** — bit-identical on all eight cells |
+| soft `vis_scale` | −0.0000 | **reject** — worse on 6 of 8 cells (worst −0.0191) |
+| IR NMS | +0.0003, held-out night +0.0019 | **adopt** — but see below |
+| `cap_ratio` ×64 | +0.0025 | **not adopted** — see below |
+
+**`sigma_weighted` is closed.** The Gaussian head's sigma reaching the fused
+coordinates changes the result on **no cell, to four decimals**. That answers the
+handoff's open item: sigma is inert to fusion, and the honest description of the
+Gaussian head's contribution to *this* system is none.
+
+**Soft `vis_scale` fails a third time.** Keeping a distrusted VIS at a reduced
+score instead of vetoing it — now driven by the VIS health score of §3b, with a
+floor — loses on 6 of 8 cells. Three independent formulations of "down-weight
+rather than remove" have now lost to the hard veto.
+
+### IR NMS: a real gain that is not a fusion gain
+
+With `single_passthrough`, five of the eight cells simply ARE the IR stream, which
+makes IR duplicate suppression the highest-leverage lever left. Greedy per-class
+NMS at IoU 0.70 (54.2 → 42.0 boxes/frame) is worth **+0.0003** [+0.0003, +0.0005]
+on the selection set and **+0.0019** [+0.0015, +0.0020] on the held-out night run —
+sign agreeing across the two, which is the check that separates a real effect from
+a threshold fitted to one run's scene texture. The WBF-style variant that *averages*
+the cluster was better at night and worse on the selection set; it is rejected by
+the stated protocol rather than by preference.
+
+**Report it honestly: it lifts the `ir_only` BASELINE by exactly the same amount.**
+Every night cell goes 0.0810 → 0.0829 for the system *and* for the bar, so the gap
+the fusion is judged on does not move at all. This is a better IR detector
+post-process, not better fusion. It is adopted because the absolute AP is real and
+deployable, and it is reported separately for the same reason.
+
+### `cap_ratio`: measured, understood, deliberately not adopted
+
+Scaling the fitted VIS:IR capability ratio (36.2×) improves the selection set
+monotonically and **saturates at ×64** (+0.0025), lifting clean/day +0.0025,
+lowlight/day +0.0041 and glare/day +0.0023 with no cell losing.
+
+The saturation value is the interesting part. At ×64 IR's weight is negligible, yet
+the result is 0.3742 against VIS-alone's 0.3683 — so IR is still worth +0.0059
+while contributing essentially no detections of its own. What survives is **WBF's
+consensus boost**: a cluster containing boxes from both streams is rescaled by
+`min(n_models, n_cluster) / sum(weights)`, so IR's real job on a day frame is to
+*re-rank VIS's boxes by agreeing with them*, not to add its own.
+
+Not adopted, for a reason that is about the benchmark rather than the number: **no
+cell here can punish a large ratio.** The ratio only matters where VIS is unvetoed,
+and on every such cell VIS is the better stream — fog/day, the one day cell where
+IR wins, has VIS vetoed. A parameter the evaluation cannot penalise should not be
+tuned on that evaluation, however good the protocol. The finding is recorded, the
+value is left at its fitted 36.2×, and the honest statement is that the prior is
+*sub-optimal for ranking* and that the benchmark lacks the cell that would price
+the alternative.
+
+### The veto control surface is exhausted
+
+Re-running the per-frame coordinate-ascent oracle **under the new weights** (it was
+previously measured under the old ones) shows the shipped rule is within **+0.0007**
+of the best any per-frame VIS veto could do, on every cell:
+
+| cell | shipped | oracle | headroom |
+|---|---:|---:|---:|
+| clean/day | 0.3717 | 0.3724 | +0.0007 |
+| fog/day | 0.0177 | 0.0176 | −0.0001 |
+| lowlight/day | 0.0381 | 0.0382 | +0.0001 |
+| glare/day | 0.2960 | 0.2963 | +0.0003 |
+
+fog/day's old 0.0204 ceiling was an artifact of the old weights and is gone: under
+the capability prior alone the cell is already at its ceiling. Further gains have
+to come from the weights, the fusion mechanics, or the detectors — not from a
+better veto rule.
+
+---
+
 ## 4. Limitations — read these before quoting anything above
 
 1. **IR is uncorrupted in all eight benchmark cells**, so the headline table
@@ -459,6 +552,6 @@ powers of two and holds to ~1e-6 otherwise.
 4. **`sigma_weighted` is still off**, so the Gaussian head's sigma still does not
    reach the fused coordinates. Unmeasured under the new preset.
 5. **The learned gate** is still not in any headline table.
-6. **fog/day headroom.** The gated system is exactly `ir_only` there; the earlier
-   ascent found 0.0204 against the 0.0177 bar, so a rule that keeps *part* of VIS
-   on fog may still pay ~+0.003.
+6. **A benchmark cell that prices the capability ratio** (§3c): one where VIS is
+   unvetoed and IR is the better stream. Without it the ratio cannot be tuned
+   honestly.

@@ -192,6 +192,7 @@ def load_context(
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
     tau_lap: float | None = None,
     preset: str = "adopted",
+    ir_nms: float | None = None,
     structure_dir="runs/derived/structure",
     structure_constants="runs/eval/structure_constants.json",
     ir_bright="runs/derived/brightness/gauss_ir_paired_clean.json",
@@ -237,6 +238,24 @@ def load_context(
     combination = str(cfg["reliability"]["combination"])
 
     ir_clean, _ = load_cache(cache_dir / "gauss_ir_paired_clean.pkl")
+    if ir_nms is None and preset == "crossmodal":
+        ir_nms = 0.70
+    if ir_nms:
+        # DETECTOR-SIDE duplicate suppression on the IR stream, at an IoU chosen on
+        # the clean fit runs (`probe_ir_dedup.py`): +0.0003 [+0.0003, +0.0005] there
+        # and +0.0019 [+0.0015, +0.0020] on the held-out night run, with the sign
+        # agreeing across the two -- the check that separates a real effect from a
+        # threshold fitted to one run's scene texture. Greedy NMS keeps the
+        # highest-scoring box of a cluster; the WBF-style variant that averages the
+        # cluster was BETTER at night and WORSE on the selection set, so it is
+        # rejected by the pre-stated protocol rather than by preference.
+        #
+        # Read the gain honestly: it lifts the `ir_only` BASELINE by exactly the same
+        # amount, so it does not widen the gap the fusion is judged on. It is a
+        # better IR stream, not better fusion -- which matters because, with
+        # `single_passthrough`, five of the eight cells simply ARE this stream.
+        from uqfusion.eval.irdedup import nms_records
+        ir_clean = nms_records(ir_clean, float(ir_nms))
     vis_by_cond = {}
     for cond in conditions:
         name = "gauss_vis_paired_clean.pkl" if cond == "clean" else f"gauss_vis_paired_{cond}.pkl"
