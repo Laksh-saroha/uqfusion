@@ -6,7 +6,14 @@
 > * `docs/veil-veto-and-rule-sweep-2026-09-01.md` — §7.1's veil term is now
 >   measured (fog/day +0.0040, fog/night +0.0004, guards unmoved), and the
 >   29-rule sweep is reported.
-> * `docs/crossmodal-gate-2026-09-01.md` — **§7.2 is wrong, and §6's reading of
+> * `docs/levers-and-the-26m-swap-2026-09-01.md` — **the veil veto of §7.1 is a
+   -0.0632 regression on the detectors §1 actually specifies.** Rebuilt on
+   `runs/full_scale/*` (yolo26m / yolo26m-p2feat nc=1), VIS scores **0.0824** on
+   fogged day frames where yolo26s scored 0.0020, so vetoing it in favour of IR's
+   0.0192 destroys four times the AP it saves. Also: fusion's day gain is NOT WBF's
+   agreement bonus (only 0.05% of VIS boxes have an IR partner at `iou_thr` 0.85),
+   and the benchmark had no held-out day data at all until that record.
+ * `docs/crossmodal-gate-2026-09-01.md` — **§7.2 is wrong, and §6's reading of
 >   the Mahalanobis ablation is wrong.** lowlight/day is fixable: it now scores
 >   0.0381 against VIS-alone's 0.0346 (+0.0215 [+0.0184, +0.0246] over the
 >   system below). The Mahalanobis soft term is not "essentially nothing" — it is

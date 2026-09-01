@@ -161,6 +161,23 @@ coordinate is touched. IR says **whether**, not **where**.
 | + support IoU 0.30 γ 0.5 | +0.0078 | **+0.0033** | +0.0090 | — |
 | **`crossmodal26m`** (§2 + support) | +0.0078 | **+0.0033** | +0.0090 | **+0.0716** |
 
+Confirmed on the full 10-cell extended grid (`runs/eval/final_26m_grid.md`, paired
+bootstrap n=500, day frames, against `max(VIS, IR)` on the same streams):
+
+| cell | gated | bar | delta | 95% CI |
+|---|---:|---:|---:|---|
+| clean/clean | 0.3792 | 0.3686 | **+0.0106** | [+0.0086, +0.0124] |
+| clean × IR glare_s2 | 0.3724 | 0.3686 | +0.0038 | [+0.0019, +0.0065] |
+| clean × IR blur_s2 | 0.3757 | 0.3686 | +0.0071 | [+0.0051, +0.0095] |
+| blur_s3/clean | 0.0448 | 0.0425 | +0.0023 | [+0.0011, +0.0038] |
+| rain_s2/clean | 0.1137 | 0.1023 | **+0.0114** | [+0.0101, +0.0125] |
+| lowlight × IR glare_s2 | 0.0472 | 0.0435 | +0.0038 | [+0.0034, +0.0055] |
+| blur_s3 × IR glare_s2 | 0.0432 | 0.0425 | +0.0006 | [−0.0019, +0.0019] |
+| clean × IR fog_s2 / noise_s2, noise_s2/clean | — | — | +0.0000 | fully vetoed or IR-better; ties the bar |
+
+**Zero cells below their bar**, worst +0.0000. Under `crossmodal` on the same
+caches the worst was −0.0632.
+
 IoU 0.30 rather than 0.55 is the whole reason §5 exists — see there.
 
 ---
@@ -202,8 +219,8 @@ arm, not yet enough to certify one.
 | `consensus_beta`, `consensus_distinct` | inert or negative; §1.2 explains why. **Rejected.** |
 | per-frame registration | §3. **Rejected** — mechanism +80x, AP negative held-out. |
 | `class_veto` (IR is nc=1, so a VIS veto deletes every buoy) | **exactly zero on every cell.** VIS is only ever vetoed on night frames, and the night GT contains no buoys at all. Correctly implemented as carry-through (the first version cost −0.0065 of *ship* AP by turning vetoed frames back into two-stream frames); kept in the code, not adopted. |
-| `ir_nms` re-tune | see `runs/eval/irnms_calib_26m.md` |
-| cross-modal score calibration under `crossmodal` | see `runs/eval/irnms_calib_26m.md` |
+| `ir_nms` re-tune | **not a lever.** Swept off/0.5/0.6/0.7/0.8/0.9 — 15.7 to 30.0 IR boxes per frame, a 2x range — and the day column is flat to ±0.0002 throughout. Night moves at most +0.0005 (0.6 over the adopted 0.7), which is the only place it can act since night is 100% IR. **Kept at 0.7.** |
+| cross-modal score calibration | **worse.** Isotonic `conf -> P(TP@0.5)` per modality, fitted on pohang00 only: tune −0.0044, TEST −0.0035. It also turns out to make `cap_ir_scale` completely inert (x1, x4 and x16 give identical AP to four decimals, where without calibration they give 0.3676 / 0.3702 / 0.3713 — `replace(ctx, cap_ir=…)` was checked directly and does work). The likely reason, stated as inference rather than measurement: calibrated IR P(TP) occupies a narrow band (0.02–0.13 across IR's whole confidence range, against VIS's 0.06–0.97), so re-weighting slides that band as a block, and once the block sits below the VIS boxes near the precision–recall knee, sliding it further changes no ranking that AP can see. **Rejected.** |
 
 ---
 
