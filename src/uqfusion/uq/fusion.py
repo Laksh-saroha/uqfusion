@@ -56,6 +56,10 @@ def sigma_weighted_fusion(
     iou_thr: float = 0.55,
     skip_box_thr: float = 0.0,
     use_sigma: bool = True,
+    consensus_beta: float = 1.0,
+    consensus_distinct: bool = False,
+    support_iou: float = 0.0,
+    support_gamma: float = 0.0,
 ) -> tuple:
     """WBF with inverse-variance coordinate averaging — scope's actual claim (TODO A1).
 
@@ -81,6 +85,48 @@ def sigma_weighted_fusion(
     therefore reproduces stock WBF exactly, which is what makes the A/B an
     ablation of sigma alone rather than of two different fusion implementations.
     `scripts/smoke_sigma_wbf.py` asserts that equality.
+
+    `consensus_beta` and `consensus_distinct` expose the agreement bonus, which
+    until now was an unexamined property of a third-party library. WBF multiplies
+    a cluster's score by ``min(n_models, n_cluster) / sum(weights)``, so a box the
+    two sensors BOTH saw is scored twice as high as one only a single sensor saw.
+    That factor is where this system's day-cell gain actually comes from -- on a
+    clean day frame IR contributes almost no detections of its own, yet fusion
+    still beats VIS alone, because agreeing with VIS re-ranks VIS's own boxes
+    upward relative to its unconfirmed ones. Nobody chose the factor 2; it is what
+    `ensemble_boxes` happens to do.
+
+    ``(1 + beta * (k - 1)) / sum(weights)`` replaces it, with k the cluster size
+    capped at the number of streams. **beta = 1.0 is stock WBF exactly** (k=1 -> 1,
+    k=2 -> 2), so the default remains an ablation of nothing.
+
+    `consensus_distinct` fixes a second thing WBF does not distinguish: k counts
+    cluster MEMBERS, so two overlapping boxes from the SAME sensor earn the same
+    bonus as one confirmation from the other. That is self-agreement priced as
+    cross-modal agreement, and on a stream that emits duplicates it is a bonus for
+    being noisy. True counts distinct source streams instead.
+
+    `support_iou` / `support_gamma` let one sensor vouch for another sensor's box
+    WITHOUT moving it, and they exist because the geometry says the merge-based
+    version cannot work here. Measured on the clean day cell, only **0.05-0.08%**
+    of VIS detections have a same-class IR detection at IoU >= 0.85, the adopted
+    `iou_thr`: at that threshold the two streams essentially never land in the same
+    cluster, so WBF's agreement bonus almost never fires cross-modally and the
+    day-cell gain has to come from somewhere else (IR boxes entering at the bottom
+    of the ranking and recovering GT that VIS missed). Agreement only becomes
+    geometrically available at IoU 0.1-0.3, where 32-48% of VIS boxes do have an IR
+    partner -- which is exactly where the 3-6 px median registration residual
+    (`runs/eval/x_registration_drift.md`) puts it.
+
+    Lowering `iou_thr` to reach that regime is not the fix: it was swept and loses
+    (-0.0138 on the fit set at 0.55), because merging across a 5 px residual drags
+    the fused coordinates off the object. The information IR carries at that
+    threshold is *whether* a target is there, not *where* its edges are.
+
+    So: a cluster gets its score multiplied by ``1 + support_gamma`` when a box
+    from a DIFFERENT input stream overlaps it at >= `support_iou`. Coordinates are
+    untouched, and the supporting box still competes on its own. `support_gamma=0`
+    disables it exactly.
 
     sigmas are in the SAME normalized units as boxes (divide pixel sigma by
     [W, H, W, H] before calling); zero/negative sigma is floored, since an
@@ -108,7 +154,8 @@ def sigma_weighted_fusion(
             if y2 < y1:
                 y1, y2 = y2, y1
             by_label.setdefault(int(lb[j]), []).append(
-                (float(sc[j]) * w[t_idx], float(w[t_idx]), np.array([x1, y1, x2, y2]), sg[j]))
+                (float(sc[j]) * w[t_idx], float(w[t_idx]), np.array([x1, y1, x2, y2]), sg[j],
+                 t_idx))
 
     out_boxes, out_scores, out_labels = [], [], []
     for label, entries in by_label.items():
@@ -132,10 +179,29 @@ def sigma_weighted_fusion(
                 clusters[idx].append(e)
                 fused[idx] = _fuse_cluster(clusters[idx], use_sigma)
 
-        for members, box in zip(clusters, fused):
+        # Cross-stream support: one pass per label, on the entries already
+        # prefiltered above, so the boost sees exactly the boxes fusion saw.
+        sup = np.zeros(len(clusters), dtype=bool)
+        if support_gamma and len(clusters):
+            ent_box = np.stack([e[2] for e in entries])
+            ent_src = np.asarray([e[4] for e in entries])
+            for ci, (members, box) in enumerate(zip(clusters, fused)):
+                mine = {m[4] for m in members}
+                other = ~np.isin(ent_src, list(mine))
+                if not other.any():
+                    continue
+                sup[ci] = bool((_bb_iou(ent_box[other], box) >= support_iou).any())
+
+        for ci, (members, box) in enumerate(zip(clusters, fused)):
             conf = float(np.mean([m[0] for m in members]))
-            # conf_type='avg', allows_overflow=False — WBF's exact rescale.
-            conf *= min(len(w), len(members)) / w.sum()
+            # conf_type='avg', allows_overflow=False — WBF's exact rescale when
+            # consensus_beta == 1.0 and consensus_distinct is False.
+            k = (len({m[4] for m in members}) if consensus_distinct
+                 else min(len(w), len(members)))
+            k = min(k, len(w))
+            conf *= (1.0 + float(consensus_beta) * (k - 1)) / w.sum()
+            if support_gamma and sup[ci]:
+                conf *= 1.0 + float(support_gamma)
             out_boxes.append(box)
             out_scores.append(conf)
             out_labels.append(label)
@@ -179,6 +245,11 @@ def fuse_detections(
     sigma_weighted: bool = False,
     score_scale: tuple[float, float] | None = None,
     single_passthrough: bool = False,
+    veto_keep_cls: tuple[int, ...] | None = None,
+    consensus_beta: float = 1.0,
+    consensus_distinct: bool = False,
+    support_iou: float = 0.0,
+    support_gamma: float = 0.0,
 ) -> dict:
     """Weighted Boxes Fusion of two modality records in the VIS frame.
 
@@ -237,6 +308,34 @@ def fuse_detections(
     stream that emits duplicates there. Both directions are the same artifact.)
 
     Default False, because the adopted table was measured with it off.
+
+    `veto_keep_cls` names the classes a veto may NOT remove, and it exists
+    because the veto was designed for a two-class problem and is deployed on an
+    asymmetric one. IR is `nc=1` (D28/A-1): it detects ships and nothing else. So
+    when the gate vetoes VIS on a fogged or dark frame, ship detection correctly
+    falls to IR -- and BUOY detection falls to nobody, because the only stream
+    that ever had a buoy box was just deleted. The frame is not handed to the
+    better sensor for buoys; it is handed to no sensor. Ship AP cannot see this,
+    which is why it went unnoticed: it lives entirely in the macro number.
+
+    Passing the classes IR cannot supply keeps VIS's boxes for exactly those
+    classes and drops the rest, so the veto still removes VIS from the decision
+    it is unfit for while leaving the one where it is unopposed. A VIS box that
+    survives this way faces no competing stream, so it can neither dilute nor
+    outrank anything -- the objection that forced the hard veto does not apply to
+    a class only one stream produces.
+
+    If a vetoed stream has no boxes of the kept classes it is dropped outright,
+    which is the pre-existing behaviour. None or `()` reproduces it everywhere.
+
+    `consensus_beta` / `consensus_distinct` tune the cross-modal agreement bonus,
+    and `support_iou` / `support_gamma` add a looser one that boosts a box's score
+    without letting the other stream move its coordinates -- see
+    `sigma_weighted_fusion` for why the geometry forces that split. Non-default
+    values route through the local WBF implementation, which
+    `scripts/smoke_sigma_wbf.py` asserts is byte-identical to `ensemble_boxes` at
+    the defaults, so the arms measure the change and not a second fusion
+    implementation.
     """
     from ensemble_boxes import weighted_boxes_fusion
 
@@ -253,6 +352,28 @@ def fuse_detections(
     scale = (1.0, 1.0) if score_scale is None else (float(score_scale[0]), float(score_scale[1]))
     streams = [(vis_boxes, vis_record, max(w_vis, _EPS), veto_vis, scale[0]),
                (ir_boxes, ir_record, max(w_ir, _EPS), veto_ir, scale[1])]
+
+    # A veto with `veto_keep_cls` REDUCES the stream to the classes the other one
+    # cannot supply instead of deleting it. Resolved here, before every path
+    # below, so `single_passthrough` and the WBF path agree on what "alive" means.
+    keep = None if not veto_keep_cls else set(int(c) for c in veto_keep_cls)
+    if keep is not None and (veto_vis or veto_ir):
+        reduced = []
+        for boxes, record, weight, vetoed, a in streams:
+            if vetoed:
+                m = np.isin(np.asarray(record["cls"]).astype(int), list(keep))
+                if m.any():
+                    sub = {**record, "conf": np.asarray(record["conf"])[m],
+                           "cls": np.asarray(record["cls"])[m]}
+                    if "sigma_ltrb" in record:
+                        # Carried with its own box, for the same reason the IR NMS
+                        # has to: a mask applied to boxes and not to sigma leaves
+                        # `sigma_weighted_fusion` two arrays of different length.
+                        sub["sigma_ltrb"] = np.asarray(
+                            record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)[m]
+                    boxes, record, vetoed = boxes[m], sub, False
+            reduced.append((boxes, record, weight, vetoed, a))
+        streams = reduced
 
     if single_passthrough:
         alive = [(b, r, a) for b, r, _, v, a in streams if not v]
@@ -278,11 +399,17 @@ def fuse_detections(
             # lines up with (x1, y1, x2, y2); divide by the same norm as boxes.
             s = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
             sigmas_list.append(s / norm)
+        elif consensus_beta != 1.0 or consensus_distinct or support_gamma:
+            # The local implementation needs a sigma column even when it will not
+            # use one; ones make `_fuse_cluster` reduce to the stock coordinate mean.
+            sigmas_list.append(np.ones_like(b))
 
-    if sigma_weighted:
+    if sigma_weighted or consensus_beta != 1.0 or consensus_distinct or support_gamma:
         fused_boxes, fused_scores, fused_labels = sigma_weighted_fusion(
             boxes_list, scores_list, labels_list, sigmas_list, weights,
-            iou_thr=iou_thr, skip_box_thr=skip_box_thr, use_sigma=True)
+            iou_thr=iou_thr, skip_box_thr=skip_box_thr, use_sigma=sigma_weighted,
+            consensus_beta=consensus_beta, consensus_distinct=consensus_distinct,
+            support_iou=support_iou, support_gamma=support_gamma)
     else:
         fused_boxes, fused_scores, fused_labels = weighted_boxes_fusion(
             boxes_list,

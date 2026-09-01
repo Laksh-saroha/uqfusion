@@ -112,6 +112,10 @@ def variant_ctx(ctx, name: str):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--n-boot", type=int, default=1000)
+    ap.add_argument("--cache-dir", default="runs/cache",
+                     help="prediction caches to read. runs/cache = yolo26s (phase2); "
+                          "runs/cache_m = the full-scale yolo26m / yolo26m-p2feat "
+                          "detectors the architecture actually specifies.")
     ap.add_argument("--out", default="runs/eval/final_system.md")
     ap.add_argument("--conditions", nargs="+", default=None,
                     help="restrict the sweep (pre-flight uses --conditions clean)")
@@ -122,7 +126,7 @@ def main() -> int:
     _assert_class_indices()
 
     t0 = time.time()
-    ctx = load_context(preset=args.preset,
+    ctx = load_context(cache_dir=args.cache_dir, preset=args.preset,
                        **({"conditions": tuple(args.conditions)} if args.conditions else {}))
     variants = VARIANTS_CROSSMODAL if args.preset == "crossmodal" else VARIANTS
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}

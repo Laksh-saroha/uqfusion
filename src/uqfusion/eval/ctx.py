@@ -116,6 +116,11 @@ class FusionContext:
     ir_bound: float = 0.0                 # merge bound: above this, IR leaves the fusion
     ir_bound_switch: float = 0.0          # authority bound (tighter): above this, IR may not veto
     q_vis_by_cond: dict[str, np.ndarray] = field(default_factory=dict)   # VIS absolute health
+    veto_keep_cls: tuple[int, ...] = ()   # classes a veto may not delete (IR is nc=1)
+    consensus_beta: float = 1.0           # 1.0 == stock WBF's agreement bonus
+    consensus_distinct: bool = False      # count streams, not cluster members
+    support_iou: float = 0.0              # loose cross-stream confirmation...
+    support_gamma: float = 0.0            # ...worth (1 + gamma) on the score; 0 = off
     order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
@@ -212,6 +217,7 @@ def load_context(
     structure_dir="runs/derived/structure",
     structure_constants="runs/eval/structure_constants.json",
     ir_bright=None,
+    veto_keep_cls=(),
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
@@ -452,6 +458,24 @@ def load_context(
         c_vis = replace(c_vis, mu_d=1e9, lam=0.0)
         c_ir = replace(c_ir, mu_d=1e9, lam=0.0)
 
+    # Which classes may a veto NOT delete? The ones the surviving stream cannot
+    # produce. Derived from the caches rather than hardcoded, because it is a fact
+    # about the checkpoints and it changes: the phase2 IR model is nc=2 and can
+    # supply buoys, so the exempt set there is EMPTY and every 26s number stays
+    # bit-identical; the full-scale IR model is nc=1 per D28/A-1 and cannot, so
+    # the exempt set is {buoy} and a VIS veto currently zeroes buoy AP outright.
+    # "auto" therefore means the same rule on both, not the same behaviour.
+    #
+    # OFF by default, including under `crossmodal`: every published table was
+    # measured with the veto deleting the whole stream, and a default that
+    # silently changed them would make the two incomparable. Pass "auto" to
+    # enable it; scripts/eval_class_selective_veto.py measures what it buys.
+    if veto_keep_cls == "auto":
+        vis_cls = set(int(c) for r in vis_prior_records for c in np.asarray(r["cls"]).ravel())
+        ir_cls = set(int(c) for r in ir_prior_records for c in np.asarray(r["cls"]).ravel())
+        veto_keep_cls = tuple(sorted(vis_cls - ir_cls))
+    veto_keep_cls = tuple(int(c) for c in (veto_keep_cls or ()))
+
     ctx = FusionContext(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
@@ -466,7 +490,7 @@ def load_context(
         ir_d2=(ir_d2 if preset == "crossmodal" else None),
         ir_bound=(ir_bound if preset == "crossmodal" else 0.0),
         ir_bound_switch=(ir_bound_switch if preset == "crossmodal" else 0.0),
-        q_vis_by_cond=q_vis_by_cond)
+        q_vis_by_cond=q_vis_by_cond, veto_keep_cls=veto_keep_cls)
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -502,6 +526,8 @@ def load_context(
         print(f"[ctx] capability prior: VIS {ctx.cap_vis:.4f}  IR {ctx.cap_ir:.4f} "
               f"(ratio {ctx.cap_vis / max(ctx.cap_ir, 1e-9):.1f}x, IR scaled "
               f"1/{cap_ir_scale:g})  [{capability_sel}]")
+        print(f"[ctx] veto-exempt classes (IR cannot supply): "
+              f"{list(ctx.veto_keep_cls) or 'none — IR covers every VIS class'}")
         print(f"[ctx] iou_thr={iou_thr} veto={veto} filter={veto_filter} "
               f"bright_soft={bright_soft}  day {len(ctx.sel('day'))} / night {len(ctx.sel('night'))}")
         if ctx.tau_lap is not None and ctx.struct_by_cond:
@@ -544,6 +570,11 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         brightness_ir=None, veto_below=ctx.veto,
     )
     kw.setdefault("single_passthrough", ctx.single_passthrough)
+    kw.setdefault("veto_keep_cls", ctx.veto_keep_cls)
+    kw.setdefault("consensus_beta", ctx.consensus_beta)
+    kw.setdefault("consensus_distinct", ctx.consensus_distinct)
+    kw.setdefault("support_iou", ctx.support_iou)
+    kw.setdefault("support_gamma", ctx.support_gamma)
     kw.update(overrides)
     vis = kw.pop("vis_records", ctx.vis_by_cond[condition])
     ir = kw.pop("ir_records", ctx.ir_clean)

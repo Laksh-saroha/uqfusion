@@ -49,6 +49,10 @@ CELLS = [("clean", None), ("blur_s3", None), ("rain_s2", None), ("noise_s2", Non
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--cache-dir", default="runs/cache",
+                     help="prediction caches to read. runs/cache = yolo26s (phase2); "
+                          "runs/cache_m = the full-scale yolo26m / yolo26m-p2feat "
+                          "detectors the architecture actually specifies.")
     ap.add_argument("--out", default="runs/eval/extended_tuning.md")
     args = ap.parse_args()
     t0 = time.time()
@@ -56,7 +60,7 @@ def main() -> int:
     arms = ["adopted"] + [f"cap_ratio x{r}" for r in (4.0, 16.0, 64.0)] + ["veto_ir @authority"]
     res: dict[tuple[str, str], dict] = {}
     for vis_cond, ir_cond in CELLS:
-        base = load_context(preset="crossmodal", conditions=(vis_cond,),
+        base = load_context(cache_dir=args.cache_dir, preset="crossmodal", conditions=(vis_cond,),
                             ir_condition=ir_cond, verbose=False)
         night = np.isin(base.runs, NIGHT_RUNS)
         day = np.flatnonzero(~night)

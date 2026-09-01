@@ -65,6 +65,11 @@ def evaluate_systems(
     veto_override: tuple[list, list] | None = None,
     trust_override: tuple[list, list] | None = None,
     single_passthrough: bool = False,
+    veto_keep_cls: tuple[int, ...] | None = None,
+    consensus_beta: float = 1.0,
+    consensus_distinct: bool = False,
+    support_iou: float = 0.0,
+    support_gamma: float = 0.0,
 ) -> dict:
     """mAP@50-95 (and mAP@50) per system over the paired frame set. Also returns
     per-frame gate weights and R_sys for the B3 abstain analysis.
@@ -159,6 +164,19 @@ def evaluate_systems(
     scaled. The hard veto is the `trust -> 0` limit, so the two are a continuum
     and not rival designs.
 
+    `veto_keep_cls` exempts named classes from the veto instead of deleting the
+    whole stream -- see `fuse_detections`. It matters here because IR is nc=1 and
+    VIS is nc=2, so a VIS veto removes the ONLY source of buoy boxes and buoy AP
+    goes to zero on every vetoed frame. Ship AP, which every table in this project
+    reports, cannot see that at all.
+
+    `consensus_beta` / `consensus_distinct` tune WBF's cross-modal agreement
+    bonus; `support_iou` / `support_gamma` add a looser one that does not move
+    coordinates. At the adopted `iou_thr` of 0.85 only 0.05% of VIS boxes have an
+    IR partner, so the first pair is nearly inert on real data and the second is
+    the one that can reach the agreement that exists. See `fuse_detections`.
+    Defaults are stock WBF.
+
     Both the veto and sigma weighting apply to GATED fusion only. Naive 0.5/0.5
     is the fixed-weight control and must stay untouched, or it stops being a
     control.
@@ -241,6 +259,11 @@ def evaluate_systems(
                                           skip_box_thr, veto_vis=veto_v, veto_ir=veto_i,
                                           sigma_weighted=sigma_weighted,
                                           single_passthrough=single_passthrough,
+                                          veto_keep_cls=veto_keep_cls,
+                                          consensus_beta=consensus_beta,
+                                          consensus_distinct=consensus_distinct,
+                                          support_iou=support_iou,
+                                          support_gamma=support_gamma,
                                           score_scale=(None if tv is None
                                                        else (float(tv[fi_]), float(ti[fi_])))))
         fused_naive.append(fuse_detections(rv, ri, 0.5, 0.5, hw, h, iou_thr_wbf, skip_box_thr))

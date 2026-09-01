@@ -65,6 +65,10 @@ GRID = [
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--cache-dir", default="runs/cache",
+                     help="prediction caches to read. runs/cache = yolo26s (phase2); "
+                          "runs/cache_m = the full-scale yolo26m / yolo26m-p2feat "
+                          "detectors the architecture actually specifies.")
     ap.add_argument("--out", default="runs/eval/extended_grid.md")
     ap.add_argument("--n-boot", type=int, default=1000)
     args = ap.parse_args()
@@ -72,7 +76,7 @@ def main() -> int:
     t0 = time.time()
     rows, boots = [], []
     for vis_cond, ir_cond, purpose in GRID:
-        ctx = load_context(preset="crossmodal", conditions=(vis_cond,),
+        ctx = load_context(cache_dir=args.cache_dir, preset="crossmodal", conditions=(vis_cond,),
                            ir_condition=ir_cond, verbose=False)
         night = np.isin(ctx.runs, NIGHT_RUNS)
         res = run_systems(ctx, vis_cond)
