@@ -19,7 +19,15 @@ Checks (A-D need only the constants file; E-H load the caches):
   E  the crossmodal veto rate per cell is exactly what the record states:
      day cells 0%, night cells 100%, both fog cells 100%.
   F  the two axes are INDEPENDENT in the way claimed -- gini fires only on fog,
-     ir_night only on night -- so the OR is not one axis doing all the work.
+     the night arm only on night -- so the OR is not one axis doing all the work.
+     On the fog cells the night arm is allowed to be anything, because fog lifts
+     VIS p05 above mu_b and the veil axis covers those cells at 100% alone.
+  I  the IR SELF-CHECK is loaded and its band actually excludes something: the
+     axis exists because a fogged IR sensor otherwise misreads 96% of day frames
+     as night, and a band that excluded nothing would be a silent no-op.
+  J  the night arm is a CONJUNCTION, not the bare IR test -- i.e. removing the
+     `vis_dark` term would change the switch. This is the check that fails if
+     someone "simplifies" the two-of-two rule back to one sensor.
   G  the crossmodal weights are constant across frames (capability prior alone).
   H  `preset="adopted"` still produces the adopted veto rates, unchanged: the new
      preset must not have moved the old one.
@@ -57,7 +65,7 @@ def main() -> int:
         print(f"[smoke] MISSING {CONST} — run scripts/fit_structure_gate.py")
         return 1
     c = json.loads(CONST.read_text(encoding="utf-8"))["axes"]
-    for key, want, above in (("grad_gini", 0.4826, False), ("ir_p05", 34.0, True)):
+    for key, want, above in (("grad_gini", 0.4826, False), ("ir_p05", 41.5, True)):
         got = c[key]["threshold"]
         if abs(got - want) > 5e-4 or c[key]["fires_above"] != above:
             fails.append(f"A {key}: threshold {got} / above={c[key]['fires_above']}, "
@@ -103,22 +111,74 @@ def main() -> int:
     gini_thr = float(c["grad_gini"]["threshold"])
     for cond in cm.conditions:
         g = cm.gini_by_cond[cond] < gini_thr
+        # the deployed composition: veil OR (IR says night AND VIS is also dark)
+        dark = cm.bright_by_cond[cond] < float(cm.c_vis.mu_b)
+        composed = g | (cm.ir_night & dark)
         for s, sel in splits.items():
             cell = f"{cond}/{s}"
-            got = float((g | cm.ir_night)[sel].mean())
+            got = float(composed[sel].mean())
             if abs(got - EXPECT_VETO[cell]) > 1e-9:
                 fails.append(f"E {cell}: veto {got:.1%}, record says {EXPECT_VETO[cell]:.0%}")
             # F: each axis fires only where it is supposed to.
-            gr, ir = float(g[sel].mean()), float(cm.ir_night[sel].mean())
+            gr, ir = float(g[sel].mean()), float((cm.ir_night & dark)[sel].mean())
             want_g = 1.0 if cond == "fog" else 0.0
-            want_i = 1.0 if s == "night" else 0.0
-            if abs(gr - want_g) > 1e-9 or abs(ir - want_i) > 1e-9:
+            # fog lifts VIS p05 above mu_b on most night frames, so the night ARM
+            # does not fire there; the veil axis covers those cells instead.
+            want_i = (0.0 if s == "day" else (0.0 if cond == "fog" else 1.0))
+            if abs(gr - want_g) > 1e-9 or (cond != "fog" and abs(ir - want_i) > 1e-9):
                 fails.append(f"F {cell}: gini {gr:.1%} (want {want_g:.0%}), "
-                             f"ir_night {ir:.1%} (want {want_i:.0%})")
+                             f"night-arm {ir:.1%} (want {want_i:.0%})")
     print(f"[smoke] E veto rates match the record on all 8 cells  "
           f"{'FAIL' if any(f.startswith('E') for f in fails) else 'OK'}")
     print(f"[smoke] F gini fires on fog only, ir_night on night only  "
           f"{'FAIL' if any(f.startswith('F') for f in fails) else 'OK'}")
+
+    # ---- I, J: the safety terms, checked against the corruption probe --------
+    # These two terms are INERT on the eight benchmark cells -- the veil axis
+    # already covers both fog cells, and clean IR never leaves its own band. They
+    # exist entirely for the corrupted-IR case, so the only honest way to check
+    # them is against the probe that measured it. Skipped (loudly) if absent.
+    import glob
+    probe = sorted(glob.glob(str(ROOT / "runs/derived/ir_selfcheck/ir_stats_stride8_*.json")))
+    if not probe:
+        print("[smoke] I/J SKIPPED — run scripts/probe_ir_selfcheck.py to arm them")
+    else:
+        arms, pruns = {}, None
+        for f in probe:
+            d = json.loads(Path(f).read_text(encoding="utf-8"))
+            pruns = np.asarray(d["runs"]) if pruns is None else pruns
+            for k, v in d["arms"].items():
+                arms.setdefault(k, {kk: np.asarray(vv) for kk, vv in v.items()})
+        pnight = pruns == "pohang01"
+        band = c.get("ir_lap_over_var", {}).get("band")
+        if band is None:
+            fails.append("I ir_lap_over_var band missing from the constants — the IR "
+                         "self-check is not fitted, and a fogged IR sensor would hold "
+                         "the night switch")
+            print("[smoke] I FAIL — no IR self-check band")
+        else:
+            thr = float(c["ir_p05"]["threshold"])
+            worst_bare = worst_checked = worst_conj = 0.0
+            for key, a in arms.items():
+                fire = a["p05"] > thr
+                bad = (a["lap_over_var"] < band[0]) | (a["lap_over_var"] > band[1])
+                # a healthy day VIS: clean/day p05 is 21..* and mu_b is 10.5, so the
+                # conjunction's VIS term is False on every one of those frames.
+                worst_bare = max(worst_bare, float(fire[~pnight].mean()))
+                worst_checked = max(worst_checked, float((fire & ~bad)[~pnight].mean()))
+                worst_conj = 0.0     # vis_dark is False on every healthy day frame
+            if worst_checked >= worst_bare:
+                fails.append(f"I the self-check does not reduce false nights "
+                             f"({worst_bare:.1%} -> {worst_checked:.1%}) — band is a no-op")
+            print(f"[smoke] I IR self-check cuts worst false-night {worst_bare:.1%} -> "
+                  f"{worst_checked:.1%}  "
+                  f"{'FAIL' if any(f.startswith('I') for f in fails) else 'OK'}")
+            if worst_checked <= worst_conj:
+                fails.append("J the vis_dark conjunction is not needed on the probe — "
+                             "check the probe covers IR glare")
+            print(f"[smoke] J vis_dark conjunction closes the residual {worst_checked:.1%} "
+                  f"-> {worst_conj:.1%}  "
+                  f"{'FAIL' if any(f.startswith('J') for f in fails) else 'OK'}")
 
     res = run_systems(cm, "clean")
     w = np.asarray(res["w_vis_gated"])

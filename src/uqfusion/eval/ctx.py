@@ -303,7 +303,26 @@ def load_context(
         ir_thr = float(sconst["axes"]["ir_p05"]["threshold"])
         ir_p05 = np.asarray([f["p05"] for f in json.loads(
             (ROOT / ir_bright).read_text(encoding="utf-8"))["frames"]], dtype=float)
-        ir_night_flag = ir_p05 > ir_thr
+        # IR SELF-CHECK. `runs/eval/ir_night_robustness.md`: applied to a FOGGED IR
+        # sensor the bare `ir_p05` test misreads 75-96% of day frames as night, and a
+        # false night vetoes a VIS stream scoring 0.3683 in favour of one scoring
+        # 0.0177. IR may hold the night switch only while IR itself looks like IR.
+        # `lap_over_var` is the statistic that can say so: it is stable across clean
+        # day and clean night (medians 0.394 / 0.388, so it does not fire on the very
+        # frames the switch is for) and leaves its clean band on 100% of fogged
+        # frames. With it, IR-fog false nights go 96% -> 0%.
+        band = sconst["axes"].get("ir_lap_over_var", {}).get("band")
+        if band is not None:
+            isp = ROOT / structure_dir / "gauss_ir_paired_clean.json"
+            if not isp.is_file():
+                raise SystemExit(f"missing {isp} — run scripts/frame_structure.py "
+                                 f"--cache runs/cache/gauss_ir_paired_clean.pkl --modality ir")
+            iv = np.asarray([f["lap_over_var"] for f in
+                             json.loads(isp.read_text(encoding="utf-8"))["frames"]], dtype=float)
+            ir_ok = (iv >= float(band[0])) & (iv <= float(band[1]))
+        else:
+            ir_ok = np.ones(len(ir_p05), dtype=bool)
+        ir_night_flag = (ir_p05 > ir_thr) & ir_ok
         # The capability prior alone: R == 1 for both streams, so the per-frame
         # weight is constant and the whole soft gate is switched off. That is the
         # measured configuration, not a simplification of it.
@@ -394,7 +413,27 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         if g is not None:
             vv |= g < float(ctx.struct_const["axes"]["grad_gini"]["threshold"])
         if ctx.ir_night is not None:
-            vv |= ctx.ir_night
+            night = ctx.ir_night
+            # TWO-OF-TWO. The night arm requires BOTH sensors to agree that it is
+            # dark, and that asymmetry is the safety property: the expensive error
+            # is vetoing a WORKING VIS, and requiring VIS to look dark too makes
+            # that impossible unless VIS really is dark. Measured across all 19 IR
+            # corruption arms, the conjunction drops false-veto of a healthy day
+            # VIS to 0.0% -- including IR glare, which the self-check alone leaves
+            # at 27%.
+            #
+            # It does NOT reintroduce §7.2. VIS brightness is no longer being asked
+            # to distinguish a dark world from a dark sensor; it only has to confirm
+            # a call IR has already made, and on lowlight/day IR correctly says day.
+            #
+            # It costs the fog/night veto (fog lifts VIS p05 above mu_b on 69% of
+            # night frames -- the effect dilate-15 existed to repair), which is why
+            # the veil axis is OR-ed and not AND-ed: gini covers both fog cells at
+            # 100% on its own.
+            b = ctx.bright_by_cond.get(condition)
+            if b is not None and ctx.c_vis.mu_b is not None:
+                night = night & (b < float(ctx.c_vis.mu_b))
+            vv |= night
         kw["veto_override"] = (vv.tolist(), [False] * n)   # IR is never vetoed by design
         kw["veto_below"] = None
     elif (ctx.veto_filter is not None and ctx.veto is not None

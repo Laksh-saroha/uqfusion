@@ -4,7 +4,7 @@ Raw outputs, all under gitignored `runs/`, which is why the tables are reproduce
 here: `runs/eval/final_system_crossmodal.md`, `final_system_adopted_regress.md`,
 `architecture_v3.md`, `gate_lab_twosided.md`, `gate_lab_scalefree.md`,
 `probe_structure_full.md`, `probe_detector_evidence.md`,
-`runs/eval/structure_constants.json`.
+`runs/eval/structure_constants.json`, `ir_night_robustness*.md`, `final_system_crossmodal_hardened.md`.
 
 **This document does not modify `docs/gated-fusion-handoff.md`** beyond a pointer
 added at its head, following the convention set by
@@ -64,7 +64,9 @@ preset "crossmodal"                             preset "adopted" (unchanged, sti
 ─────────────────────────────────────────       ────────────────────────────────────────────
 weights   capability prior alone                 capability x r_frame(Mahalanobis) x r_box
 veto      grad_gini < 0.4826                     dilate15(p05 < 10.5)
-          OR ir_p05 > 34.0                       OR majority15(lap_var < 508.7)
+          OR ( ir_p05 > 41.5                     OR majority15(lap_var < 508.7)
+               AND ir_lap_over_var in band
+               AND vis_p05 < mu_b )
 filters   none on either axis                    dilate-15 and majority-15
 fusion    single_passthrough=True                single-list WBF on vetoed frames
 ```
@@ -79,7 +81,9 @@ pohang00/02/03, with pohang01 and all four corrupted conditions held out
 | constant | value | fires | role |
 |---|---:|---|---|
 | `grad_gini` | 0.4826 | below | veil / fog |
-| `ir_p05` | 34.0 | above | cross-modal night |
+| `ir_p05` | 41.5 | above | cross-modal night (margin midpoint) |
+| `ir_lap_over_var` | 0.2756..8.5404 | outside | IR self-check (see 3a) |
+| VIS `p05` | 10.5 (`mu_b`) | below | second vote of the night arm (see 3a) |
 | `lap_over_var` | 4.278 | above | real-night, VIS side (fitted, not adopted) |
 
 Each axis is clean enough that no temporal filter is needed — and that is a
@@ -87,9 +91,15 @@ measurement, not a simplification:
 
 | axis | clean/day | clean/night | fog/day | fog/night | lowlight/day | lowlight/night | glare/day | glare/night |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `grad_gini` | 0.0% | 0.0% | **100%** | **100%** | 0.0% | 0.0% | 0.0% | 0.0% |
-| `ir_p05` | 0.0% | **100%** | 0.0% | **100%** | 0.0% | **100%** | 0.0% | **100%** |
-| OR | 0.0% | 100% | 100% | 100% | **0.0%** | 100% | 0.0% | 100% |
+| `grad_gini` (veil) | 0.0% | 0.0% | **100%** | **100%** | 0.0% | 0.0% | 0.0% | 0.0% |
+| `ir_p05` (bare axis) | 0.0% | **100%** | 0.0% | **100%** | 0.0% | **100%** | 0.0% | **100%** |
+| night arm as deployed | 0.0% | **100%** | 0.0% | 31% | 0.0% | **100%** | 0.0% | **100%** |
+| **veto (OR)** | 0.0% | 100% | 100% | 100% | **0.0%** | 100% | 0.0% | 100% |
+
+The third row is the bare `ir_p05` axis; the fourth is the night arm as actually
+deployed, i.e. after the two safety terms of §3a. They differ only on fog/night,
+where fog lifts VIS `p05` above `mu_b` so the VIS vote is withheld — and where the
+veil axis already vetoes 100% on its own. That is why the two axes are OR-ed.
 
 The hysteresis the adopted gate needed existed to repair a *flickering* switch —
 fog lifts `p05` above `mu_b` on 71% of night frames. That flickering was a
@@ -211,16 +221,89 @@ Same post-process, both signs. Bypassing it is what turns the night cells from
 
 ---
 
+## 3a. The exposure, measured — and closed
+
+The obvious objection to §2.2 is that the night axis consults a sensor this
+benchmark never damages. That was listed as the result's largest threat; it has
+since been measured, and it was a real hole.
+
+**The hole.** `probe_ir_night_robustness.py` applies each of the six corruptions
+to the paired IR frames at three severities and asks what the DEPLOYED threshold
+does (n=1116, stride 2, seed 7 — not the seed the VIS caches used). Two
+directions, very unequal in cost:
+
+| IR corruption | false night (veto a working VIS) | missed night (keep VIS at night) |
+|---|---:|---:|
+| fog s1/s2/s3 | **43.8% / 86.7% / 94.8%** | 0% |
+| glare s1/s2/s3 | **19.2% / 20.3% / 26.8%** | 0% |
+| lowlight s1–s3 | 0% | 100% |
+| noise s3 | 0% | 16.1% |
+| rain, blur, all severities | 0% | 0% |
+
+A **false night** vetoes VIS on a clear day — trading a stream scoring 0.3683 for
+one scoring 0.0177. A **missed night** merely keeps VIS at night, bounded by what
+`no_veto` costs a night cell (−0.0022 to −0.0054). The asymmetry is roughly 60x,
+so the fail-safe direction is not a judgement call: when IR cannot be trusted, it
+must not be allowed to veto VIS.
+
+**Two terms close it, and neither costs anything on the benchmark.**
+
+*The IR self-check.* IR may hold the switch only while IR still looks like IR.
+The check cannot be a novelty bound on clean DAY IR — night IR is legitimately
+different from day IR, and that difference IS the night test, so such a bound
+would fire on exactly the frames the switch is for. It needs a statistic stable
+across clean day AND clean night that still moves under corruption.
+`lap_over_var` is one: clean day median 0.394 against clean night 0.388, and it
+leaves its clean band on 100% of fogged frames. Fitted over ALL clean paired IR
+frames, day and night pooled.
+
+*The second vote.* The night arm requires VIS to agree that it is dark. This is
+the term that closes glare, which the self-check alone cannot: a glare-corrupted
+IR frame may look bright, but the VIS frame underneath is an ordinary daylight
+frame at p05 21–36, nowhere near `mu_b` = 10.5.
+
+Measured over all 19 IR corruption arms, worst false-veto of a **healthy day VIS**:
+
+| rule | worst false night |
+|---|---:|
+| `ir_p05 > thr` alone | **94.8%** |
+| `+ IR self-check` | 22.7% |
+| `+ vis_dark` (adopted) | **0.0%** |
+
+This does not reintroduce §7.2. VIS brightness is no longer being asked to tell a
+dark world from a dark sensor; it only confirms a call IR has already made, and on
+lowlight/day IR correctly says *day*, so the conjunction never fires there. The
+threshold also moved from the fit-run maximum (34.0) to the **midpoint of the
+empty margin** (41.5) — the same rule `fit_brightness_gate.py` used for `mu_b` —
+because a threshold sitting exactly on the clean day maximum has no headroom when
+the day distribution shifts up.
+
+The conjunction costs the fog/night veto (fog lifts VIS `p05` above `mu_b` on 69%
+of night frames — the effect `dilate-15` existed to repair), which is why the veil
+axis is OR-ed rather than AND-ed: `grad_gini` covers both fog cells at 100% alone.
+
+**On the eight benchmark cells both terms are inert**, and the hardened preset
+re-runs **bit-identical on all eight** (`final_system_crossmodal_hardened.md` vs
+`final_system_crossmodal.md`). They buy robustness at zero measured cost — which
+is also why they cannot be validated by the headline table, and are pinned by
+`smoke_crossmodal_gate.py` checks I and J against the corruption probe instead.
+
+**What is still open here.** This is the image-statistics half. It does not measure
+what a degraded IR *detector* contributes to the fusion, which needs new paired IR
+caches and a GPU pass. And the residual risk is the both-degraded regime: IR glare
+plus VIS lowlight still vetoes VIS on 12.7–24% of frames, because both votes are
+then wrong at once. That is the case scope §7.4 built `R_sys` for, and `R_sys` is
+still not wired to the switch.
+
+---
+
 ## 4. Limitations — read these before quoting anything above
 
-1. **IR is uncorrupted in all eight cells.** The cross-modal night test is
-   therefore graded on the easiest version of its job: it can never be wrong,
-   because the sensor it consults is never damaged. A deployment where both
-   sensors degrade needs the check run in **both** directions, with an abstain
-   when they disagree — `R_sys` already exists as that signal and is not wired to
-   this. **This is the single largest threat to the result** and the top open
-   item. Nothing in the current cache set can test it: there are no corrupted IR
-   paired caches.
+1. **IR is uncorrupted in all eight benchmark cells**, so the headline table
+   cannot exercise the night axis's failure mode at all. §3a measures it
+   separately and hardens against it, but every number in §0 is still from a run
+   in which IR was perfect. The both-degraded regime (IR glare + VIS lowlight)
+   remains a measured 12.7–24% false veto.
 2. **IR `p05` is not a temperature.** Pohang IR is 8-bit via per-frame min–max
    normalisation (OQ-3), so `p05` measures where a frame sits in its own thermal
    range; at night the sea/sky contrast collapses and that normalised floor rises.
@@ -294,15 +377,19 @@ powers of two and holds to ~1e-6 otherwise.
 
 ## 6. Open items, ranked
 
-1. **Corrupt IR and re-run.** Limitation 1 is the result's main exposure. Build
-   paired IR caches under blur/noise (the two IR ladder conditions that exist) and
-   measure what the cross-modal night test does when the sensor it trusts is the
-   broken one. Add the reverse check and an `R_sys` abstain.
-2. **Both-degraded cells.** The eight-cell grid never degrades both sensors at
-   once, which is the case scope §7.4 says the whole `R_sys` design exists for.
-3. **`sigma_weighted` is still off**, so the Gaussian head's sigma still does not
+1. **Corrupt IR and re-run the DETECTOR.** The image-statistics half is done
+   (§3a) and the axis is hardened. What remains is the fusion half: build paired
+   IR caches under corruption and measure what a degraded IR *detector*
+   contributes, rather than only what a degraded IR *image* does to the switch.
+2. **Wire `R_sys` to the switch.** The both-degraded regime is the one case §3a
+   does not close (IR glare + VIS lowlight: 12.7–24% false veto). Neither sensor
+   can vouch for the other there, which is exactly the abstain `R_sys` was
+   designed for and is still not connected to.
+3. **Both-degraded cells in the headline grid.** The eight-cell grid never
+   degrades both sensors at once.
+4. **`sigma_weighted` is still off**, so the Gaussian head's sigma still does not
    reach the fused coordinates. Unmeasured under the new preset.
-4. **The learned gate** is still not in any headline table.
-5. **fog/day headroom.** The gated system is exactly `ir_only` there; the earlier
+5. **The learned gate** is still not in any headline table.
+6. **fog/day headroom.** The gated system is exactly `ir_only` there; the earlier
    ascent found 0.0204 against the 0.0177 bar, so a rule that keeps *part* of VIS
    on fog may still pay ~+0.003.

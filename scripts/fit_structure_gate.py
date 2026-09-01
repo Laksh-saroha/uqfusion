@@ -105,25 +105,67 @@ def main() -> int:
     ir_run = np.asarray([f["run"] for f in ir])
     ir_v = np.asarray([f["p05"] for f in ir], dtype=float)
     ir_fit = np.isin(ir_run, FIT_RUNS)
-    ir_thr = float(ir_v[ir_fit].max())
     ir_night = ir_run == NIGHT_RUN
+    # MIDPOINT of the empty margin, not the fit-run maximum -- the same rule
+    # `fit_brightness_gate.py` used for mu_b. Measured reason, not symmetry: under a
+    # corrupted IR sensor the day distribution shifts UP, and a threshold sitting
+    # exactly on the clean day maximum has no room to absorb that. The midpoint costs
+    # nothing on clean data (the gap is empty by construction) and buys the whole
+    # margin as headroom.
+    ir_thr = float((ir_v[ir_fit].max() + ir_v[ir_night].min()) / 2.0)
     out["axes"]["ir_p05"] = {
         "threshold": ir_thr, "fires_above": True, "role": "cross-modal night test",
+        "rule": "midpoint of the empty margin between clean fit-run day and held-out night",
         "source": str(args.ir_bright), "fit_n": int(ir_fit.sum()),
         "fit_min": float(ir_v[ir_fit].min()), "fit_max": float(ir_v[ir_fit].max()),
         "heldout_night_min": float(ir_v[ir_night].min()),
         "heldout_night_max": float(ir_v[ir_night].max()),
-        "margin": float(ir_v[ir_night].min() - ir_thr),
+        "margin": float(ir_v[ir_night].min() - ir_v[ir_fit].max()),
         "caveats": ["Pohang IR is 8-bit via per-frame min-max normalisation (OQ-3): p05 "
                     "measures where a frame sits in ITS OWN thermal range, and the night "
                     "floor rises because sea/sky contrast collapses.",
-                    "IR is uncorrupted in all eight benchmark cells, so this test is "
-                    "graded on the easiest version of its job."],
+                    "IR is uncorrupted in all eight benchmark cells, so this axis alone is "
+                    "graded on the easiest version of its job; see ir_lap_over_var and the "
+                    "vis_dark conjunction, which exist because it fails without them."],
     }
-    print(f"[fit] ir_p05         fires ABOVE {ir_thr:.1f}   (cross-modal night; fit "
+    print(f"[fit] ir_p05         fires ABOVE {ir_thr:.1f}   (cross-modal night; fit day "
           f"{ir_v[ir_fit].min():.0f}..{ir_v[ir_fit].max():.0f}, held-out night "
-          f"{ir_v[ir_night].min():.0f}..{ir_v[ir_night].max():.0f}, margin "
-          f"{ir_v[ir_night].min() - ir_thr:+.0f})")
+          f"{ir_v[ir_night].min():.0f}..{ir_v[ir_night].max():.0f}, empty margin "
+          f"{ir_v[ir_night].min() - ir_v[ir_fit].max():+.0f})")
+
+    # ---- the IR SELF-CHECK -------------------------------------------------
+    # Measured in runs/eval/ir_night_robustness.md: applied to a FOGGED IR sensor the
+    # night test above misreads 75-96% of day frames as night, and a false night vetoes
+    # a VIS stream scoring 0.3683 in favour of one scoring 0.0177. The axis cannot be
+    # trusted with the switch unless IR can first say whether IR is healthy.
+    #
+    # The check cannot be a novelty bound on clean DAY IR, because night IR is
+    # legitimately different from day IR -- that difference IS the night test -- so such
+    # a bound would fire on exactly the frames the switch needs. It has to use a
+    # statistic that is stable across clean day AND clean night while still moving under
+    # corruption. `lap_over_var` is: clean day median 0.396 against clean night 0.386,
+    # and it leaves its clean band on 100% of fogged frames. The band is therefore
+    # fitted over ALL clean paired IR frames, day and night together.
+    isp = ROOT / args.struct_dir / "gauss_ir_paired_clean.json"
+    if isp.is_file():
+        ifr = frames(isp)
+        iv = np.asarray([f["lap_over_var"] for f in ifr], dtype=float)
+        out["axes"]["ir_lap_over_var"] = {
+            "band": [float(iv.min()), float(iv.max())],
+            "role": "IR self-check: outside this band, IR may not hold the night switch",
+            "rule": "min..max over ALL clean paired IR frames (day and night together)",
+            "fit_n": int(len(iv)),
+            "day_median": float(np.median(iv[np.asarray([f["run"] for f in ifr]) != NIGHT_RUN])),
+            "night_median": float(np.median(iv[np.asarray([f["run"] for f in ifr]) == NIGHT_RUN])),
+        }
+        print(f"[fit] ir_lap_over_var band {iv.min():.4f}..{iv.max():.4f}  "
+              f"(IR self-check; day med "
+              f"{np.median(iv[np.asarray([f['run'] for f in ifr]) != NIGHT_RUN]):.3f}, night med "
+              f"{np.median(iv[np.asarray([f['run'] for f in ifr]) == NIGHT_RUN]):.3f})")
+    else:
+        print(f"[fit] WARNING: {isp} missing — IR self-check NOT fitted. Run "
+              f"scripts/frame_structure.py --cache runs/cache/gauss_ir_paired_clean.pkl "
+              f"--modality ir")
 
     # ---- what each axis does to the eight cells ---------------------------
     print(f"\n{'cell':16}", end="")
