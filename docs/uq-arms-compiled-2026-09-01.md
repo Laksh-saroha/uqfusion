@@ -15,19 +15,34 @@ making dropout an `nn.Conv2d` subclass, so keys never move.
 Confirmed live in this queue: `Transferred 768/768` (VIS) and `828/828` (IR).
 The old path transferred 756/768.
 
-IR is the clean before/after, because a pre-defect run survives:
+IR is the clean before/after, because a run with the deployed head intact survives:
 
-| IR run | best | epoch-mean | note |
-|---|---:|---:|---|
-| `mc_ir_seed0` (parent) | 0.11351 | 0.09589 | |
-| `mc_ir_seed0_ft_broken-20260823` | 0.12871 | 0.12506 | **loaded correctly** — misnamed |
-| `mc_ir_seed0_ft` (rebuilt) | 0.11894 | 0.11513 | decapitated |
-| `mc_ir_seed0_ft_refit` | **0.12916** | 0.12147 | **fixed** |
+| IR run | best | epoch-mean | dropout placement | note |
+|---|---:|---:|---|---|
+| `mc_ir_seed0` (parent) | 0.11351 | 0.09589 | one2one | |
+| `mc_ir_seed0_ft_broken-20260823` | 0.12871 | 0.12506 | **one2many (discarded)** | correctly named |
+| `mc_ir_seed0_ft` (rebuilt) | 0.11894 | 0.11513 | one2one | decapitated |
+| `mc_ir_seed0_ft_refit` | **0.12916** | 0.12147 | one2one, `MCDropoutConv2d` | **fixed** |
 
-The refit lands +0.0005 from the pre-defect run and +0.0102 above the decapitated
-rebuild. The fix is verified by reproduction, not just by the transfer count.
+**Two distinct defects, and they must not be conflated.** The 2026-08-23 defect put
+all six dropout layers on `cv2`/`cv3` — the one2many branch YOLO26 computes and then
+discards — so dropout never executed at inference, T passes came out bit-identical,
+and epistemic variance was exactly zero. That run is useless as an MC arm and the
+`_broken-20260823` name is accurate. Its mAP is *high* precisely because it is
+effectively a plain detector: its deployed head was never touched by dropout, so the
+reload had no shifted keys to drop.
 
-> Naming: `_broken-20260823` is the run that worked. Rename before anyone cites it.
+The 2026-08-31 defect is the opposite shape. Placement was correct (one2one), but the
+inserted module renumbered the deployed keys, so the training reload dropped the 12
+output convs: 0.12973 -> 0.11894, with MC variance working the whole time.
+
+That makes `_broken-20260823` the right reference for *this* repair even though it is
+the wrong model for the paper: it is the only IR run whose deployed head loaded whole.
+The refit lands +0.0005 from it and +0.0102 above the decapitated rebuild, which is
+the decapitation defect measured and closed.
+
+> Verified from the checkpoints, not inferred: dropout modules on one2one vs one2many
+> are 0/6 for `_broken-20260823`, 6/0 for the rebuild, 6/0 for the refit.
 
 ## 1. The arms (VIS)
 
