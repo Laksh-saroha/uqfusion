@@ -14,6 +14,7 @@ state, not the on one.
   E  consensus_distinct counts STREAMS, not cluster members
   F  veto_keep_cls keeps exactly the named classes of a vetoed stream
   G  veto_keep_cls with nothing to keep degrades to the plain veto
+  K  the carry-through survives single_passthrough without disabling it
   H  sigma survives the class filter with its own box (the irdedup bug, again)
   I  support_gamma=0 is exactly stock WBF
   J  support boosts a loosely-confirmed box and does NOT move its coordinates
@@ -191,6 +192,25 @@ def j_():
     return "2x on a confirmed box, coordinates unmoved, lone box unchanged"
 
 
+def k_():
+    # The bug this replaced: keeping the vetoed stream ALIVE so WBF could see its
+    # buoys made the frame two-stream again, which disabled single_passthrough and
+    # rescaled the survivor's SHIP scores by its weight -- on vetoed frames only, so
+    # part of the pooled AP ordering moved and the rest did not.
+    vv, ii = rec(20, cls_choices=(0, 1), seed=11), rec(9, cls_choices=(0,), seed=12)
+    plain = fuse_detections(vv, ii, 0.9, 0.1, HW, None, 0.85, veto_vis=True,
+                            single_passthrough=True)
+    out = fuse_detections(vv, ii, 0.9, 0.1, HW, None, 0.85, veto_vis=True,
+                          single_passthrough=True, veto_keep_cls=(1,))
+    ms, mp = np.asarray(out["cls"]) == 0, np.asarray(plain["cls"]) == 0
+    same({"boxes_xyxy": out["boxes_xyxy"][ms], "conf": out["conf"][ms],
+          "cls": np.asarray(out["cls"])[ms]},
+         {"boxes_xyxy": plain["boxes_xyxy"][mp], "conf": plain["conf"][mp],
+          "cls": np.asarray(plain["cls"])[mp]}, "K passthrough ship half", 0.0)
+    assert (np.asarray(out["cls"]) == 1).sum() > 0, "buoys must still be carried"
+    return "passthrough still fires; the IR ship scores are untouched"
+
+
 def main() -> int:
     fails = []
     print("smoke: new fusion levers")
@@ -203,7 +223,8 @@ def main() -> int:
                      ("G exempt set empty -> plain veto", g),
                      ("H sigma survives the class filter", h),
                      ("I support_gamma=0 is stock WBF", i_),
-                     ("J support boosts without moving coordinates", j_)):
+                     ("J support boosts without moving coordinates", j_),
+                     ("K carry-through keeps single_passthrough intact", k_)):
         try:
             note = fn()
             print(f"  [ok] {name}" + (f" -- {note}" if note else ""))

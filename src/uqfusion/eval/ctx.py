@@ -141,6 +141,7 @@ class FusionContext:
     support_gamma: float = 0.0            # ...worth (1 + gamma) on the score; 0 = off
     order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
+    veil_requires_night: bool = False   # AND the veil axis with the night arm
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     single_passthrough: bool = False
     cap_note: str = ""
@@ -241,6 +242,12 @@ def load_context(
 ) -> FusionContext:
     """`preset="adopted"` (default) reproduces the 2026-08-20/09-01 system exactly.
 
+    `preset="crossmodal26m"` is `crossmodal` plus the two repairs the full-scale
+    yolo26m / yolo26m-p2feat detectors force, measured in
+    `docs/levers-and-the-26m-swap-2026-09-01.md`: the veil axis becomes conditional
+    on the night arm, and a cross-modal SUPPORT term replaces the cross-modal
+    merging the geometry does not allow. Use it with `cache_dir="runs/cache_m"`.
+
     `preset="crossmodal"` is the 2026-09-01 replacement, measured in
     `docs/crossmodal-gate-2026-09-01.md`. Three changes, each independently
     measured:
@@ -270,8 +277,14 @@ def load_context(
     +0.0003, and -0.0003 (CI spans zero) on each of the four night cells. Every one
     of the eight cells lands at or above max(VIS, IR).
     """
-    if preset not in ("adopted", "crossmodal"):
+    if preset not in ("adopted", "crossmodal", "crossmodal26m"):
         raise ValueError(f"unknown preset {preset!r}")
+    # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
+    # force. It is a separate preset and not a change to `crossmodal` because every
+    # published number was measured under the latter and must stay reproducible.
+    v2 = preset == "crossmodal26m"
+    if v2:
+        preset = "crossmodal"
     cfg = load_config(config)
     cache_dir = ROOT / cache_dir
     alpha = float(cfg["reliability"]["alpha"])
@@ -494,6 +507,24 @@ def load_context(
         veto_keep_cls = tuple(sorted(vis_cls - ir_cls))
     veto_keep_cls = tuple(int(c) for c in (veto_keep_cls or ()))
 
+    if v2:
+        # (1) The veil axis becomes conditional on the night arm. It fires on 100%
+        # of fog frames and hands them to IR, which was right against yolo26s (VIS
+        # 0.0020 on fogged day frames vs IR 0.0181) and is a -0.0632 regression
+        # against yolo26m (VIS 0.0824, 4x the sensor the veto prefers). Deleting the
+        # axis instead costs fog/night -0.0347, because fog lifts VIS p05 above mu_b
+        # on 69% of night frames and the veil axis is what covers that. Conditional
+        # keeps both: fog/day +0.0716 [+0.0657, +0.0784], fog/night +0.0000 exactly.
+        veil_requires_night = True
+        # (2) Cross-modal SUPPORT, since cross-modal MERGING is unavailable: at
+        # iou_thr 0.85 only 0.05% of VIS boxes have an IR partner. A score bonus at
+        # IoU 0.30 that never moves a coordinate is +0.0078 on the tune runs and
+        # +0.0033 on the held-out ones, where 0.55 wins the tune runs and loses the
+        # held-out ones in all six variants it appears in.
+        support_iou, support_gamma = 0.30, 0.5
+    else:
+        veil_requires_night, support_iou, support_gamma = False, 0.0, 0.0
+
     ctx = FusionContext(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
@@ -508,7 +539,9 @@ def load_context(
         ir_d2=(ir_d2 if preset == "crossmodal" else None),
         ir_bound=(ir_bound if preset == "crossmodal" else 0.0),
         ir_bound_switch=(ir_bound_switch if preset == "crossmodal" else 0.0),
-        q_vis_by_cond=q_vis_by_cond, veto_keep_cls=veto_keep_cls)
+        q_vis_by_cond=q_vis_by_cond, veto_keep_cls=veto_keep_cls,
+        veil_requires_night=veil_requires_night,
+        support_iou=support_iou, support_gamma=support_gamma)
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -559,10 +592,16 @@ def load_context(
         # load its data would reproduce the other preset's numbers exactly, which
         # is the hardest kind of bug to notice (§5 of the veil record).
         if ctx.veto_rule == "gini+ir_night":
-            print(f"[ctx] preset CROSSMODAL: veto = grad_gini < "
-                  f"{ctx.struct_const['axes']['grad_gini']['threshold']:.4f} OR ir_p05 > "
-                  f"{ctx.struct_const['axes']['ir_p05']['threshold']:.1f}; no hysteresis; "
-                  f"capability-only weights; single_passthrough=True")
+            gt = ctx.struct_const["axes"]["grad_gini"]["threshold"]
+            it = ctx.struct_const["axes"]["ir_p05"]["threshold"]
+            rule = (f"ir_p05 > {it:.1f} AND (VIS dark OR grad_gini < {gt:.4f})"
+                    if ctx.veil_requires_night
+                    else f"grad_gini < {gt:.4f} OR (ir_p05 > {it:.1f} AND VIS dark)")
+            print(f"[ctx] preset CROSSMODAL{'26m' if ctx.veil_requires_night else ''}: "
+                  f"veto = {rule}; no hysteresis; capability-only weights; "
+                  f"single_passthrough=True"
+                  + (f"; support IoU {ctx.support_iou:g} gamma {ctx.support_gamma:g}"
+                     if ctx.support_gamma else ""))
             print(f"[ctx] preset CROSSMODAL: IR-night fires on "
                   f"{ctx.ir_night.mean():.1%} of frames, gini-veil conditions "
                   f"{sorted(ctx.gini_by_cond)}")
@@ -609,9 +648,31 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         # sensor, and this reads it off the intact one.
         n = len(vis)
         vv = np.zeros(n, dtype=bool)
+        veil = np.zeros(n, dtype=bool)
         g = ctx.gini_by_cond.get(condition)
         if g is not None:
-            vv |= g < float(ctx.struct_const["axes"]["grad_gini"]["threshold"])
+            veil = g < float(ctx.struct_const["axes"]["grad_gini"]["threshold"])
+        # `veil_requires_night` is the repair for a veto that was calibrated against
+        # a detector this system no longer uses. The veil axis fires on 100% of fog
+        # frames and hands them to IR, and under yolo26s that was right: VIS scored
+        # 0.0020 on fogged day frames against IR's 0.0181. Under the full-scale
+        # yolo26m it is a -0.0632 regression, because VIS now scores 0.0824 there --
+        # 41x better under fog, and 4x better than the sensor the veto prefers.
+        #
+        # No image statistic can detect that, because what changed is not in the
+        # image. The veil axis measures the fog correctly; the CLAIM attached to it,
+        # "a fogged VIS cannot see", is what stopped being true.
+        #
+        # Deleting the axis is not the fix either: it takes fog/night from 0.0850 to
+        # 0.0503, because fog lifts VIS p05 above mu_b on 69% of night frames and
+        # the veil axis is what covers the night arm's resulting blind spot.
+        #
+        # So the axis is kept and made CONDITIONAL on the other sensor agreeing it is
+        # dark: veto when IR says night AND (VIS looks dark OR the frame is veiled).
+        # Fog at night is still caught by both paths; fog in daylight is caught by
+        # neither, which is now the correct answer.
+        if not ctx.veil_requires_night:
+            vv |= veil
         if ctx.ir_night is not None:
             night = ctx.ir_night
             # TWO-OF-TWO. The night arm requires BOTH sensors to agree that it is
@@ -631,9 +692,10 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
             # the veil axis is OR-ed and not AND-ed: gini covers both fog cells at
             # 100% on its own.
             b = ctx.bright_by_cond.get(condition)
+            dark = np.ones(n, dtype=bool)
             if b is not None and ctx.c_vis.mu_b is not None:
-                night = night & (b < float(ctx.c_vis.mu_b))
-            vv |= night
+                dark = b < float(ctx.c_vis.mu_b)
+            vv |= night & (dark | veil if ctx.veil_requires_night else dark)
 
         # ---- R_sys, and the abstain it exists for --------------------------
         # scope §7.4 introduced R_sys as "has every modality failed?", and under the

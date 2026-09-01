@@ -353,35 +353,42 @@ def fuse_detections(
     streams = [(vis_boxes, vis_record, max(w_vis, _EPS), veto_vis, scale[0]),
                (ir_boxes, ir_record, max(w_ir, _EPS), veto_ir, scale[1])]
 
-    # A veto with `veto_keep_cls` REDUCES the stream to the classes the other one
-    # cannot supply instead of deleting it. Resolved here, before every path
-    # below, so `single_passthrough` and the WBF path agree on what "alive" means.
+    # A veto with `veto_keep_cls` still deletes the stream from the fusion, and
+    # then re-attaches its boxes of the named classes UNCHANGED at the end.
+    #
+    # Re-attaching rather than un-vetoing is the whole design, and the difference is
+    # not cosmetic. Leaving the stream alive so WBF can see its buoys also makes the
+    # frame a TWO-stream frame again, which (a) disables `single_passthrough` and
+    # (b) multiplies the surviving stream's scores by its own weight instead of
+    # leaving them at 1. Both act on the SHIP boxes, which this arm is supposed
+    # not to touch, and both act on only the vetoed frames -- so the ship ranking
+    # is perturbed on part of the pooled AP ordering and not the rest. Measured on
+    # the 26m fog cell that cost -0.0065 of ship AP to add buoys the ship metric
+    # cannot even see.
+    #
+    # Correctness rests on `veto_keep_cls` naming classes the SURVIVING stream does
+    # not produce, which is exactly how `load_context` derives it (VIS classes minus
+    # IR classes). A class both streams emit would be double-counted here.
     keep = None if not veto_keep_cls else set(int(c) for c in veto_keep_cls)
-    if keep is not None and (veto_vis or veto_ir):
-        reduced = []
-        for boxes, record, weight, vetoed, a in streams:
-            if vetoed:
-                m = np.isin(np.asarray(record["cls"]).astype(int), list(keep))
-                if m.any():
-                    sub = {**record, "conf": np.asarray(record["conf"])[m],
-                           "cls": np.asarray(record["cls"])[m]}
-                    if "sigma_ltrb" in record:
-                        # Carried with its own box, for the same reason the IR NMS
-                        # has to: a mask applied to boxes and not to sigma leaves
-                        # `sigma_weighted_fusion` two arrays of different length.
-                        sub["sigma_ltrb"] = np.asarray(
-                            record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)[m]
-                    boxes, record, vetoed = boxes[m], sub, False
-            reduced.append((boxes, record, weight, vetoed, a))
-        streams = reduced
+    carried = []
+    if keep is not None:
+        for boxes, record, _w, vetoed, a in streams:
+            if not vetoed:
+                continue
+            m = np.isin(np.asarray(record["cls"]).astype(int), list(keep))
+            if m.any():
+                carried.append((boxes[m],
+                                np.asarray(record["conf"], dtype=np.float64)[m] * a,
+                                np.asarray(record["cls"]).astype(int)[m]))
 
     if single_passthrough:
         alive = [(b, r, a) for b, r, _, v, a in streams if not v]
         if len(alive) == 1:
             b, record, a = alive[0]
-            return {"boxes_xyxy": np.asarray(b, dtype=np.float64).reshape(-1, 4),
-                    "conf": np.asarray(record["conf"], dtype=np.float64) * a,
-                    "cls": np.asarray(record["cls"]).astype(int)}
+            return _with_carried(
+                {"boxes_xyxy": np.asarray(b, dtype=np.float64).reshape(-1, 4),
+                 "conf": np.asarray(record["conf"], dtype=np.float64) * a,
+                 "cls": np.asarray(record["cls"]).astype(int)}, carried)
 
     boxes_list, scores_list, labels_list, weights, sigmas_list = [], [], [], [], []
     for boxes, record, weight, vetoed, a in streams:
@@ -419,8 +426,29 @@ def fuse_detections(
             iou_thr=iou_thr,
             skip_box_thr=skip_box_thr,
         )
-    return {
+    return _with_carried({
         "boxes_xyxy": np.asarray(fused_boxes) * norm,
         "conf": np.asarray(fused_scores),
         "cls": np.asarray(fused_labels).astype(int),
-    }
+    }, carried)
+
+
+def _with_carried(out: dict, carried: list) -> dict:
+    """Append boxes a veto removed but nothing else can supply.
+
+    They are appended, not fused: no clustering, no rescaling, no reordering of what
+    was already there. The only stream that produced them is gone, so there is
+    nothing for them to agree or disagree with, and every mechanism WBF would apply
+    would be acting on a single input list.
+    """
+    if not carried:
+        return out
+    b = [np.asarray(out["boxes_xyxy"], dtype=np.float64).reshape(-1, 4)]
+    c = [np.asarray(out["conf"], dtype=np.float64).reshape(-1)]
+    k = [np.asarray(out["cls"]).astype(int).reshape(-1)]
+    for bb, cc, kk in carried:
+        b.append(np.asarray(bb, dtype=np.float64).reshape(-1, 4))
+        c.append(np.asarray(cc, dtype=np.float64).reshape(-1))
+        k.append(np.asarray(kk).astype(int).reshape(-1))
+    return {"boxes_xyxy": np.concatenate(b), "conf": np.concatenate(c),
+            "cls": np.concatenate(k)}

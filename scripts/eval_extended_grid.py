@@ -71,12 +71,17 @@ def main() -> int:
                           "detectors the architecture actually specifies.")
     ap.add_argument("--out", default="runs/eval/extended_grid.md")
     ap.add_argument("--n-boot", type=int, default=1000)
+    ap.add_argument("--preset", default="crossmodal",
+                    choices=["crossmodal", "crossmodal26m"],
+                    help="crossmodal26m = crossmodal plus the two repairs the "
+                         "full-scale detectors force (conditional veil axis, "
+                         "cross-modal support term).")
     args = ap.parse_args()
 
     t0 = time.time()
     rows, boots = [], []
     for vis_cond, ir_cond, purpose in GRID:
-        ctx = load_context(cache_dir=args.cache_dir, preset="crossmodal", conditions=(vis_cond,),
+        ctx = load_context(cache_dir=args.cache_dir, preset=args.preset, conditions=(vis_cond,),
                            ir_condition=ir_cond, verbose=False)
         night = np.isin(ctx.runs, NIGHT_RUNS)
         res = run_systems(ctx, vis_cond)
