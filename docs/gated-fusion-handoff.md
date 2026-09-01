@@ -1,5 +1,24 @@
 # Gated VIS–IR fusion — architecture, constants, and measured numbers
 
+> **SUPERSEDED IN PART, 2026-09-01 — read this first.** Two later records measure
+> things this document states as settled, and disagree with it:
+>
+> * `docs/veil-veto-and-rule-sweep-2026-09-01.md` — §7.1's veil term is now
+>   measured (fog/day +0.0040, fog/night +0.0004, guards unmoved), and the
+>   29-rule sweep is reported.
+> * `docs/crossmodal-gate-2026-09-01.md` — **§7.2 is wrong, and §6's reading of
+>   the Mahalanobis ablation is wrong.** lowlight/day is fixable: it now scores
+>   0.0381 against VIS-alone's 0.0346 (+0.0215 [+0.0184, +0.0246] over the
+>   system below). The Mahalanobis soft term is not "essentially nothing" — it is
+>   the mechanism of that cell's loss, costing −0.0228 once the veto stops hiding
+>   it. A `crossmodal` preset lands every one of the eight cells at or above
+>   max(VIS, IR).
+>
+> Everything below still describes the `adopted` preset, which is still the
+> default and still reproduces these numbers bit-for-bit. Nothing here has been
+> edited or deleted.
+
+
 **Status 2026-09-01.** Architecture frozen 2026-08-20 (decisions D27, D28/A-1). The
 photometric numbers below are measured and stable. A second veto axis (the "veil
 term") was added 2026-09-01 and its effect on the tables is **being measured as this

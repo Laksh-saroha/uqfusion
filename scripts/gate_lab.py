@@ -38,7 +38,7 @@ from uqfusion.eval.ctx import FIT_RUNS, NIGHT_RUNS, load_context, run_systems   
 from uqfusion.eval.hysteresis import filter_veto                                 # noqa: E402
 
 SHIP, BUOY = 0, 1
-CACHE = ROOT / "runs" / "derived" / "gate_lab_v2.pkl"
+CACHE = ROOT / "runs" / "derived" / "gate_lab_v3.pkl"
 
 #: Soft-weight arms. The veto is orthogonal to all of them and is applied later,
 #: so every arm is cached in both its unvetoed and its VIS-vetoed form.
@@ -92,9 +92,17 @@ def build(cache_path: Path, variants=VARIANTS) -> dict:
             vctx = variant_ctx(ctx, name)
             res_b = run_systems(vctx, cond, veto_override=([False] * n, [False] * n))
             res_v = run_systems(vctx, cond, veto_override=([True] * n, [False] * n))
+            # The THIRD outcome: IR vetoed, VIS kept. `docs/veil-veto-and-rule-
+            # sweep-2026-09-01.md` §4 makes the point that the whole 29-rule sweep
+            # varied only the VIS switch, while on lowlight/day the bar IS
+            # `visible_only` -- so reaching it needs IR removed, an action that was
+            # not in the swept family at all. Caching this outcome makes every
+            # TWO-SIDED rule as cheap as a one-sided one.
+            res_i = run_systems(vctx, cond, veto_override=([False] * n, [True] * n))
             payload["parts"][(name, cond)] = {
                 "both": frame_parts(res_b["fused_gated"], ctx.gts),
                 "veto": frame_parts(res_v["fused_gated"], ctx.gts),
+                "veto_ir": frame_parts(res_i["fused_gated"], ctx.gts),
             }
             payload["w_vis"][(name, cond)] = list(map(float, res_b["w_vis_gated"]))
             if name == variants[0]:
@@ -152,10 +160,24 @@ class Lab:
 
     # -- scoring -----------------------------------------------------------
     def mixed(self, cond: str, mask: np.ndarray, sel: np.ndarray,
-              variant: str = "adopted") -> list:
+              variant: str = "adopted", ir_mask: np.ndarray | None = None) -> list:
+        """Per-frame pick among the three cached outcomes.
+
+        `mask` vetoes VIS, `ir_mask` vetoes IR. Vetoing both on one frame is the
+        plan-B3 abstain and is collapsed to neither, exactly as the fitted path in
+        `evaluate_systems` does -- a frame with every sensor rejected still has to
+        emit something.
+        """
         d = self.parts[(variant, cond)]
-        pb, pv = d["both"], d["veto"]
-        return [pv[i] if mask[i] else pb[i] for i in np.flatnonzero(sel)]
+        out = []
+        for i in np.flatnonzero(sel):
+            v = bool(mask[i])
+            r = bool(ir_mask[i]) if ir_mask is not None else False
+            if v and r:
+                v = r = False
+            out.append(d["veto"] if v else d["veto_ir"] if r else d["both"])
+            out[-1] = out[-1][i]
+        return out
 
     def ap(self, parts: list, cls: int | None = SHIP) -> float:
         r = ap_from_parts(parts)
@@ -165,8 +187,8 @@ class Lab:
         return float(e["ap50_95"]) if e else 0.0
 
     def score(self, cond: str, mask: np.ndarray, split: str, cls: int | None = SHIP,
-              variant: str = "adopted") -> float:
-        return self.ap(self.mixed(cond, mask, self.splits[split], variant), cls)
+              variant: str = "adopted", ir_mask: np.ndarray | None = None) -> float:
+        return self.ap(self.mixed(cond, mask, self.splits[split], variant, ir_mask), cls)
 
     def ref(self, cond: str, which: str, split: str, cls: int | None = SHIP) -> float:
         sel = np.flatnonzero(self.splits[split])
@@ -187,6 +209,47 @@ class Lab:
 
     def filt(self, m: np.ndarray, mode: str, k: int) -> np.ndarray:
         return np.asarray(filter_veto(m.tolist(), self.order, k, mode), dtype=bool)
+
+    # -- scale-free image statistics (loaded lazily from runs/derived/structure) --
+    def load_structure(self, struct_dir: Path) -> bool:
+        """Attach `frame_structure.py` statistics if they have been computed.
+
+        Kept out of the pickle deliberately: these are cheap to re-read, they are
+        the part of the design most likely to gain a new column, and a cache that
+        had to be rebuilt for every new statistic would defeat the point of having
+        one.
+        """
+        need = [struct_dir / f"gauss_vis_paired_{c}.json" for c in self.conditions]
+        train = struct_dir / "gauss_vis_train_clean.json"
+        if not all(p.is_file() for p in need) or not train.is_file():
+            self.st = self.st_fit = None
+            return False
+        self.st = {}
+        for c, p in zip(self.conditions, need):
+            fr = json.loads(p.read_text(encoding="utf-8"))["frames"]
+            self.st[c] = {k: np.asarray([f[k] for f in fr], dtype=float)
+                          for k, v in fr[0].items() if isinstance(v, (int, float))}
+        tf = json.loads(train.read_text(encoding="utf-8"))["frames"]
+        m = np.asarray([f["run"] in FIT_RUNS for f in tf])
+        self.st_fit = {k: np.asarray([f[k] for f in tf], dtype=float)[m]
+                       for k, v in tf[0].items() if isinstance(v, (int, float))}
+        return True
+
+    def st_thr(self, key: str, high: bool) -> float:
+        """Novelty bound on a structure statistic: the clean fit runs' own extreme.
+
+        `high=True` means the veto fires ABOVE the bound, so the bound is the
+        maximum any clean fit frame reached; `high=False` is the mirror. Same
+        protocol as `tau_lap`: pohang01 and every corrupted condition held out.
+        """
+        v = self.st_fit[key]
+        return float(v.max() if high else v.min())
+
+    def st_flag(self, cond: str, key: str, high: bool,
+                filt: tuple[str, int] | None = None) -> np.ndarray:
+        m = (self.st[cond][key] > self.st_thr(key, True) if high
+             else self.st[cond][key] < self.st_thr(key, False))
+        return self.filt(m, filt[0], filt[1]) if filt else m
 
     def novelty_thr(self, key: str, k: int) -> float:
         """Hard lower bound of the windowed statistic over CLEAN FIT-RUN frames.
@@ -247,11 +310,66 @@ def main() -> int:
     rules: dict[str, dict[str, np.ndarray]] = {}
 
     def add(name, fn):
-        rules[name] = {c: fn(c) for c in lab.conditions}
+        """`fn(cond)` returns the VIS veto mask, or a (VIS, IR) pair for a
+        two-sided rule. Stored uniformly as a pair so the scorer has one path."""
+        out = {}
+        for c in lab.conditions:
+            r = fn(c)
+            out[c] = (np.asarray(r, bool), None) if not isinstance(r, tuple) else (
+                np.asarray(r[0], bool), np.asarray(r[1], bool))
+        rules[name] = out
 
     add("A photometric only", lab.photometric)
     add("B photometric OR veil", lambda c: lab.photometric(c) | lab.veil(c))
     add("Z no veto", lambda c: np.zeros(lab.n, bool))
+
+    if lab.load_structure(ROOT / "runs" / "derived" / "structure"):
+        # The scale-free axes. `dark` alone cannot tell digitally-dimmed daylight
+        # from real night -- both have p05 below mu_b -- so it is CONJOINED with a
+        # statistic that can. `lap_over_var` is Laplacian variance divided by image
+        # variance: both scale by k^2 under a gain change, so the ratio is
+        # invariant to dimming by construction, and it reads how CONCENTRATED the
+        # gradient energy is. Harbour lamps on black water score high; a dimmed but
+        # intact daylight scene scores low, at the same p05.
+        #
+        # `grad_gini` is the veil axis done the same way: the Gini coefficient of
+        # the gradient magnitude, which is scale-free, and which separates the fog
+        # cells from every other cell with no filter at all.
+        for filt in (None, ("dilate", 15), ("dilate", 31), ("dilate", 61)):
+            tag = "raw" if filt is None else f"{filt[0]}{filt[1]}"
+            add(f"H dark AND concentrated({tag}) OR gini-veil",
+                lambda c, f=filt: (
+                    (lab.photometric(c) & lab.st_flag(c, "lap_over_var", True, f))
+                    | lab.st_flag(c, "grad_gini", False)))
+            add(f"I dark AND concentrated({tag}) OR veil(lap_var)",
+                lambda c, f=filt: (
+                    (lab.photometric(c) & lab.st_flag(c, "lap_over_var", True, f))
+                    | lab.veil(c)))
+        add("J gini-veil only", lambda c: lab.st_flag(c, "grad_gini", False))
+        # --- two-sided rules -------------------------------------------------
+        # `docs/veil-veto-and-rule-sweep-2026-09-01.md` §4: the 29-rule sweep moved
+        # only the VIS switch, and on lowlight/day the bar IS `visible_only`, so
+        # reaching it needs IR removed -- an action outside that family. These rules
+        # put IR on the switch too, so the hypothesis is measured rather than argued.
+        add("Y veto IR always (VIS through WBF alone)",
+            lambda c: (np.zeros(lab.n, bool), np.ones(lab.n, bool)))
+        add("N sensor selection: IR vetoed iff VIS kept (VIS = photometric OR veil)",
+            lambda c: ((lab.photometric(c) | lab.veil(c)),
+                       ~(lab.photometric(c) | lab.veil(c))))
+        add("O sensor selection: IR vetoed iff VIS kept (VIS = gini-veil)",
+            lambda c: (lab.st_flag(c, "grad_gini", False),
+                       ~lab.st_flag(c, "grad_gini", False)))
+        add("P VIS=gini-veil, IR vetoed where VIS frame-evidence clears the clean bound",
+            lambda c: (lab.st_flag(c, "grad_gini", False),
+                       (lab.ev[c]["max_conf"] >= lab.novelty_thr("max_conf", 1))
+                       & ~lab.st_flag(c, "grad_gini", False)))
+        add("K photometric OR gini-veil",
+            lambda c: lab.photometric(c) | lab.st_flag(c, "grad_gini", False))
+        add("L dark AND concentrated(dilate31) OR gini-veil OR evidence sum_conf w31",
+            lambda c: ((lab.photometric(c) & lab.st_flag(c, "lap_over_var", True, ("dilate", 31)))
+                       | lab.st_flag(c, "grad_gini", False) | lab.evidence(c, "sum_conf", 31)))
+    else:
+        print("[lab] runs/derived/structure not complete — scale-free rules skipped")
     add("C veil only", lab.veil)
     for key in ("max_conf", "sum_conf", "top5_conf", "n_c25"):
         for k in (1, 15, 31, 61):
@@ -286,9 +404,11 @@ def main() -> int:
         for name, masks in rules.items():
             cells = {}
             for cond, s in lab.cells:
+                mv, mi = masks[cond]
                 cells[f"{cond}/{s}"] = {
-                    "ap": lab.score(cond, masks[cond], s, variant=variant),
-                    "rate": float(masks[cond][lab.splits[s]].mean())}
+                    "ap": lab.score(cond, mv, s, variant=variant, ir_mask=mi),
+                    "rate": float(mv[lab.splits[s]].mean()),
+                    "rate_ir": 0.0 if mi is None else float(mi[lab.splits[s]].mean())}
             gaps = [cells[f"{c}/{s}"]["ap"] - bar[(c, s)] for c, s in lab.cells]
             rows.append({"rule": f"{name}  [{variant}]", "variant": variant, "base": name,
                          "cells": cells, "worst_gap": float(min(gaps)),
@@ -327,12 +447,17 @@ def main() -> int:
                  + " | ".join(f"{r['cells'][f'{c}/{s}']['ap']:.4f}" for c, s in lab.cells)
                  + f" | {r['worst_gap']:+.4f} |")
 
-    L += ["", "## 2. Veto rate, same order", "",
+    L += ["", "## 2. Veto rate, same order — `VIS% / IR%`", "",
+          "A rule with a non-zero IR column is TWO-SIDED. Vetoing both streams on "
+          "one frame is collapsed to neither (the plan-B3 abstain), so the two "
+          "columns are not complements even where the rule says they should be.", "",
           "| rule | " + " | ".join(f"{c}/{s}" for c, s in lab.cells) + " |",
           "|---|" + "---:|" * len(lab.cells)]
     for r in ranked:
         L.append(f"| {r['rule']} | "
-                 + " | ".join(f"{r['cells'][f'{c}/{s}']['rate']:.1%}" for c, s in lab.cells) + " |")
+                 + " | ".join(f"{r['cells'][f'{c}/{s}']['rate']:.0%}/"
+                              f"{r['cells'][f'{c}/{s}']['rate_ir']:.0%}"
+                              for c, s in lab.cells) + " |")
 
     L += ["", "## 3. Gap to bar per cell (AP − max(VIS, IR)), same order", "",
           "| rule | " + " | ".join(f"{c}/{s}" for c, s in lab.cells) + " |",
@@ -348,8 +473,10 @@ def main() -> int:
         ref_rule, ref_var = "B photometric OR veil", "adopted"
         for cond, s in lab.cells:
             sel = lab.splits[s]
-            a = lab.mixed(cond, rules[best["base"]][cond], sel, best["variant"])
-            b = lab.mixed(cond, rules[ref_rule][cond], sel, ref_var)
+            mv, mi = rules[best["base"]][cond]
+            a = lab.mixed(cond, mv, sel, best["variant"], mi)
+            rv, ri = rules[ref_rule][cond]
+            b = lab.mixed(cond, rv, sel, ref_var, ri)
             bd = bootstrap_delta(a, b, None, n_boot=args.n_boot, cls=SHIP)
             boot.append({"cell": f"{cond}/{s}", **bd})
         L += ["", f"## 4. `{best['rule']}` vs `{ref_rule}  [{ref_var}]`, paired "

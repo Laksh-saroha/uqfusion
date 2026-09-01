@@ -102,6 +102,12 @@ class FusionContext:
     veto_filter: tuple[str, int] | None = None   # (mode, k) hysteresis on the switch
     tau_lap: float | None = None                # veil veto threshold; None disables it
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER   # denoise, not dilate
+    # --- the 2026-09-01 cross-modal gate (preset "crossmodal"); see load_context.
+    gini_by_cond: dict[str, np.ndarray] = field(default_factory=dict)
+    ir_night: np.ndarray | None = None
+    struct_const: dict = field(default_factory=dict)
+    veto_rule: str = "photometric+veil"          # | "gini+ir_night"
+    single_passthrough: bool = False
     cap_note: str = ""
     _sel: dict = field(default_factory=dict)
     _order: dict | None = None
@@ -181,9 +187,46 @@ def load_context(
     veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
     tau_lap: float | None = None,
+    preset: str = "adopted",
+    structure_dir="runs/derived/structure",
+    structure_constants="runs/eval/structure_constants.json",
+    ir_bright="runs/derived/brightness/gauss_ir_paired_clean.json",
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
+    """`preset="adopted"` (default) reproduces the 2026-08-20/09-01 system exactly.
+
+    `preset="crossmodal"` is the 2026-09-01 replacement, measured in
+    `docs/crossmodal-gate-2026-09-01.md`. Three changes, each independently
+    measured:
+
+      weights   capability prior alone (`mu_d -> inf`, `lam -> 0`). The Mahalanobis
+                soft term is not inert, it is the MECHANISM of the lowlight/day
+                loss: lowlight drives VIS's D to ~248 against a mu_d of 71, so
+                r_frame_vis collapses to ~0.009 while clean IR keeps ~0.82, and
+                mean w_vis lands at 0.320 on a cell where VIS scores 0.0346 and IR
+                0.0177. The gate hands the frame to the weaker sensor.
+
+      veto      `grad_gini < gini_thr` OR `ir_p05 > ir_night_thr`, no hysteresis on
+                either. The photometric axis is dropped, because it asks VIS "are
+                you dark?" and cannot tell a dark world from a dark sensor:
+                lowlight/day has p05 = 0, DARKER than the real night run, on frames
+                where the detector still works. IR settles it -- on lowlight/day
+                the IR frame is ordinary daylight, since the corruption hit VIS
+                alone.
+
+      fusion    `single_passthrough`, so a frame with one surviving stream returns
+                that stream instead of passing it through single-list WBF, which
+                clips, merges at iou_thr and re-scores (worth -0.0011 on a vetoed
+                day cell and +0.0003 on a vetoed night one).
+
+    Measured against the adopted system, ship AP, n_boot 1000: lowlight/day
+    +0.0215 [+0.0184, +0.0246], glare/day +0.0032, fog/day +0.0011, clean/day
+    +0.0003, and -0.0003 (CI spans zero) on each of the four night cells. Every one
+    of the eight cells lands at or above max(VIS, IR).
+    """
+    if preset not in ("adopted", "crossmodal"):
+        raise ValueError(f"unknown preset {preset!r}")
     cfg = load_config(config)
     cache_dir = ROOT / cache_dir
     alpha = float(cfg["reliability"]["alpha"])
@@ -243,13 +286,40 @@ def load_context(
     gts = [load_gt(r["image_path"], r["image_hw"]) for r in vis_by_cond["clean"]]
     runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_by_cond["clean"]])
 
+    gini_by_cond, ir_night_flag, sconst = {}, None, {}
+    if preset == "crossmodal":
+        sp = ROOT / structure_constants
+        if not sp.is_file():
+            raise SystemExit(f"missing {sp} — run scripts/fit_structure_gate.py first")
+        sconst = json.loads(sp.read_text(encoding="utf-8"))
+        gini_thr = float(sconst["axes"]["grad_gini"]["threshold"])
+        for cond in conditions:
+            fp = ROOT / structure_dir / f"gauss_vis_paired_{cond}.json"
+            if not fp.is_file():
+                raise SystemExit(f"missing {fp} — run scripts/frame_structure.py first")
+            g = np.asarray([f["grad_gini"] for f in
+                            json.loads(fp.read_text(encoding="utf-8"))["frames"]], dtype=float)
+            gini_by_cond[cond] = g
+        ir_thr = float(sconst["axes"]["ir_p05"]["threshold"])
+        ir_p05 = np.asarray([f["p05"] for f in json.loads(
+            (ROOT / ir_bright).read_text(encoding="utf-8"))["frames"]], dtype=float)
+        ir_night_flag = ir_p05 > ir_thr
+        # The capability prior alone: R == 1 for both streams, so the per-frame
+        # weight is constant and the whole soft gate is switched off. That is the
+        # measured configuration, not a simplification of it.
+        c_vis = replace(c_vis, mu_d=1e9, lam=0.0)
+        c_ir = replace(c_ir, mu_d=1e9, lam=0.0)
+
     ctx = FusionContext(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
         h_frames=h_frames, gts=gts,
         runs=runs, cap_vis=1.0, cap_ir=1.0, conditions=tuple(conditions),
         iou_thr=iou_thr, veto=veto, veto_filter=veto_filter, veil_filter=veil_filter,
-        tau_lap=tau_lap)
+        tau_lap=tau_lap, gini_by_cond=gini_by_cond, ir_night=ir_night_flag,
+        struct_const=sconst,
+        veto_rule="gini+ir_night" if preset == "crossmodal" else "photometric+veil",
+        single_passthrough=(preset == "crossmodal"))
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -271,6 +341,19 @@ def load_context(
             why = ("no tau_lap in brightness_constants.json" if ctx.tau_lap is None
                    else "no lap_var column in the brightness files")
             print(f"[ctx] veil term OFF ({why}) - photometric-only gate")
+        # Same reasoning as the veil line above: a preset that silently failed to
+        # load its data would reproduce the other preset's numbers exactly, which
+        # is the hardest kind of bug to notice (§5 of the veil record).
+        if ctx.veto_rule == "gini+ir_night":
+            print(f"[ctx] preset CROSSMODAL: veto = grad_gini < "
+                  f"{ctx.struct_const['axes']['grad_gini']['threshold']:.4f} OR ir_p05 > "
+                  f"{ctx.struct_const['axes']['ir_p05']['threshold']:.1f}; no hysteresis; "
+                  f"capability-only weights; single_passthrough=True")
+            print(f"[ctx] preset CROSSMODAL: IR-night fires on "
+                  f"{ctx.ir_night.mean():.1%} of frames, gini-veil conditions "
+                  f"{sorted(ctx.gini_by_cond)}")
+        else:
+            print("[ctx] preset ADOPTED: photometric OR veil veto, full soft weights")
     return ctx
 
 
@@ -290,10 +373,31 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         iou_thr_wbf=ctx.iou_thr, brightness_vis=ctx.bright_by_cond.get(condition),
         brightness_ir=None, veto_below=ctx.veto,
     )
+    kw.setdefault("single_passthrough", ctx.single_passthrough)
     kw.update(overrides)
     vis = kw.pop("vis_records", ctx.vis_by_cond[condition])
     ir = kw.pop("ir_records", ctx.ir_clean)
-    if (ctx.veto_filter is not None and ctx.veto is not None
+    if (ctx.veto_rule == "gini+ir_night" and ctx.veto is not None
+            and "veto_override" not in overrides and "veto_below" not in overrides):
+        # Two axes, neither filtered, and neither is about VIS brightness.
+        #
+        # `grad_gini` fires on 100% of both fog cells and 0.0% of the other six --
+        # cleanly enough that the majority-15 the `lap_var` veil term needed has
+        # nothing left to denoise. `ir_p05` fires on 100% of all four night cells
+        # and 0.0% of all four day cells, which is what removes the need for the
+        # dilate-15 the photometric axis needed: the flickering that hysteresis
+        # existed to repair was a property of reading darkness off the DEGRADED
+        # sensor, and this reads it off the intact one.
+        n = len(vis)
+        vv = np.zeros(n, dtype=bool)
+        g = ctx.gini_by_cond.get(condition)
+        if g is not None:
+            vv |= g < float(ctx.struct_const["axes"]["grad_gini"]["threshold"])
+        if ctx.ir_night is not None:
+            vv |= ctx.ir_night
+        kw["veto_override"] = (vv.tolist(), [False] * n)   # IR is never vetoed by design
+        kw["veto_below"] = None
+    elif (ctx.veto_filter is not None and ctx.veto is not None
             and "veto_override" not in overrides and "veto_below" not in overrides
             and kw.get("veto_on", "r_bright") == "r_bright"
             and ctx.c_vis.mu_b is not None):

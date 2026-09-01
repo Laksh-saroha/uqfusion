@@ -47,6 +47,13 @@ from uqfusion.eval.ctx import load_context, run_systems  # noqa: E402
 
 VARIANTS = ("adopted", "no_maha", "cap_only", "no_veto")
 
+#: Under `--preset crossmodal` the soft terms are already off, so `no_maha` and
+#: `cap_only` would both be the adopted arm under another name. The informative
+#: ablations there run the other way: put the Mahalanobis term BACK (`with_maha`),
+#: and restore the photometric axis the preset dropped (`photometric_veto`), so
+#: each removed component is charged for its own absence.
+VARIANTS_CROSSMODAL = ("adopted", "with_maha", "photometric_veto", "no_veto")
+
 # Class indices in the VIS label space, which is the frame everything is scored
 # in: `runs/derived/data_vis_stride2.yaml` -> {0: ship, 1: buoy}. IR is nc=1 with
 # ship at 0 (`data_ir_shiponly.yaml`), so the index means the same thing on both
@@ -75,6 +82,22 @@ def variant_ctx(ctx, name: str):
     hysteresis) is untouched in all but `no_veto`."""
     if name == "adopted":
         return ctx, {}
+    if name == "with_maha":
+        # Restore the D-6 ladder constants the crossmodal preset switches off, so
+        # the term is charged for what it costs rather than credited for being
+        # absent.
+        import json as _json
+        f = _json.loads((ROOT / "runs/eval/reliability_constants.json").read_text(
+            encoding="utf-8"))
+        return replace(ctx,
+                       c_vis=replace(ctx.c_vis, mu_d=float(f["vis"]["mu_d"]),
+                                     tau=float(f["vis"]["tau"]),
+                                     lam=float(f["vis"]["lam"])),
+                       c_ir=replace(ctx.c_ir, mu_d=float(f["ir"]["mu_d"]),
+                                    tau=float(f["ir"]["tau"]),
+                                    lam=float(f["ir"]["lam"]))), {}
+    if name == "photometric_veto":
+        return replace(ctx, veto_rule="photometric+veil"), {}
     if name == "no_maha":
         return replace(ctx, c_vis=replace(ctx.c_vis, mu_d=1e9),
                        c_ir=replace(ctx.c_ir, mu_d=1e9)), {}
@@ -92,11 +115,16 @@ def main() -> int:
     ap.add_argument("--out", default="runs/eval/final_system.md")
     ap.add_argument("--conditions", nargs="+", default=None,
                     help="restrict the sweep (pre-flight uses --conditions clean)")
+    ap.add_argument("--preset", default="adopted", choices=["adopted", "crossmodal"],
+                    help="'adopted' reproduces the 2026-08-20/09-01 system; "
+                         "'crossmodal' is the 2026-09-01 replacement (see ctx.load_context)")
     args = ap.parse_args()
     _assert_class_indices()
 
     t0 = time.time()
-    ctx = load_context(**({"conditions": tuple(args.conditions)} if args.conditions else {}))
+    ctx = load_context(preset=args.preset,
+                       **({"conditions": tuple(args.conditions)} if args.conditions else {}))
+    variants = VARIANTS_CROSSMODAL if args.preset == "crossmodal" else VARIANTS
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}
 
     # ---- run every variant once per condition; keep frame parts ------------
@@ -104,7 +132,7 @@ def main() -> int:
     vis_parts, ir_parts = {}, {}
     veto_rates = {}
     for cond in ctx.conditions:
-        for name in VARIANTS:
+        for name in variants:
             vctx, kw = variant_ctx(ctx, name)
             res = run_systems(vctx, cond, **kw)
             parts[(name, cond)] = frame_parts(res["fused_gated"], ctx.gts)
@@ -176,7 +204,7 @@ def main() -> int:
 
     # ---- table 3: soft-weight ablation, deltas vs adopted ------------------
     rows_abl = []
-    for name in ("no_maha", "cap_only", "no_veto"):
+    for name in variants[1:]:
         for cond in ctx.conditions:
             for sname, sel in splits.items():
                 a = cell(parts[(name, cond)], sel)
@@ -205,7 +233,9 @@ def main() -> int:
          f"Configuration: capability prior over fit runs (VIS {ctx.cap_vis:.4f} / "
          f"IR {ctx.cap_ir:.4f}), photometric term veto-only, hard veto at "
          f"r_bright<{ctx.veto} with {ctx.veto_filter} hysteresis, WBF iou_thr "
-         f"{ctx.iou_thr}. Paired frame-level bootstrap, n={args.n_boot}, seed 0. "
+         f"{ctx.iou_thr}. PRESET: {args.preset} (veto rule {ctx.veto_rule}, "
+         f"single_passthrough={ctx.single_passthrough}). "
+         f"Paired frame-level bootstrap, n={args.n_boot}, seed 0. "
          f"Caches: the record's yolo26s checkpoints (the full-scale retrain "
          f"replaces them; this table freezes the architecture, not the numbers).",
          "",
@@ -262,10 +292,15 @@ def main() -> int:
                  f"{r['delta']:+.4f} | [{r['ci'][0]:+.4f}, {r['ci'][1]:+.4f}]"
                  f"{' (spans 0)' if r['spans_zero'] else ''} | {r['flip']:.1%} |")
 
+    new_abl = ("`with_maha`: the D-6 Mahalanobis ladder constants put BACK, so the "
+               "term is charged for what it costs. `photometric_veto`: the veto rule "
+               "swapped back to photometric OR veil, isolating the veto change from "
+               "the weight change. `no_veto`: nothing vetoed at all.")
     L += ["", "## 3. Soft-weight ablation (veto kept; deltas vs adopted)", "",
-          "`no_maha`: r_frame forced to 1. `cap_only`: additionally r_box forced "
-          "to 1, so weights are the pure capability prior. `no_veto`: the soft "
-          "system alone.", "",
+          (new_abl if args.preset == "crossmodal" else
+           "`no_maha`: r_frame forced to 1. `cap_only`: additionally r_box forced "
+           "to 1, so weights are the pure capability prior. `no_veto`: the soft "
+           "system alone."), "",
           "| variant | cell | ship AP | ship delta | ship 95% CI | mAP | delta (macro) | 95% CI |",
           "|---|---|---:|---:|---|---:|---:|---|"]
     for r in rows_abl:
@@ -281,7 +316,9 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(L) + "\n", encoding="utf-8")
     out.with_suffix(".json").write_text(json.dumps({
-        "config": {"cap_vis": ctx.cap_vis, "cap_ir": ctx.cap_ir, "iou_thr": ctx.iou_thr,
+        "config": {"preset": args.preset, "veto_rule": ctx.veto_rule,
+                   "single_passthrough": ctx.single_passthrough,
+                   "cap_vis": ctx.cap_vis, "cap_ir": ctx.cap_ir, "iou_thr": ctx.iou_thr,
                    "veto": ctx.veto, "veto_filter": list(ctx.veto_filter or ()),
                    "bright_soft": ctx.c_vis.bright_soft, "n_boot": args.n_boot},
         "main": rows_main, "vs_visible": rows_vis, "ablation": rows_abl},
