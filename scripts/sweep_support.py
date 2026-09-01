@@ -24,9 +24,14 @@ never touches a coordinate.
 measurement predicts they are nearly inert on real data, and a prediction that
 specific is worth falsifying rather than assuming.
 
-Selection is on CLEAN FIT-RUN DAY frames. Night is reported: VIS is 0.0000 there,
-so every night cell is IR alone and no support term can move it -- if one does,
-something is wrong.
+Selection is on `TUNE_RUNS` (pohang00) day frames and the result is reported on
+`TEST_RUNS` (pohang02 + pohang03), which is a RUN-DISJOINT held-out day set. That
+distinction has not existed before in this project: `FIT_RUNS` excludes only
+pohang01, and pohang01 is entirely night, so "fit-run day" and "day" have always
+been the same 1200 frames and every day constant has been reported in-sample.
+
+Night is reported too. VIS is 0.0000 there, so every night frame is IR alone and
+no support term can move it -- if one does, something is wrong.
 
 Usage:
     python scripts/sweep_support.py --cache-dir runs/cache_m --out runs/eval/support_26m.md
@@ -48,7 +53,8 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from uqfusion.eval.apmetrics import ap_from_parts, bootstrap_delta, frame_parts  # noqa: E402
-from uqfusion.eval.ctx import FIT_RUNS, NIGHT_RUNS, load_context, run_systems    # noqa: E402
+from uqfusion.eval.ctx import (NIGHT_RUNS, TEST_RUNS, TUNE_RUNS,                  # noqa: E402
+                               load_context, run_systems)
 
 SHIP = 0
 
@@ -66,8 +72,10 @@ def main() -> int:
                         conditions=(args.condition,), verbose=True)
     night = np.isin(base.runs, NIGHT_RUNS)
     day = np.flatnonzero(~night)
-    fit_day = np.flatnonzero(np.isin(base.runs, FIT_RUNS) & ~night)
+    tune = np.flatnonzero(np.isin(base.runs, TUNE_RUNS) & ~night)
+    test = np.flatnonzero(np.isin(base.runs, TEST_RUNS) & ~night)
     nightsel = np.flatnonzero(night)
+    assert not set(tune) & set(test), "the day split must be disjoint"
 
     arms = [("adopted", base)]
     for iou in (0.10, 0.30, 0.50):
@@ -90,17 +98,21 @@ def main() -> int:
         p = frame_parts(r["fused_gated"], ctx.gts)
         parts_by_arm[name] = p
         ds, dm = apf(p, day)
-        fs, _ = apf(p, fit_day)
+        us, _ = apf(p, tune)
+        ts, tm = apf(p, test)
         ns, _ = apf(p, nightsel)
-        rows.append({"arm": name, "fit": fs, "day": ds, "day_macro": dm, "night": ns})
-        print(f"[sup] {name:28} fit {fs:.4f}  day {ds:.4f}  night {ns:.4f} "
-              f"({time.time() - t0:.0f}s)", flush=True)
+        rows.append({"arm": name, "tune": us, "test": ts, "test_macro": tm,
+                     "day": ds, "day_macro": dm, "night": ns})
+        print(f"[sup] {name:28} tune {us:.4f}  TEST {ts:.4f}  day {ds:.4f}  "
+              f"night {ns:.4f} ({time.time() - t0:.0f}s)", flush=True)
 
     b0 = rows[0]
-    best = max(rows[1:], key=lambda r: r["fit"])
+    # Selected on the TUNE runs only. Whether that choice survives is the
+    # `test` column, and it is allowed to say no.
+    best = max(rows[1:], key=lambda r: r["tune"])
     boot = {}
     if args.n_boot:
-        for tag, sel in (("fit", fit_day), ("day", day)):
+        for tag, sel in (("tune", tune), ("test", test), ("day", day)):
             boot[tag] = bootstrap_delta([parts_by_arm[best["arm"]][k] for k in sel],
                                         [parts_by_arm["adopted"][k] for k in sel],
                                         None, n_boot=args.n_boot, cls=SHIP)
@@ -110,20 +122,25 @@ def main() -> int:
 
     L = [f"# Support, consensus, and what the geometry allows — `{args.cache_dir}`, "
          f"`{args.condition}`", "",
-         "Ship AP. **fit** is the selection set (fit runs, clean, day); day and night "
-         "are reports. `support` boosts a box's score when the other stream overlaps "
-         "it at `iou`, and never moves a coordinate.", "",
-         "| arm | fit | day | day macro | night | fit vs adopted |",
-         "|---|---:|---:|---:|---:|---:|"]
+         "Ship AP. **tune** is pohang00 day (the selection set); **TEST** is "
+         "pohang02+03 day, run-disjoint and held out. `day` is both together, "
+         "reported only for comparison with every earlier table -- it is the "
+         "in-sample number those tables have always shown. `support` boosts a box's "
+         "score when the other stream overlaps it at `iou`, and never moves a "
+         "coordinate.", "",
+         "| arm | tune | **TEST** | test macro | day (in-sample) | night | tune delta | TEST delta |",
+         "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for r in rows:
-        L.append(f"| {r['arm']} | {r['fit']:.4f} | {r['day']:.4f} | {r['day_macro']:.4f} | "
-                 f"{r['night']:.4f} | {r['fit'] - b0['fit']:+.4f} |")
+        L.append(f"| {r['arm']} | {r['tune']:.4f} | **{r['test']:.4f}** | "
+                 f"{r['test_macro']:.4f} | {r['day']:.4f} | {r['night']:.4f} | "
+                 f"{r['tune'] - b0['tune']:+.4f} | {r['test'] - b0['test']:+.4f} |")
 
     L += ["", "## Verdict", "",
-          f"- Best on the selection set: **{best['arm']}**, "
-          f"{best['fit'] - b0['fit']:+.4f} over adopted."]
+          f"- Best on the TUNE runs: **{best['arm']}**, "
+          f"{best['tune'] - b0['tune']:+.4f} over adopted there and "
+          f"**{best['test'] - b0['test']:+.4f} on the held-out runs**."]
     if boot:
-        for tag in ("fit", "day"):
+        for tag in ("tune", "test", "day"):
             b = boot[tag]
             L.append(f"- {tag}: {b['delta']:+.4f} [{b['ci_lo']:+.4f}, {b['ci_hi']:+.4f}]"
                      + (" — **spans zero**" if b["spans_zero"] else ""))

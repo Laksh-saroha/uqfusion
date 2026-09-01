@@ -54,6 +54,24 @@ NIGHT_RUNS = ("pohang01",)
 #: Runs the gate was allowed to see. pohang01 is held out of every fit (§7).
 FIT_RUNS = ("pohang00", "pohang02", "pohang03")
 
+#: A RUN-DISJOINT SPLIT OF THE DAY FRAMES, which the project has never had.
+#:
+#: `FIT_RUNS` excludes only pohang01, and pohang01 is entirely night -- so the
+#: "day" report set and the "fit-run day" selection set are the SAME 1200 frames.
+#: Every constant tuned on fit-run day frames has therefore been reported on the
+#: frames it was tuned on, and the only genuinely held-out data in the whole
+#: benchmark is a run where VIS scores exactly 0.0000 and nothing about the fusion
+#: of two streams can be tested at all.
+#:
+#: Splitting by RUN and not by frame is the point: consecutive frames of one
+#: canal transit are near-duplicates, so a random frame split would leak. pohang00
+#: (836 day frames) tunes; pohang02 + pohang03 (247 + 117 = 364) are held out. The
+#: split is uneven because the runs are, and the smaller side is the held-out one
+#: deliberately -- a constant that only survives on the run it was fitted to should
+#: fail here.
+TUNE_RUNS = ("pohang00",)
+TEST_RUNS = ("pohang02", "pohang03")
+
 
 def fit_scorer(cache_path: Path) -> MahalanobisScorer:
     records, _ = load_cache(cache_path)
