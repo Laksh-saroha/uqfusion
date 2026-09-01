@@ -90,13 +90,22 @@ Within-run epoch sd is **0.0035–0.0106**. Between-seed sd of best-fitness is
 uncertainty across seeds. Every arm in the record is a `max` over epochs, so every
 arm carries this. The σ-head/ensemble gap of 0.00044 is far inside it.
 
-## 4. Recommendation
+## 4. Decision (D31, 2026-09-01)
 
-Do not rank the arms on mAP. On the estimator that survives scrutiny, σ-head and the
-ensemble are indistinguishable (−1.2 sd, n=1 vs n=5) and MC is behind. Report mAP as a
-"no accuracy cost" check with best *and* epoch-mean shown, and let the calibration
-metrics (d-ECE, NLL, AUSE, AURC) carry the arm comparison, where the separations are
-large enough to mean something.
+**Checkpoint selection stays best-epoch**, and the epoch-mean is reported beside it
+for every arm. Full rationale in `docs/D31-checkpoint-selection-2026-09-01.md`; the
+short version is that best-epoch is the convention, every existing server number
+already is one, and for the pre-2026-09-01 runs `best.pt` is the only checkpoint
+still on disk. It was chosen knowing it flatters MC — the arm this project has the
+least interest in flattering — which is the safer direction to be wrong in.
 
-If a ranking is required, all three arms must be re-run on one machine with matched
-seeds and a fixed epoch budget — and the checkpoint-selection rule pre-registered.
+**The arms are not ranked on mAP.** On the estimator that survives scrutiny the
+sigma-head and the ensemble are indistinguishable (-1.2 sd, n=1 against n=5) and MC
+is behind; on best-epoch MC leads. Reporting one of those and not the other would be
+the actual dishonesty, so the paper reports both and draws no ranking. The arm
+comparison is carried by the calibration metrics (d-ECE, NLL, AUSE, AURC), where the
+separations are large relative to their noise.
+
+`mc_vis_seed0_ft_server` runs with `save_period = 1`, so all ten of its epoch
+checkpoints are kept and any future change of rule is a recomputation rather than a
+retrain.
