@@ -64,6 +64,23 @@ AXES = (("grad_gini", False, "veil"),
         ("lap_over_var", True, "concentrated / real-night (VIS side)"))
 
 
+#: Statistics the IR health model reads. Chosen to span photometry, structure and
+#: spatial spread, so a corruption that leaves one family alone still moves another.
+IR_HEALTH_KEYS = ("grad_gini", "lap_over_var", "spec_slope", "tex_cover",
+                  "tile_std_p50", "edge_density", "log_range", "std", "range",
+                  "frac_dark", "grad_mean")
+#: Heavy-tailed positive columns, log1p-compressed before standardisation.
+IR_LOG_KEYS = ("lap_over_var", "grad_mean", "std", "range", "tex_cover", "edge_density")
+
+
+def _ir_health_matrix(frame_rows: list[dict]) -> "np.ndarray":
+    X = np.stack([[f[k] for k in IR_HEALTH_KEYS] for f in frame_rows]).astype(float)
+    for j, k in enumerate(IR_HEALTH_KEYS):
+        if k in IR_LOG_KEYS:
+            X[:, j] = np.log1p(np.clip(X[:, j], 0, None))
+    return X
+
+
 def frames(path: Path) -> list[dict]:
     return json.loads(path.read_text(encoding="utf-8"))["frames"]
 
@@ -195,6 +212,95 @@ def main() -> int:
                 print(f"{r:>15.1%} ", end="")
             print()
     out["veto_rates"] = rates
+
+    # ---- IR HEALTH: multivariate novelty over the whole statistic vector ----
+    # The per-axis band above catches IR fog completely and IR glare barely (12-34%),
+    # and glare is the arm that survives into the both-degraded case. A single
+    # statistic is the wrong instrument: a corruption moves the JOINT distribution of
+    # frame statistics even when it moves no one of them past its own extreme. A
+    # Mahalanobis novelty score over the standardised vector catches fog/rain/noise/
+    # lowlight at 100%, blur at 84-99% and glare at 64-75%, against 0.0% on clean.
+    #
+    # Fitted, like every other bound here, on CLEAN frames only -- but on ALL clean
+    # paired IR frames, DAY AND NIGHT POOLED. That pooling is required, not
+    # incidental: night IR is legitimately different from day IR, and a model fitted
+    # on day alone would call every night frame novel and disarm the night switch on
+    # exactly the frames it exists for.
+    #
+    # Heavy-tailed positive columns are log1p-compressed first so one unit does not
+    # dominate the covariance.
+    if isp.is_file():
+        ifr = frames(isp)
+        X = _ir_health_matrix(ifr)
+        mu_v = X.mean(0)
+        sd_v = X.std(0) + 1e-9
+        Z = (X - mu_v) / sd_v
+        cov = np.cov(Z.T) + 1e-6 * np.eye(X.shape[1])
+        prec = np.linalg.inv(cov)
+        d2 = np.einsum("ij,jk,ik->i", Z, prec, Z)
+        out["axes"]["ir_health"] = {
+            "keys": list(IR_HEALTH_KEYS),
+            "log1p_keys": list(IR_LOG_KEYS),
+            "mean": mu_v.tolist(), "std": sd_v.tolist(), "precision": prec.tolist(),
+            "bound": float(d2.max()),
+            "bound_switch": float(np.quantile(d2, 0.99)),
+            "role": "IR self-check: two bounds, because the two decisions it feeds have "
+                    "OPPOSITE cost asymmetries",
+            "rule": ("Mahalanobis novelty over the standardised statistic vector, fitted on "
+                     "ALL clean paired IR frames (day and night pooled). `bound` = hard "
+                     "maximum, used for the MERGE decision (drop IR from fusion): dropping "
+                     "IR from a clean day frame costs real AP, so that decision keeps the "
+                     "strict novelty bound. `bound_switch` = p99, used for the AUTHORITY "
+                     "decision (may IR veto VIS?): over-restricting merely disables the "
+                     "night veto, worth at most the -0.0022..-0.0054 that `no_veto` costs a "
+                     "night cell, while under-restricting lets a glare-corrupted IR veto a "
+                     "working VIS at -0.35. Measured: p99 flags 1.1% of clean IR and 0.0% "
+                     "of clean NIGHT frames -- so it never disarms the switch on the frames "
+                     "the switch is for -- while catching 83% of IR glare and dropping the "
+                     "worst both-degraded bad-veto from 6.7% to 0.7%."),
+            "fit_n": int(len(d2)),
+            "clean_day_median": float(np.median(d2[np.asarray([f["run"] for f in ifr]) != NIGHT_RUN])),
+            "clean_night_median": float(np.median(d2[np.asarray([f["run"] for f in ifr]) == NIGHT_RUN])),
+        }
+        print(f"[fit] ir_health      merge bound {d2.max():.1f}, switch bound "
+              f"{np.quantile(d2, 0.99):.1f}  (clean day med "
+              f"{np.median(d2[np.asarray([f['run'] for f in ifr]) != NIGHT_RUN]):.1f}, "
+              f"night med "
+              f"{np.median(d2[np.asarray([f['run'] for f in ifr]) == NIGHT_RUN]):.1f}, "
+              f"n={len(d2)})")
+
+    # ---- VIS HEALTH -------------------------------------------------------
+    # R_sys needs an ABSOLUTE health per stream, and the first attempt built the VIS
+    # side out of raw-statistic ratios. Measured, that failed: `grad_gini` spans
+    # 0.385 (fog) to 0.4826 (its own threshold), so `gini / thr` bottoms out near
+    # 0.80 and never crosses 0.5 -- VIS was reported healthy on a fully fogged frame,
+    # and the abstain released exactly ZERO vetoes across 76 corruption pairs. A
+    # ratio is only a health signal if the statistic has the dynamic range to fall.
+    #
+    # So VIS gets the same instrument as IR: a Mahalanobis novelty score over the
+    # standardised statistic vector, whose distance is unbounded above and therefore
+    # does have that range. Fitted on CLEAN FIT-RUN frames only (pohang00/02/03),
+    # which is the usual VIS protocol -- unlike the IR model, night is NOT pooled in,
+    # because on the VIS side night genuinely IS a failure and should score novel.
+    Xv = _ir_health_matrix([f for f in tf if f["run"] in FIT_RUNS])
+    mu_w = Xv.mean(0)
+    sd_w = Xv.std(0) + 1e-9
+    Zw = (Xv - mu_w) / sd_w
+    precw = np.linalg.inv(np.cov(Zw.T) + 1e-6 * np.eye(Xv.shape[1]))
+    d2w = np.einsum("ij,jk,ik->i", Zw, precw, Zw)
+    out["axes"]["vis_health"] = {
+        "keys": list(IR_HEALTH_KEYS), "log1p_keys": list(IR_LOG_KEYS),
+        "mean": mu_w.tolist(), "std": sd_w.tolist(), "precision": precw.tolist(),
+        "bound": float(d2w.max()),
+        "role": "VIS absolute health, for R_sys and the abstain",
+        "rule": ("Mahalanobis novelty over the standardised statistic vector; bound = max "
+                 "over CLEAN frames of the fit runs. Night is deliberately NOT pooled in "
+                 "(unlike the IR model): on the VIS side night is a genuine failure and "
+                 "should score novel."),
+        "fit_n": int(len(d2w)),
+    }
+    print(f"[fit] vis_health     novelty bound {d2w.max():.1f}  (clean fit median "
+          f"{np.median(d2w):.1f}, n={len(d2w)})")
 
     if args.report_only:
         print("\n[fit] --report-only: nothing written")

@@ -28,6 +28,14 @@ Checks (A-D need only the constants file; E-H load the caches):
   J  the night arm is a CONJUNCTION, not the bare IR test -- i.e. removing the
      `vis_dark` term would change the switch. This is the check that fails if
      someone "simplifies" the two-of-two rule back to one sensor.
+  K  R_sys is a real per-frame signal, not the constant 1 the capability-only
+     weights degenerate it to, and both health models are loaded.
+  L  the two IR bounds are ordered `bound_switch < bound` -- the AUTHORITY bound
+     must be tighter than the MERGE bound, because over-restricting authority is
+     cheap and over-restricting the merge is not. Reversing them is the mistake
+     this check exists to catch.
+  M  on the benchmark, `veto_ir` and the `abstain` flag never fire: IR is clean in
+     all eight cells, so nothing here can move the headline table.
   G  the crossmodal weights are constant across frames (capability prior alone).
   H  `preset="adopted"` still produces the adopted veto rates, unchanged: the new
      preset must not have moved the old one.
@@ -179,6 +187,33 @@ def main() -> int:
             print(f"[smoke] J vis_dark conjunction closes the residual {worst_checked:.1%} "
                   f"-> {worst_conj:.1%}  "
                   f"{'FAIL' if any(f.startswith('J') for f in fails) else 'OK'}")
+
+    # ---- K, L, M ---------------------------------------------------------
+    if "vis_health" not in c or "ir_health" not in c:
+        fails.append("K a health model is missing from the constants — R_sys would "
+                     "degenerate to the constant 1 the capability-only weights give it")
+    else:
+        bnd, bsw = float(c["ir_health"]["bound"]), float(c["ir_health"]["bound_switch"])
+        if not (bsw < bnd):
+            fails.append(f"L IR bounds not ordered: authority {bsw:.1f} must be TIGHTER "
+                         f"than merge {bnd:.1f}")
+        print(f"[smoke] L IR bounds ordered: authority {bsw:.1f} < merge {bnd:.1f}  "
+              f"{'FAIL' if any(f.startswith('L') for f in fails) else 'OK'}")
+    qv = np.concatenate([cm.q_vis_by_cond[x] for x in cm.conditions])
+    if qv.std() < 1e-9 or qv.min() > 0.5:
+        fails.append(f"K q_vis has no dynamic range (min {qv.min():.3f}, std "
+                     f"{qv.std():.3f}) — a ratio that never crosses 0.5 cannot flag "
+                     f"an unhealthy stream, which is how the first version failed")
+    print(f"[smoke] K R_sys inputs live: q_vis spans {qv.min():.3f}..{qv.max():.3f}  "
+          f"{'FAIL' if any(f.startswith('K') for f in fails) else 'OK'}")
+
+    for cond in cm.conditions:
+        r = run_systems(cm, cond)
+        if np.any(r["veto_ir"]) or np.any(r["abstain"]):
+            fails.append(f"M {cond}: veto_ir/abstain fired on a benchmark cell where IR "
+                         f"is clean — the headline table would move")
+    print(f"[smoke] M veto_ir and abstain silent on all 8 cells (IR is clean there)  "
+          f"{'FAIL' if any(f.startswith('M') for f in fails) else 'OK'}")
 
     res = run_systems(cm, "clean")
     w = np.asarray(res["w_vis_gated"])

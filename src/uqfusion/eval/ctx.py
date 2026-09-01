@@ -105,6 +105,10 @@ class FusionContext:
     # --- the 2026-09-01 cross-modal gate (preset "crossmodal"); see load_context.
     gini_by_cond: dict[str, np.ndarray] = field(default_factory=dict)
     ir_night: np.ndarray | None = None
+    ir_d2: np.ndarray | None = None       # IR novelty score per frame
+    ir_bound: float = 0.0                 # merge bound: above this, IR leaves the fusion
+    ir_bound_switch: float = 0.0          # authority bound (tighter): above this, IR may not veto
+    q_vis_by_cond: dict[str, np.ndarray] = field(default_factory=dict)   # VIS absolute health
     struct_const: dict = field(default_factory=dict)
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     single_passthrough: bool = False
@@ -287,6 +291,7 @@ def load_context(
     runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_by_cond["clean"]])
 
     gini_by_cond, ir_night_flag, sconst = {}, None, {}
+    ir_d2, ir_bound, ir_bound_switch, q_vis_by_cond = None, 0.0, 0.0, {}
     if preset == "crossmodal":
         sp = ROOT / structure_constants
         if not sp.is_file():
@@ -311,18 +316,67 @@ def load_context(
         # day and clean night (medians 0.394 / 0.388, so it does not fire on the very
         # frames the switch is for) and leaves its clean band on 100% of fogged
         # frames. With it, IR-fog false nights go 96% -> 0%.
+        hm = sconst["axes"].get("ir_health")
         band = sconst["axes"].get("ir_lap_over_var", {}).get("band")
-        if band is not None:
-            isp = ROOT / structure_dir / "gauss_ir_paired_clean.json"
-            if not isp.is_file():
-                raise SystemExit(f"missing {isp} — run scripts/frame_structure.py "
-                                 f"--cache runs/cache/gauss_ir_paired_clean.pkl --modality ir")
+        isp = ROOT / structure_dir / "gauss_ir_paired_clean.json"
+        if (hm is not None or band is not None) and not isp.is_file():
+            raise SystemExit(f"missing {isp} — run scripts/frame_structure.py "
+                             f"--cache runs/cache/gauss_ir_paired_clean.pkl --modality ir")
+        if hm is not None:
+            # The multivariate check supersedes the single-axis band: a corruption
+            # moves the JOINT distribution of frame statistics even when it moves no
+            # one of them past its own extreme. Measured on the corruption probe,
+            # per-axis `lap_over_var` catches IR glare on 12-34% of frames and this
+            # catches 64-75%, at the same 0.0% on clean.
+            ifr = json.loads(isp.read_text(encoding="utf-8"))["frames"]
+            X = np.stack([[f[k] for k in hm["keys"]] for f in ifr]).astype(float)
+            for j, k in enumerate(hm["keys"]):
+                if k in hm["log1p_keys"]:
+                    X[:, j] = np.log1p(np.clip(X[:, j], 0, None))
+            Z = (X - np.asarray(hm["mean"])) / np.asarray(hm["std"])
+            ir_d2 = np.einsum("ij,jk,ik->i", Z, np.asarray(hm["precision"]), Z)
+            ir_bound = float(hm["bound"])
+            # The AUTHORITY bound is tighter than the MERGE bound, because the two
+            # decisions fail in opposite directions. Over-restricting authority just
+            # disables the night veto (worth at most the -0.0022..-0.0054 `no_veto`
+            # costs a night cell); under-restricting lets a glare-corrupted IR veto a
+            # working VIS, worth -0.35. Dropping IR from the MERGE has the reverse
+            # shape -- it costs real AP on a clean day frame -- so that one keeps the
+            # strict maximum. Measured: p99 flags 0.0% of clean NIGHT frames, so it
+            # never disarms the switch on the frames the switch exists for.
+            ir_bound_switch = float(hm.get("bound_switch", hm["bound"]))
+        elif band is not None:
             iv = np.asarray([f["lap_over_var"] for f in
                              json.loads(isp.read_text(encoding="utf-8"))["frames"]], dtype=float)
-            ir_ok = (iv >= float(band[0])) & (iv <= float(band[1]))
+            ir_d2 = np.maximum(float(band[0]) - iv, iv - float(band[1]))
+            ir_bound = ir_bound_switch = 0.0
         else:
-            ir_ok = np.ones(len(ir_p05), dtype=bool)
+            ir_d2, ir_bound, ir_bound_switch = np.zeros(len(ir_p05)), 1.0, 1.0
+        ir_ok = ir_d2 <= ir_bound_switch
         ir_night_flag = (ir_p05 > ir_thr) & ir_ok
+        # VIS absolute health, per frame, for R_sys and the abstain. Same instrument
+        # as the IR side: a Mahalanobis novelty score, because a RATIO of a raw
+        # statistic to its own threshold has no dynamic range -- `grad_gini / thr`
+        # bottoms out near 0.80 on a fully fogged frame, so the first version of this
+        # reported VIS healthy on fog and the abstain released zero vetoes across 76
+        # corruption pairs. Fitted on clean FIT-RUN frames only; night is not pooled
+        # in, because on the VIS side night IS a failure and should score novel.
+        vh = sconst["axes"].get("vis_health")
+        if vh is not None:
+            vmu, vsd = np.asarray(vh["mean"]), np.asarray(vh["std"])
+            vprec, vbound = np.asarray(vh["precision"]), float(vh["bound"])
+            for cond in conditions:
+                fr = json.loads((ROOT / structure_dir /
+                                 f"gauss_vis_paired_{cond}.json").read_text(
+                                     encoding="utf-8"))["frames"]
+                Xv = np.stack([[f[k] for k in vh["keys"]] for f in fr]).astype(float)
+                for j, k in enumerate(vh["keys"]):
+                    if k in vh["log1p_keys"]:
+                        Xv[:, j] = np.log1p(np.clip(Xv[:, j], 0, None))
+                Zv = (Xv - vmu) / vsd
+                q_vis_by_cond[cond] = np.clip(
+                    vbound / np.maximum(np.einsum("ij,jk,ik->i", Zv, vprec, Zv), 1e-12), 0, 1)
+
         # The capability prior alone: R == 1 for both streams, so the per-frame
         # weight is constant and the whole soft gate is switched off. That is the
         # measured configuration, not a simplification of it.
@@ -338,7 +392,11 @@ def load_context(
         tau_lap=tau_lap, gini_by_cond=gini_by_cond, ir_night=ir_night_flag,
         struct_const=sconst,
         veto_rule="gini+ir_night" if preset == "crossmodal" else "photometric+veil",
-        single_passthrough=(preset == "crossmodal"))
+        single_passthrough=(preset == "crossmodal"),
+        ir_d2=(ir_d2 if preset == "crossmodal" else None),
+        ir_bound=(ir_bound if preset == "crossmodal" else 0.0),
+        ir_bound_switch=(ir_bound_switch if preset == "crossmodal" else 0.0),
+        q_vis_by_cond=q_vis_by_cond)
 
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
@@ -434,8 +492,64 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
             if b is not None and ctx.c_vis.mu_b is not None:
                 night = night & (b < float(ctx.c_vis.mu_b))
             vv |= night
-        kw["veto_override"] = (vv.tolist(), [False] * n)   # IR is never vetoed by design
+
+        # ---- R_sys, and the abstain it exists for --------------------------
+        # scope §7.4 introduced R_sys as "has every modality failed?", and under the
+        # capability-only weights it degenerates to a constant 1 -- R is identically
+        # 1 for both streams, so `max(R_vis, R_ir)` carries no information at all.
+        # It is rebuilt here from the axes the gate actually uses, as a per-frame
+        # ABSOLUTE health for each sensor:
+        #
+        #   q_vis = min(veil ratio, photometric sigmoid)   -- min, not product: either
+        #           alarm firing is sufficient grounds to distrust the stream, which is
+        #           the same convention `compute_reliability` uses for r_bright.
+        #   q_ir  = bound / novelty, capped at 1           -- a ratio to the novelty
+        #           bound, the same softening the veil axis takes from its own bound.
+        #
+        # Both are ratios or sigmoids of constants already fitted; no new constant is
+        # introduced. R_sys = max(q_vis, q_ir): "is at least one sensor healthy?"
+        q_vis = ctx.q_vis_by_cond.get(condition)
+        if q_vis is None:
+            q_vis = np.ones(n)
+        q_ir = np.ones(n)
+        if ctx.ir_d2 is not None and ctx.ir_bound > 0:
+            q_ir = np.clip(ctx.ir_bound / np.maximum(ctx.ir_d2, 1e-12), 0, 1)
+        r_sys = np.maximum(q_vis, q_ir)
+        healthy_vis, healthy_ir = q_vis >= 0.5, q_ir >= 0.5   # the pre-registered midpoint
+
+        # A broken IR should not merely be barred from holding the switch (which the
+        # `ir_ok` term in `ir_night` already does) -- it should leave the merge, for
+        # the same reason a broken VIS does. Symmetric, and gated on VIS being
+        # healthy so the frame is never left with nothing.
+        vi = (~healthy_ir) & healthy_vis
+
+        # ABSTAIN is REPORTED, not acted on, and that is a measured decision rather
+        # than a cautious one. The obvious design -- when neither sensor can vouch
+        # for itself, release the switch and keep both -- was implemented and
+        # measured across 76 (IR corruption x VIS condition) pairs. It prevented
+        # **0** bad vetoes and lost **2,095** correct ones: the frames where both
+        # streams are flagged are overwhelmingly VIS-fogged AND IR-broken, and
+        # releasing the veil veto there merely adds fog-VIS junk on top of the
+        # broken-IR junk. Nothing is gained by declining to choose when both options
+        # are bad; the veto was already picking the less bad one.
+        #
+        # The residual the release was meant to fix is not reachable this way either.
+        # It is a MISSED DETECTION -- IR glare that slips under the authority bound,
+        # so `healthy_ir` is True and the abstain cannot fire on those frames at all.
+        #
+        # So abstain keeps the role scope §7.4 actually gave it: a per-frame flag
+        # saying "no modality is reliable here", for a downstream consumer or a
+        # risk-coverage curve. It does not touch the merge.
+        abstain = (~healthy_vis) & (~healthy_ir)
+        kw["veto_override"] = (vv.tolist(), vi.tolist())
         kw["veto_below"] = None
+        res = evaluate_systems(vis, ir, ctx.scorer_vis, ctx.c_vis, **kw)
+        # Reported alongside the systems, because a gate that can abstain has to say
+        # how often it did -- an abstain rate is a result, not a diagnostic.
+        res["R_sys_gate"] = r_sys.tolist()
+        res["q_vis"], res["q_ir"] = q_vis.tolist(), q_ir.tolist()
+        res["abstain"] = abstain.tolist()
+        return res
     elif (ctx.veto_filter is not None and ctx.veto is not None
             and "veto_override" not in overrides and "veto_below" not in overrides
             and kw.get("veto_on", "r_bright") == "r_bright"
