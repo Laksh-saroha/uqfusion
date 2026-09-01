@@ -70,6 +70,7 @@ def evaluate_systems(
     consensus_distinct: bool = False,
     support_iou: float = 0.0,
     support_gamma: float = 0.0,
+    sigma_score_alpha: float = 0.0,
 ) -> dict:
     """mAP@50-95 (and mAP@50) per system over the paired frame set. Also returns
     per-frame gate weights and R_sys for the B3 abstain analysis.
@@ -264,6 +265,7 @@ def evaluate_systems(
                                           consensus_distinct=consensus_distinct,
                                           support_iou=support_iou,
                                           support_gamma=support_gamma,
+                                          sigma_score_alpha=sigma_score_alpha,
                                           score_scale=(None if tv is None
                                                        else (float(tv[fi_]), float(ti[fi_])))))
         fused_naive.append(fuse_detections(rv, ri, 0.5, 0.5, hw, h, iou_thr_wbf, skip_box_thr))

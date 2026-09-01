@@ -130,6 +130,9 @@ class FusionContext:
     # --- the 2026-09-01 cross-modal gate (preset "crossmodal"); see load_context.
     gini_by_cond: dict[str, np.ndarray] = field(default_factory=dict)
     ir_night: np.ndarray | None = None
+    struct_lov_by_cond: dict = field(default_factory=dict)   # VIS lap_over_var per frame
+    ir_night_raw: np.ndarray | None = None   # the p05 test alone, before the self-check
+    ir_ok: np.ndarray | None = None          # IR passes the AUTHORITY bound
     ir_d2: np.ndarray | None = None       # IR novelty score per frame
     ir_bound: float = 0.0                 # merge bound: above this, IR leaves the fusion
     ir_bound_switch: float = 0.0          # authority bound (tighter): above this, IR may not veto
@@ -139,9 +142,12 @@ class FusionContext:
     consensus_distinct: bool = False      # count streams, not cluster members
     support_iou: float = 0.0              # loose cross-stream confirmation...
     support_gamma: float = 0.0            # ...worth (1 + gamma) on the score; 0 = off
+    sigma_score_alpha: float = 0.0        # (median_sigma/sigma)**alpha on the score
     order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
     veil_requires_night: bool = False   # AND the veil axis with the night arm
+    night_weak_fallback: bool = False   # a disarmed IR may still be CONFIRMED by a dark VIS
+    ir_merge_veto: bool = True          # drop a novel IR from the merge (measured harmful)
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     single_passthrough: bool = False
     cap_note: str = ""
@@ -391,6 +397,8 @@ def load_context(
     runs = np.asarray([Path(r["image_path"]).parent.name for r in vis_prior_records])
 
     gini_by_cond, ir_night_flag, sconst = {}, None, {}
+    struct_lov_by_cond = {}
+    ir_night_raw_flag, ir_ok = None, None
     ir_d2, ir_bound, ir_bound_switch, q_vis_by_cond = None, 0.0, 0.0, {}
     if preset == "crossmodal":
         sp = ROOT / structure_constants
@@ -402,9 +410,13 @@ def load_context(
             fp = ROOT / structure_dir / f"gauss_vis_paired_{cond}.json"
             if not fp.is_file():
                 raise SystemExit(f"missing {fp} — run scripts/frame_structure.py first")
-            g = np.asarray([f["grad_gini"] for f in
-                            json.loads(fp.read_text(encoding="utf-8"))["frames"]], dtype=float)
-            gini_by_cond[cond] = g
+            fr_ = json.loads(fp.read_text(encoding="utf-8"))["frames"]
+            gini_by_cond[cond] = np.asarray([f["grad_gini"] for f in fr_], dtype=float)
+            # Loaded for every preset that reads the structure files; only the
+            # `crossmodal26m` night fallback consumes it, and only when IR is
+            # disarmed. `{}` leaves that fallback with no evidence and it declines.
+            struct_lov_by_cond[cond] = np.asarray(
+                [f["lap_over_var"] for f in fr_], dtype=float)
         ir_thr = float(sconst["axes"]["ir_p05"]["threshold"])
         # The gate reads the statistics of the IR frames it is actually being given.
         ir_tag = ir_condition or "clean"
@@ -459,7 +471,8 @@ def load_context(
         else:
             ir_d2, ir_bound, ir_bound_switch = np.zeros(len(ir_p05)), 1.0, 1.0
         ir_ok = ir_d2 <= ir_bound_switch
-        ir_night_flag = (ir_p05 > ir_thr) & ir_ok
+        ir_night_raw_flag = ir_p05 > ir_thr
+        ir_night_flag = ir_night_raw_flag & ir_ok
         # VIS absolute health, per frame, for R_sys and the abstain. Same instrument
         # as the IR side: a Mahalanobis novelty score, because a RATIO of a raw
         # statistic to its own threshold has no dynamic range -- `grad_gini / thr`
@@ -515,7 +528,8 @@ def load_context(
         # axis instead costs fog/night -0.0347, because fog lifts VIS p05 above mu_b
         # on 69% of night frames and the veil axis is what covers that. Conditional
         # keeps both: fog/day +0.0716 [+0.0657, +0.0784], fog/night +0.0000 exactly.
-        veil_requires_night = True
+        veil_requires_night = night_weak_fallback = True
+        ir_merge_veto = False
         # (2) Cross-modal SUPPORT, since cross-modal MERGING is unavailable: at
         # iou_thr 0.85 only 0.05% of VIS boxes have an IR partner. A score bonus at
         # IoU 0.30 that never moves a coordinate is +0.0078 on the tune runs and
@@ -523,7 +537,9 @@ def load_context(
         # held-out ones in all six variants it appears in.
         support_iou, support_gamma = 0.30, 0.5
     else:
-        veil_requires_night, support_iou, support_gamma = False, 0.0, 0.0
+        veil_requires_night = night_weak_fallback = False
+        ir_merge_veto = True
+        support_iou, support_gamma = 0.0, 0.0
 
     ctx = FusionContext(
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
@@ -536,11 +552,15 @@ def load_context(
         order_records=vis_prior_records,
         veto_rule="gini+ir_night" if preset == "crossmodal" else "photometric+veil",
         single_passthrough=(preset == "crossmodal"),
+        ir_night_raw=(ir_night_raw_flag if preset == "crossmodal" else None),
+        ir_ok=(ir_ok if preset == "crossmodal" else None),
         ir_d2=(ir_d2 if preset == "crossmodal" else None),
         ir_bound=(ir_bound if preset == "crossmodal" else 0.0),
         ir_bound_switch=(ir_bound_switch if preset == "crossmodal" else 0.0),
         q_vis_by_cond=q_vis_by_cond, veto_keep_cls=veto_keep_cls,
+        struct_lov_by_cond=struct_lov_by_cond,
         veil_requires_night=veil_requires_night,
+        night_weak_fallback=night_weak_fallback, ir_merge_veto=ir_merge_veto,
         support_iou=support_iou, support_gamma=support_gamma)
 
     if capability_sel:
@@ -632,6 +652,7 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
     kw.setdefault("consensus_distinct", ctx.consensus_distinct)
     kw.setdefault("support_iou", ctx.support_iou)
     kw.setdefault("support_gamma", ctx.support_gamma)
+    kw.setdefault("sigma_score_alpha", ctx.sigma_score_alpha)
     kw.update(overrides)
     vis = kw.pop("vis_records", ctx.vis_by_cond[condition])
     ir = kw.pop("ir_records", ctx.ir_clean)
@@ -697,6 +718,48 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
                 dark = b < float(ctx.c_vis.mu_b)
             vv |= night & (dark | veil if ctx.veil_requires_night else dark)
 
+            # `night_weak_fallback` repairs what `veil_requires_night` costs at
+            # night when IR is ALSO damaged. Putting the veil term behind the night
+            # arm means the AUTHORITY bound can now disarm it: on fogged night
+            # frames with a blurred IR the arm never fires, blind VIS stays in the
+            # fusion, and the cell loses -0.0296.
+            #
+            # The bound is doing its job -- it stops a damaged IR CAUSING a veto --
+            # but here the damaged IR is PREVENTING one, and those directions have
+            # opposite costs. So a disarmed IR is allowed to be CONFIRMED rather
+            # than believed: its night call stands only where VIS independently
+            # looks dark. That is the original two-of-two vote, used as the fallback
+            # instead of as the primary rule, and it introduces no new constant.
+            #
+            # WHAT COUNTS AS CONFIRMATION MATTERS. `dark` alone does not: VIS p05
+            # is 0 on lowlight/day -- DARKER than the real night run, on frames
+            # where the detector still works -- so a fallback keyed on darkness
+            # vetoes 20% of lowlight/glare_s2 DAY frames and costs that cell
+            # -0.0072. That is exactly the failure the crossmodal gate was built to
+            # escape, re-entered through the back door: a dark WORLD and a dark
+            # SENSOR look the same to a brightness statistic.
+            #
+            # `lap_over_var` is the axis that can tell them apart -- concentrated
+            # highlights on an otherwise empty field, the signature of real night.
+            # It is already fitted (clean-only novelty bound, structure_constants)
+            # and the crossmodal preset simply never used it. It fires on 100% of
+            # clean night, 0% of clean day and 3% of lowlight day. Where fog
+            # destroys it (0% on fogged night), `dark AND veil` stands in: fog is
+            # the one condition that lifts p05 without lifting it past daylight,
+            # and the veil term confirms the fog rather than assuming it.
+            #
+            # Still partial on fogged night -- fog lifts p05 above mu_b on 71% of
+            # those frames. No global photometric threshold can do better: fogged
+            # NIGHT p05 reaches 34 while clean DAY p05 starts at 21, so any
+            # threshold high enough to catch the former vetoes clear daylight.
+            if ctx.night_weak_fallback and ctx.ir_night_raw is not None:
+                concentrated = np.zeros(n, dtype=bool)
+                lv = ctx.struct_lov_by_cond.get(condition)
+                if lv is not None:
+                    concentrated = lv > float(
+                        ctx.struct_const["axes"]["lap_over_var"]["threshold"])
+                vv |= ctx.ir_night_raw & (~ctx.ir_ok) & (concentrated | (dark & veil))
+
         # ---- R_sys, and the abstain it exists for --------------------------
         # scope §7.4 introduced R_sys as "has every modality failed?", and under the
         # capability-only weights it degenerates to a constant 1 -- R is identically
@@ -725,7 +788,16 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         # `ir_ok` term in `ir_night` already does) -- it should leave the merge, for
         # the same reason a broken VIS does. Symmetric, and gated on VIS being
         # healthy so the frame is never left with nothing.
-        vi = (~healthy_ir) & healthy_vis
+        # MEASURED HARMFUL, so off under `crossmodal26m`. The claim behind this
+        # veto is true -- on the frames it fires VIS beats IR by +0.32 to +0.37 --
+        # and the veto is still a net loss: dropping it improves four of twelve
+        # cells and costs one 0.0004, summing to +0.0128 day and +0.0047 on the
+        # held-out runs. A subset AP asks "is this stream WORSE?"; a veto needs "is
+        # this stream a NET NEGATIVE?", and a stream 30x worse alone is still
+        # additive at the tail of a pooled ranking. Under capability-only weights
+        # IR enters at w_ir ~= 0.007, so a damaged IR was already nearly harmless
+        # and the bound was deleting free recall.
+        vi = ((~healthy_ir) & healthy_vis) if ctx.ir_merge_veto else np.zeros(n, bool)
 
         # ABSTAIN is REPORTED, not acted on, and that is a measured decision rather
         # than a cautious one. The obvious design -- when neither sensor can vouch

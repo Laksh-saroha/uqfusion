@@ -60,6 +60,7 @@ def sigma_weighted_fusion(
     consensus_distinct: bool = False,
     support_iou: float = 0.0,
     support_gamma: float = 0.0,
+    sigma_score_alpha: float = 0.0,
 ) -> tuple:
     """WBF with inverse-variance coordinate averaging — scope's actual claim (TODO A1).
 
@@ -128,6 +129,20 @@ def sigma_weighted_fusion(
     untouched, and the supporting box still competes on its own. `support_gamma=0`
     disables it exactly.
 
+    `sigma_score_alpha` puts the Gaussian head into the SCORE, which is the one
+    place it has never been. `sigma_weighted` moves coordinates and is documented
+    as inert; `r_box` was computed and then flattened to 0.86-0.95 by its own
+    calibration. Yet measured per box, "sigma below its frame median" separates true
+    positives at **3.00x** (P(TP@0.5) 0.687 vs 0.229) and at **3.39x** on TP@0.75 --
+    stronger on localisation than on presence, which is exactly what AP@50-95 pays
+    for, and exactly what a per-side sigma head is supposed to know.
+
+    A cluster's score is multiplied by ``(median_sigma / sigma) ** alpha``, with the
+    median taken WITHIN the frame and per input list. Within-frame is the whole
+    point: sigma's absolute scale drifts with condition and with detector, and the
+    signal that survives is which boxes in THIS frame are tightly localised relative
+    to their neighbours. `alpha = 0` disables it exactly.
+
     sigmas are in the SAME normalized units as boxes (divide pixel sigma by
     [W, H, W, H] before calling); zero/negative sigma is floored, since an
     infinitely precise box would take the entire weight.
@@ -137,6 +152,20 @@ def sigma_weighted_fusion(
     w = np.asarray(weights, dtype=np.float64)
     if w.sum() <= 0:
         raise ValueError("fusion weights must sum to > 0")
+
+    # --- per-list sigma reliability, computed BEFORE the prefilter -----------
+    # Within-frame and per input list: sigma's absolute scale drifts with the
+    # condition and with the detector, and what survives both is which boxes in
+    # THIS frame are tightly localised relative to their neighbours.
+    rel = []
+    for sg in sigmas_list:
+        sg = np.asarray(sg, dtype=np.float64).reshape(-1, 4)
+        if not sigma_score_alpha or not len(sg):
+            rel.append(np.ones(len(sg)))
+            continue
+        u = np.sqrt(np.maximum(sg, 0.0) ** 2).mean(axis=1)
+        med = np.median(u[u > 0]) if (u > 0).any() else 1.0
+        rel.append((med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha))
 
     # --- prefilter: one row per surviving box, grouped by label --------------
     by_label: dict[int, list] = {}
@@ -154,8 +183,8 @@ def sigma_weighted_fusion(
             if y2 < y1:
                 y1, y2 = y2, y1
             by_label.setdefault(int(lb[j]), []).append(
-                (float(sc[j]) * w[t_idx], float(w[t_idx]), np.array([x1, y1, x2, y2]), sg[j],
-                 t_idx))
+                (float(sc[j]) * w[t_idx] * float(rel[t_idx][j]), float(w[t_idx]),
+                 np.array([x1, y1, x2, y2]), sg[j], t_idx))
 
     out_boxes, out_scores, out_labels = [], [], []
     for label, entries in by_label.items():
@@ -250,6 +279,7 @@ def fuse_detections(
     consensus_distinct: bool = False,
     support_iou: float = 0.0,
     support_gamma: float = 0.0,
+    sigma_score_alpha: float = 0.0,
 ) -> dict:
     """Weighted Boxes Fusion of two modality records in the VIS frame.
 
@@ -385,10 +415,15 @@ def fuse_detections(
         alive = [(b, r, a) for b, r, _, v, a in streams if not v]
         if len(alive) == 1:
             b, record, a = alive[0]
+            c_ = np.asarray(record["conf"], dtype=np.float64) * a
+            if sigma_score_alpha and "sigma_ltrb" in record and len(c_):
+                sg = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
+                u = sg.mean(axis=1)
+                med = np.median(u[u > 0]) if (u > 0).any() else 1.0
+                c_ = c_ * (med / np.maximum(u, 1e-12)) ** float(sigma_score_alpha)
             return _with_carried(
                 {"boxes_xyxy": np.asarray(b, dtype=np.float64).reshape(-1, 4),
-                 "conf": np.asarray(record["conf"], dtype=np.float64) * a,
-                 "cls": np.asarray(record["cls"]).astype(int)}, carried)
+                 "conf": c_, "cls": np.asarray(record["cls"]).astype(int)}, carried)
 
     boxes_list, scores_list, labels_list, weights, sigmas_list = [], [], [], [], []
     for boxes, record, weight, vetoed, a in streams:
@@ -406,17 +441,19 @@ def fuse_detections(
             # lines up with (x1, y1, x2, y2); divide by the same norm as boxes.
             s = np.asarray(record["sigma_ltrb"], dtype=np.float64).reshape(-1, 4)
             sigmas_list.append(s / norm)
-        elif consensus_beta != 1.0 or consensus_distinct or support_gamma:
+        elif consensus_beta != 1.0 or consensus_distinct or support_gamma or sigma_score_alpha:
             # The local implementation needs a sigma column even when it will not
             # use one; ones make `_fuse_cluster` reduce to the stock coordinate mean.
             sigmas_list.append(np.ones_like(b))
 
-    if sigma_weighted or consensus_beta != 1.0 or consensus_distinct or support_gamma:
+    if (sigma_weighted or consensus_beta != 1.0 or consensus_distinct
+            or support_gamma or sigma_score_alpha):
         fused_boxes, fused_scores, fused_labels = sigma_weighted_fusion(
             boxes_list, scores_list, labels_list, sigmas_list, weights,
             iou_thr=iou_thr, skip_box_thr=skip_box_thr, use_sigma=sigma_weighted,
             consensus_beta=consensus_beta, consensus_distinct=consensus_distinct,
-            support_iou=support_iou, support_gamma=support_gamma)
+            support_iou=support_iou, support_gamma=support_gamma,
+            sigma_score_alpha=sigma_score_alpha)
     else:
         fused_boxes, fused_scores, fused_labels = weighted_boxes_fusion(
             boxes_list,
