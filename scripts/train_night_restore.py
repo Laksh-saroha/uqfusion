@@ -56,13 +56,23 @@ def main() -> int:
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--imgsz", type=int, default=640)
     ap.add_argument("--patience", type=int, default=10)
+    ap.add_argument("--resume", action="store_true",
+                    help="continue this run from its own weights/last.pt")
     args = ap.parse_args()
 
     assert SHIPPED.is_file(), f"missing shipped weights {SHIPPED}"
     assert DATA.is_file(), f"missing data yaml {DATA}"
     out = ROOT / "runs/full_scale" / RUN_NAME
-    assert not (out / "weights" / "best.pt").is_file(), \
-        f"{out} already holds weights -- refusing to overwrite a finished run"
+    if args.resume:
+        # Resume loads the optimizer, EMA and epoch counter from last.pt, so the
+        # start weights are that checkpoint -- NOT the shipped best.pt. Passing
+        # both would be ambiguous about which run is being continued.
+        last = out / "weights" / "last.pt"
+        assert last.is_file(), f"--resume but no {last}"
+        print(f"[night-restore] RESUMING from {last.relative_to(ROOT)}", flush=True)
+    else:
+        assert not (out / "weights" / "best.pt").is_file(), \
+            f"{out} already holds weights -- refusing to overwrite a finished run"
 
     cfg = load_config()
     t0 = time.time()
@@ -75,7 +85,7 @@ def main() -> int:
         cfg, str(DATA), variant="yolo26m", seed=0,
         epochs=args.epochs, imgsz=args.imgsz, batch=args.batch,
         run_name=RUN_NAME, out_subdir="full_scale",
-        resume=False, weights=str(SHIPPED),
+        resume=args.resume, weights=None if args.resume else str(SHIPPED),
         train_overrides={"patience": args.patience},
     )
     print(f"[night-restore] best {best}\n[night-restore] dir {run_dir}\n"
