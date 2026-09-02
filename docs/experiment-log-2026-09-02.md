@@ -47,6 +47,7 @@ fixing that after the fact.
 | G4 | draw-averaged gate | does soft-NMS pass a bar with the draw noise averaged out? | day passes every cell; **night is −1.03e-5 on `blur_s3/glare_s2`, negative on 4/4 draws** | **do not adopt** |
 | G5 | metric noise floor | is the macro metric its own noise source? | buoy is 5.3% of boxes and **75% of macro variance**; buoy AP is **exactly 0.0000** on 2 of 11 cells | **gate per class** |
 | G6 | paired vs unpaired delta | what is a gate actually able to resolve? | pairing buys **3–16×**; real 2σ floor **0.0014–0.0031**; shipped +0.0106 clears it 6.6× | **margin measured** |
+| G7 | re-price 3 constants | did `cap_ir_scale` 4, `iou_thr` 0.85 or the veil repair ship on noise? | no alternative dominates; veil-off costs **−0.0416** on `fog/clean`; `iou_thr` 0.95 unresolvable | **all three STAND** |
 
 ---
 
@@ -523,6 +524,80 @@ defensible margin to pre-register instead of an implicit zero.
 
 ---
 
+### 4.10 Re-pricing the three inherited constants — all three stand
+
+§4.9 supplied the margin §4.7 said a gate needs, so the three constants selected
+under the single-draw bar could finally be judged against a number.
+`docs/prereg-reprice-inherited-constants.md`, committed at `6b49ca0` **before the
+script existed** → `runs/eval/reprice_constants.md`. Single-axis arms, 4 draws,
+margin measured **per cell and per arm** as `2 × hypot(sd_draw, sd_paired_boot)`
+rather than imported, because the paired sd depends on how much the arm moves.
+
+Arms were built with `dataclasses.replace` on one context per (draw, IR
+condition) — all three constants are read at `run_systems` time. The run asserts
+this rather than assuming it: a replace-built `cap_ir_scale = 1.0` matched a
+genuinely loaded one at **0.0e+00** on both `cap_ir` and end-to-end AP.
+
+| arm | cells BETTER | cells WORSE | TEST delta | result |
+|---|---:|---:|---:|---|
+| `cap_ir_scale` = 1.0 | 2 | 8 | −0.0023 | worse somewhere |
+| `cap_ir_scale` = 2.0 | 2 | 6 | −0.0010 | worse somewhere |
+| `cap_ir_scale` = 8.0 | 5 | 2 | +0.0006 | worse somewhere |
+| `iou_thr` = 0.70 | 0 | 6 | −0.0017 | worse somewhere |
+| `iou_thr` = 0.95 | 0 | 1 | +0.0002 | worse somewhere |
+| veil repair = off | 0 | 7 | +0.0000 | worse somewhere |
+
+**No alternative dominates. All three constants STAND** — which by rule 5 means
+*not shown wrong*, never *optimal*.
+
+**The veil repair is the emphatic one.** Turning it off costs **−0.0416 on
+`fog/clean`** against a margin of 0.0054 — 7.7× — plus −0.0141 on the night arm
+of two cells and −0.0036 on both `blur_s3` cells, with **zero** cells better. The
+repair that §4 of the 2026-09-01 log adopted was not a close call and does not
+depend on the instrument that was in doubt.
+
+**`iou_thr` 0.85 is unresolvable against 0.95.** Ten of eleven cells come back
+`same`; the eleventh is −0.0007 against a margin of 0.0006. 0.95 is merging
+switched off, so this is §3.4 confirmed with a margin attached: **cross-modal
+merging does essentially nothing, and 0.85 is not doing work.** 0.70 *is* clearly
+worse (6 cells, TEST −0.0017), so the constant is not free — it just has a flat
+top between 0.85 and 1.0.
+
+**`cap_ir_scale` 4.0 sits on a plateau.** 1.0 and 2.0 are clearly worse (TEST
+−0.0023 and −0.0010). 8.0 is the only near-miss in the whole run — 5 cells better,
+TEST +0.0006 — but it is worse on `blur_s3/clean` (−0.0002) and on the night arm of
+`blur_s3/glare_s2` (−0.0009), so it does not dominate. ×4 stands; ×8 is the one
+alternative worth naming.
+
+#### The rule degenerated again, in exactly the way §4.7 diagnosed
+
+**8 of the 39 non-`same` verdicts rest on a delta of |Δ| < 1e-4 against a margin
+that also rounds to 0.0000.** Two of `cap_ir_scale = 8.0`'s five `BETTER` cells
+are deltas of +0.0000. When the measured margin collapses toward zero the rule
+stops being an equivalence test and becomes a sign test on numerical noise — the
+**identical** no-magnitude-floor flaw that rejected soft-NMS at −1.03e-5.
+
+I wrote this pre-registration *after* diagnosing that flaw in §4.7 and still did
+not put an absolute floor in it. I assumed the measured margin would supply one.
+It does not, on the cells where the arm barely moves.
+
+**It changes nothing here, and that was checked rather than asserted.** Recounting
+dominance at magnitude floors of 0, 1e-4, 2e-4 and 5e-4 leaves every arm with at
+least one `WORSE` cell and no arm dominating at any of them. The verdicts are
+robust; the rule that produced them is not, and the next pre-registration must
+carry an absolute floor **alongside** the measured margin.
+
+#### One number that looks wrong and is not
+
+The `cap_ir_scale` arms have paired-bootstrap sd of 0.0000–0.0001 while the
+`iou_thr` arms have 0.0007–0.0008 on the same cells. That is mechanism, not a bug:
+rescaling IR confidence is a *monotone transform within one stream*, so it only
+moves the VIS/IR interleaving in the concatenated list and moves it the same way
+on every frame. Changing `iou_thr` changes which boxes merge at all, which varies
+frame to frame. A stable arm genuinely has a stable delta.
+
+---
+
 ---
 
 ## 5. I2 — σ knows how far, not which way
@@ -782,11 +857,15 @@ that reads whichever column is available. Neither would have raised.
    code stays in the tree behind `crossmodal26m_snms`; the shipped preset has not
    moved. Re-opening it requires a *third* pre-registration with an explicit
    equivalence margin, written before the run — §4.7 says what it should contain.
-2. **Re-price the inherited constants** (§4.5, §4.9). `cap_ir_scale` ×4, the
-   veil-veto repair and `iou_thr` 0.85 were decided on single-draw corrupted cells.
-   §4.9 now supplies the per-cell margin to judge them against, and
-   `scripts/gate_snms_draw_avg.py` already does the draw loop. **The gate itself is
-   the finding** (§4.5). A single corruption draw cannot
+2. **Re-pricing the inherited constants — done, §4.10.** All three stand. What
+   is left on this axis is narrower: `cap_ir_scale` ×8 is the one alternative that
+   came close (5 cells better, TEST +0.0006, 2 cells worse), and rule 7 forbids
+   this run from selecting it. `iou_thr` has a flat top between 0.85 and 1.0, so
+   naming merging as OFF (§3.4) is now a free simplification rather than a guess.
+3. **Every gate rule this project writes needs an absolute magnitude floor**
+   (§4.10). Twice now a bar with no floor has turned into a sign test on numbers
+   near 1e-5 — once rejecting soft-NMS, once mislabelling 8 verdicts here. The
+   measured margin does not supply the floor on cells where the arm barely moves. A single corruption draw cannot
    resolve ±0.001 on cells scoring ~0.027, and every adoption decision this project
    made on those cells was taken with that instrument. `cap_ir_scale` ×4, the veil
    veto repair and `iou_thr` 0.85 were all decided under it. Some turned on margins
@@ -825,10 +904,12 @@ that reads whichever column is available. Neither would have raised.
 `scripts/sweep_vis_soft_nms.py`, `scripts/smoke_vis_soft_nms.py`,
 `scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
 `scripts/gate_snms_draw_avg.py`, `scripts/probe_metric_noise_floor.py`,
-`scripts/probe_delta_noise_floor.py`.
+`scripts/probe_delta_noise_floor.py`,
+`scripts/reprice_constants_draw_avg.py`.
 
-**Pre-registration.** `docs/prereg-snms-draw-averaged-gate.md`, committed at
-`1fbf735` before `snms_gate_draw_avg.md` existed.
+**Pre-registrations.** `docs/prereg-snms-draw-averaged-gate.md` (`1fbf735`) and
+`docs/prereg-reprice-inherited-constants.md` (`6b49ca0`), each committed before
+the run it governs existed.
 
 **Modified.** `src/uqfusion/eval/irdedup.py` (+`soft_nms_record`,
 `soft_nms_records`); `src/uqfusion/eval/ctx.py` (+`vis_soft_nms`,
@@ -839,7 +920,8 @@ that reads whichever column is available. Neither would have raised.
 `tta_o2m`, `within_modality`, `merge_support_split`, `checkpoint_ensemble`,
 `cap_ir_gated`, `per_class_levers`, `ap_by_size`, `night_restore_audit`,
 `vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
-`snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`.
+`snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`,
+`reprice_constants`.
 
 **New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames),
 `runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3),
