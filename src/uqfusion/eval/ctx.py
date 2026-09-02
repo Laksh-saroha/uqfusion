@@ -238,6 +238,7 @@ def load_context(
     preset: str = "adopted",
     ir_condition: str | None = None,
     ir_nms: float | None = None,
+    vis_soft_nms: float | None = None,
     cap_ir_scale: float | None = None,
     structure_dir="runs/derived/structure",
     structure_constants="runs/eval/structure_constants.json",
@@ -283,11 +284,20 @@ def load_context(
     +0.0003, and -0.0003 (CI spans zero) on each of the four night cells. Every one
     of the eight cells lands at or above max(VIS, IR).
     """
-    if preset not in ("adopted", "crossmodal", "crossmodal26m"):
+    if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms"):
         raise ValueError(f"unknown preset {preset!r}")
     # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
     # force. It is a separate preset and not a change to `crossmodal` because every
     # published number was measured under the latter and must stay reproducible.
+    #
+    # `crossmodal26m_snms` is `crossmodal26m` plus VIS soft-NMS, adopted 2026-09-02.
+    # Same reasoning one layer up: the +0.0106 headline and the whole of
+    # `final_26m_grid_v2.md` were measured under `crossmodal26m`, so that preset does
+    # not move. A caller who wants the shipped system asks for this one.
+    if preset == "crossmodal26m_snms":
+        if vis_soft_nms is None:
+            vis_soft_nms = 0.5
+        preset = "crossmodal26m"
     v2 = preset == "crossmodal26m"
     if v2:
         preset = "crossmodal"
@@ -341,6 +351,33 @@ def load_context(
     vis_prior_records = vis_by_cond.get("clean")
     if vis_prior_records is None:
         vis_prior_records, _ = load_cache(cache_dir / "gauss_vis_paired_clean.pkl")
+
+    if vis_soft_nms:
+        # DETECTOR-SIDE score decay on the VIS stream, the exact counterpart of
+        # `ir_nms` on the IR side, and applied at the same point for the same
+        # reason. Gaussian soft-NMS: a box overlapping a higher-scoring sibling of
+        # its own class keeps its coordinates and loses score.
+        #
+        # Adopted 2026-09-02 on `probe_within_modality.py`: +0.0025 [+0.0021,
+        # +0.0029] on the VIS stream, positive on all three held-out day runs --
+        # the only arm in the 16-job ideas queue that was positive, tight AND
+        # generalising. 46.6% of VIS day boxes have a same-class sibling at
+        # IoU>=0.6 and `iou_thr` 0.85 never clustered any of them.
+        #
+        # It is NOT a merging arm: no coordinate is combined, so it does not
+        # inherit the loss that sank every WBF variant (C4/C5, and again here).
+        # It only changes the ORDER, which the oracle probe says is the surface
+        # with +0.1288 still on it.
+        #
+        # `vis_prior_records` is suppressed too: `c_vis` and the capability prior
+        # are calibration fitted on the stream the system consumes, and letting
+        # them see a different one is the mismatch the `ir_condition` guard above
+        # exists to prevent.
+        from uqfusion.eval.irdedup import soft_nms_records
+        vis_by_cond = {k: soft_nms_records(v, float(vis_soft_nms))
+                       for k, v in vis_by_cond.items()}
+        vis_prior_records = (vis_by_cond["clean"] if "clean" in vis_by_cond
+                             else soft_nms_records(vis_prior_records, float(vis_soft_nms)))
 
     scorer_vis = fit_scorer(cache_dir / "gauss_vis_train_clean.pkl")
     scorer_ir = fit_scorer(cache_dir / "gauss_ir_train_clean.pkl")

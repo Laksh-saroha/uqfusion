@@ -53,3 +53,47 @@ def nms_record(rec: dict, thr: float) -> dict:
 
 def nms_records(records: list[dict], thr: float) -> list[dict]:
     return [nms_record(r, thr) for r in records]
+
+
+def soft_nms_record(rec: dict, sigma_nms: float = 0.5, min_conf: float = 1e-4) -> dict:
+    """Gaussian soft-NMS, per class. Decays a neighbour's score by
+    `exp(-iou^2 / sigma_nms)` instead of deleting it.
+
+    Measured on the VIS stream 2026-09-02 (`probe_within_modality.py`): +0.0025
+    mAP50-95 [+0.0021, +0.0029], positive on all three held-out day runs. Hard NMS
+    at 0.90 is +0.0016 -- smaller, because deleting a box removes its chance of
+    being the one that matches, while decaying it only moves it down the ranking.
+
+    Why this is not the merging family that keeps losing: no coordinate is ever
+    combined. The surviving boxes are the detector's own, untouched; only the
+    ORDER changes, which is the one surface the oracle probe says is still open.
+
+    `sigma_ltrb` travels with its box for the reason `nms_record` documents --
+    `compute_reliability` indexes sigma against `boxes_xyxy`.
+    """
+    b = np.asarray(rec["boxes_xyxy"], dtype=np.float64).reshape(-1, 4)
+    s = np.asarray(rec["conf"], dtype=np.float64).reshape(-1).copy()
+    c = np.asarray(rec["cls"]).reshape(-1)
+    if len(s) < 2:
+        return rec
+    sg = np.asarray(rec.get("sigma_ltrb", np.zeros((len(s), 4))),
+                    dtype=np.float64).reshape(-1, 4)
+    keep: list[int] = []
+    for cl in np.unique(c):
+        order = np.flatnonzero(c == cl)
+        order = order[np.argsort(-s[order], kind="stable")].tolist()
+        while order:
+            i = order.pop(0)
+            keep.append(i)
+            if not order:
+                break
+            iou = _iou(b[order], b[i])
+            s[order] = s[order] * np.exp(-(iou ** 2) / sigma_nms)
+            order = [o for o in order if s[o] > min_conf]
+    k = np.asarray(sorted(keep), dtype=int)
+    return {**rec, "boxes_xyxy": b[k], "conf": s[k], "cls": np.asarray(c)[k],
+            "sigma_ltrb": sg[k]}
+
+
+def soft_nms_records(records: list[dict], sigma_nms: float = 0.5) -> list[dict]:
+    return [soft_nms_record(r, sigma_nms) for r in records]
