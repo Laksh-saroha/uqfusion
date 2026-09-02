@@ -735,6 +735,57 @@ the evidence supported**, and the 82,694 unflagged boxes are the recoverable
 population. The sound next move is to restore above a threshold **as ignore-regions,
 not as positives**, and fine-tune. Held: it is a training decision, not a queue job.
 
+### 7.1 The restore, executed
+
+Pre-registered at `docs/prereg-night-label-restore.md`, committed `030244e`
+**before any label was touched**. Two steps, both verified:
+
+| step | result |
+|---|---|
+| `filter_night_boxes.py --restore` | 17,502 files, **132,688 boxes** back — exact |
+| `restore_night_perbox.py --execute` | **38,135** flagged boxes re-dropped across 10,766 files |
+| net | **+94,553 boxes**; `pohang01` TRAIN 2,031 → **96,584** |
+
+The per-box verdict comes from the committed `runs/visfilter/box_scores.csv` rather
+than a fresh scoring pass, so the labels match the audit that justified them
+box-for-box. `line_idx` alignment against the restored files was checked first
+(0 out of range across 2,819 sampled files) — an off-by-one there would have
+deleted a different 38,135 boxes and nothing downstream would have noticed.
+
+**Provenance, since `runs/` is gitignored and the manifest cannot be tracked:**
+
+* VIS train label hash **`b92739202127b6d8e3bbe948fe556bd440116ce83d23485438e5cacf0deb84f7`**
+  (was `287b11c50b5a…`). **This now diverges from the copy on `dgxanode01`** — quote
+  it before any server run mixes the two.
+* thresholds `t_int` 45.0, `t_grad` 8.0, `t_contrast` 10.0, `dark_median` 40.0
+* `runs/visfilter/perbox_restore_manifest.json` holds the full record locally.
+
+`.pre_visfilter` backups are written once and never clobbered
+(`filter_night_boxes.py:617`), so the original pre-filter state survives both
+operations. `val`/`test` and all IR labels are untouched.
+
+Two traps handled rather than assumed. The Ultralytics label cache was moved aside
+instead of trusted to invalidate itself across a 10,766-file rewrite; the retrain's
+scan then reported **771 backgrounds of 48,136**, down from ~9,400, which is the
+proof the new labels are in use. And `restore_night_perbox.py` now **refuses to
+re-execute** while its manifest exists: `line_idx` indexes the *restored* file, so a
+second run would apply the same indices to shortened files and delete the wrong
+boxes — the built-in `max(idxs) >= len(lines)` check catches only the files that
+shrank past the highest index, not the rest.
+
+**What is being measured, and what cannot be.** `veto_vis` fires on **100% of night
+frames**, so the fused night number is `ir_only` by construction and cannot move
+whatever the retrained detector learns. The pre-registered endpoint is therefore
+VIS-only `mAP@50-95` on the 2,068 night val frames: **DEAD** < 0.005, **WEAK**
+0.005–0.02, **ALIVE** ≥ 0.02, with a day guard at `−max(2 × sd_paired, 0.002)`.
+
+The prereg also records why a null here would be weak: the fine-tune starts from a
+checkpoint trained on *empty* night labels, so the initialisation already encodes
+"night frames contain nothing". **ALIVE** would be strong evidence; **DEAD** is
+provisional and cannot separate a blind sensor from an unbudged initialisation.
+Settling that needs a from-scratch run (~13.7 h), which the prereg does not
+authorise.
+
 ---
 
 ## 8. I7 and I8 — one null, one non-measurement
@@ -905,11 +956,13 @@ that reads whichever column is available. Neither would have raised.
 `scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
 `scripts/gate_snms_draw_avg.py`, `scripts/probe_metric_noise_floor.py`,
 `scripts/probe_delta_noise_floor.py`,
-`scripts/reprice_constants_draw_avg.py`.
+`scripts/reprice_constants_draw_avg.py`, `scripts/restore_night_perbox.py`,
+`scripts/train_night_restore.py`.
 
-**Pre-registrations.** `docs/prereg-snms-draw-averaged-gate.md` (`1fbf735`) and
-`docs/prereg-reprice-inherited-constants.md` (`6b49ca0`), each committed before
-the run it governs existed.
+**Pre-registrations.** `docs/prereg-snms-draw-averaged-gate.md` (`1fbf735`),
+`docs/prereg-reprice-inherited-constants.md` (`6b49ca0`) and
+`docs/prereg-night-label-restore.md` (`030244e`), each committed before the run it
+governs existed.
 
 **Modified.** `src/uqfusion/eval/irdedup.py` (+`soft_nms_record`,
 `soft_nms_records`); `src/uqfusion/eval/ctx.py` (+`vis_soft_nms`,
