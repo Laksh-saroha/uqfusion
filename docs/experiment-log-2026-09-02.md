@@ -45,6 +45,8 @@ fixing that after the fact.
 | G2 | soft-NMS gate, run 2 | same, at the pre-registered σ = 0.5 | **worst cell −0.0004** (`blur_s3/glare_s2`) | **bar not met — held** |
 | G3 | corruption redraw | is that −0.0004 the system, or one draw? | same cell over 6 seeds: **mean +0.0010, sd 0.0011, negative on 2/6**; baseline swings 0.0260–0.0289 | **the bar was noise-limited** |
 | G4 | draw-averaged gate | does soft-NMS pass a bar with the draw noise averaged out? | day passes every cell; **night is −1.03e-5 on `blur_s3/glare_s2`, negative on 4/4 draws** | **do not adopt** |
+| G5 | metric noise floor | is the macro metric its own noise source? | buoy is 5.3% of boxes and **75% of macro variance**; buoy AP is **exactly 0.0000** on 2 of 11 cells | **gate per class** |
+| G6 | paired vs unpaired delta | what is a gate actually able to resolve? | pairing buys **3–16×**; real 2σ floor **0.0014–0.0031**; shipped +0.0106 clears it 6.6× | **margin measured** |
 
 ---
 
@@ -442,6 +444,85 @@ mechanism, and it is consistent: soft-NMS cleans up the VIS stream, and it matte
 most exactly when the VIS stream is all there is. It is a detector post-process that
 shows up in the fusion metric, not a fusion improvement.
 
+### 4.9 What the bar should have been — the noise floor, measured
+
+§4.7 said the missing piece was an equivalence margin sized from real variance,
+and refused to invent one after the fact. This measures it, so a future
+pre-registration has a number to quote instead of a judgement call.
+`runs/eval/metric_noise_floor.md` and `runs/eval/delta_noise_floor.md`, shipped
+system, day frames only (buoy has no night GT).
+
+**The metric is macro over two very unequal classes.** Day GT is ship **10,663**
+boxes and buoy **600** — buoy is 5.3% of the boxes carrying **50%** of the number.
+
+| clean cell | sd ship | sd buoy | buoy/ship | buoy share of macro variance |
+|---|---:|---:|---:|---:|
+| clean/clean | 0.0058 | 0.0100 | 1.7× | 75% |
+
+Three structural facts follow, and none of them are statistical:
+
+* **Buoy AP is 0.2780 with sd 0.0000 on all five `clean/*` cells.** Those cells
+  corrupt IR only, and IR is `nc=1`, so corrupting IR cannot move buoy at all.
+  Half the metric is inert on five of eleven cells.
+* **Buoy AP is exactly 0.0000 on `noise_s2/clean` and `lowlight/glare_s2`.** Macro
+  there is precisely `ship/2`. Any gain on those cells is a ship-only effect
+  wearing a macro disguise.
+* Both cells also have a *measured delta floor of 0.0000* — they carry no
+  information for any gate and should be stated as such rather than counted as
+  two of eleven passing cells.
+
+**And a correction to my own first pass.** `metric_noise_floor.md` §3 reported
+`2 × sd(AP)` as a "smallest resolvable effect" and landed on **0.0120** for the
+clean cell. That is the uncertainty in the metric's *level* and it is the wrong
+yardstick: a gate scores both arms **on the same frames**, so the resample is
+common and almost all of it cancels. Taken literally it would have put the shipped
+**+0.0106 crossmodal gate inside the noise**, which is false. Measured directly:
+
+| cell | sd unpaired | sd paired | pairing buys |
+|---|---:|---:|---:|
+| clean/clean | 0.0087 | 0.0008 | 11× |
+| rain_s2/clean | 0.0043 | 0.0003 | 16× |
+| blur_s3/glare_s2 | 0.0023 | 0.0009 | 3× |
+
+The real per-cell floor, corruption draw and paired bootstrap in quadrature:
+
+| cell (vis/ir) | sd draw | sd paired boot | 2×total | binding |
+|---|---:|---:|---:|---|
+| clean/clean | 0.0000 | 0.0008 | 0.0016 | frames |
+| clean/glare_s2 | 0.0001 | 0.0007 | 0.0014 | frames |
+| clean/blur_s2 | 0.0000 | 0.0007 | 0.0014 | frames |
+| clean/noise_s2 | 0.0001 | 0.0008 | 0.0016 | frames |
+| clean/fog_s2 | 0.0002 | 0.0008 | 0.0016 | frames |
+| blur_s3/clean | 0.0011 | 0.0008 | 0.0027 | draw |
+| noise_s2/clean | 0.0000 | 0.0000 | 0.0000 | — |
+| rain_s2/clean | 0.0003 | 0.0003 | 0.0008 | frames |
+| fog/clean | 0.0008 | 0.0003 | 0.0017 | draw |
+| lowlight/glare_s2 | 0.0000 | 0.0000 | 0.0000 | — |
+| blur_s3/glare_s2 | 0.0013 | 0.0009 | 0.0031 | draw |
+
+What this settles:
+
+1. **The shipped +0.0106 clears its cell's floor by 6.6×.** The crossmodal gate is
+   not in question and never was.
+2. **The −0.0004 that failed run 2 sat 8× inside its own cell's floor** (0.0031).
+   §4.5 argued that from sign instability; this is the same conclusion with a
+   number attached.
+3. **Where to spend is now cell-dependent.** On the five clean cells the *frames*
+   bind, not the draw — and §10 item 6 shows there are no more paired day frames
+   in existence, so those cells are permanently at their floor. On the
+   both-degraded cells the *draw* binds, and draws are cheap. More draws is the
+   right purchase on exactly the cells §4.5 was about.
+4. **The margin a third pre-registration should quote** is the `2×total` column,
+   fixed per cell in advance. It is between 0.0014 and 0.0031 on the cells that
+   carry information — two to three orders of magnitude above the −1.03e-5 night
+   delta that rejected soft-NMS.
+
+That last point is stated as a fact about the instrument, **not** as grounds to
+re-open §4.7. The rejection stands; what changes is that the next gate has a
+defensible margin to pre-register instead of an implicit zero.
+
+---
+
 ---
 
 ## 5. I2 — σ knows how far, not which way
@@ -701,7 +782,11 @@ that reads whichever column is available. Neither would have raised.
    code stays in the tree behind `crossmodal26m_snms`; the shipped preset has not
    moved. Re-opening it requires a *third* pre-registration with an explicit
    equivalence margin, written before the run — §4.7 says what it should contain.
-2. **The gate itself is the finding** (§4.5). A single corruption draw cannot
+2. **Re-price the inherited constants** (§4.5, §4.9). `cap_ir_scale` ×4, the
+   veil-veto repair and `iou_thr` 0.85 were decided on single-draw corrupted cells.
+   §4.9 now supplies the per-cell margin to judge them against, and
+   `scripts/gate_snms_draw_avg.py` already does the draw loop. **The gate itself is
+   the finding** (§4.5). A single corruption draw cannot
    resolve ±0.001 on cells scoring ~0.027, and every adoption decision this project
    made on those cells was taken with that instrument. `cap_ir_scale` ×4, the veil
    veto repair and `iou_thr` 0.85 were all decided under it. Some turned on margins
@@ -739,7 +824,8 @@ that reads whichever column is available. Neither would have raised.
 `scripts/sweep_cap_ir_gated.py`, `scripts/sweep_merge_support_split.py`,
 `scripts/sweep_vis_soft_nms.py`, `scripts/smoke_vis_soft_nms.py`,
 `scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
-`scripts/gate_snms_draw_avg.py`.
+`scripts/gate_snms_draw_avg.py`, `scripts/probe_metric_noise_floor.py`,
+`scripts/probe_delta_noise_floor.py`.
 
 **Pre-registration.** `docs/prereg-snms-draw-averaged-gate.md`, committed at
 `1fbf735` before `snms_gate_draw_avg.md` existed.
@@ -753,7 +839,7 @@ that reads whichever column is available. Neither would have raised.
 `tta_o2m`, `within_modality`, `merge_support_split`, `checkpoint_ensemble`,
 `cap_ir_gated`, `per_class_levers`, `ap_by_size`, `night_restore_audit`,
 `vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
-`snms_gate_draw_avg`.
+`snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`.
 
 **New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames),
 `runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3),
