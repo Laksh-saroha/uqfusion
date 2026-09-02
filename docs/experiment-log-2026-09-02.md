@@ -14,8 +14,13 @@ reproduce every published number bit-for-bit (`smoke_crossmodal_gate.py` 14/14;
 element by element).
 
 **Headline: nothing shipped.** The one arm that passed a screen — VIS soft-NMS —
-failed its own pre-registered adoption bar by −0.0004 on one cell. §4 is the whole
-argument for why that is not being waved through.
+failed its own pre-registered adoption bar by −0.0004 on one cell. Re-drawing that
+cell's corruptions at five more seeds showed the −0.0004 was the *seed*, not the
+system (§4.5) — which indicts the gate itself, not just this arm. A second,
+draw-averaged bar was pre-registered and run; the day arm passed every cell and the
+**night arm failed at −1.03e-5 on 4 of 4 draws**, so it still does not adopt
+(§4.6). §4.7 records that the bar I wrote had no magnitude floor, and why I am not
+fixing that after the fact.
 
 ---
 
@@ -38,6 +43,8 @@ argument for why that is not being waved through.
 | I9b | merge vs support threshold | is `iou_thr` 0.85 doing anything? | **0.95 (merging off) scores −0.0001** | architecture named |
 | G1 | soft-NMS gate, run 1 | does the VIS-stream gain survive fusion? | every cell ≥ 0 — **but σ was selected on TEST** | **invalid** |
 | G2 | soft-NMS gate, run 2 | same, at the pre-registered σ = 0.5 | **worst cell −0.0004** (`blur_s3/glare_s2`) | **bar not met — held** |
+| G3 | corruption redraw | is that −0.0004 the system, or one draw? | same cell over 6 seeds: **mean +0.0010, sd 0.0011, negative on 2/6**; baseline swings 0.0260–0.0289 | **the bar was noise-limited** |
+| G4 | draw-averaged gate | does soft-NMS pass a bar with the draw noise averaged out? | day passes every cell; **night is −1.03e-5 on `blur_s3/glare_s2`, negative on 4/4 draws** | **do not adopt** |
 
 ---
 
@@ -309,12 +316,125 @@ Two ways forward, both legitimate, neither taken unilaterally:
 1. **Buy a decision.** The bar cannot be adjudicated on 1,200 paired frames. Re-run
    the gate on a corrupted-condition day substrate at `pohang04` scale; a −0.0004
    either becomes a real cost or vanishes.
+   **This option does not exist — see §10 item 6.** IR val is 2,234 frames total and
+   `pohang04` has no IR at all; the 1,200 paired day frames are every paired day
+   frame there is. §4.5 takes the axis that *was* available instead.
 2. **Ship the narrow form.** Adopt soft-NMS only where it is unambiguous — the
    `single_passthrough` frames, and the clean-VIS cells where it gains +0.0012 to
    +0.0026 — and leave both-degraded cells alone. That is a new pre-registration,
    not a loosened one, and needs its own gate.
 
-### 4.5 Where the gain actually lands
+### 4.5 The redraw — the bar was measuring the seed
+
+`runs/eval/snms_cell_redraw.md`. §4.4 named two ways forward. Before either, one
+question had to be answered: is −0.0004 a property of *soft-NMS*, or of *one
+corruption draw*? Every gate this project has run rests on a single realisation of
+each corruption — blur(s3, seed 1) over VIS, glare(s2, seed 7) over IR. The
+bootstrap resamples **frames**, so it is structurally blind to this.
+
+Re-drawing that cell's two corruptions at five further seeds, kind and severity
+fixed:
+
+| vis/ir seed | shipped day | soft-NMS day | delta |
+|---|---:|---:|---:|
+| 1/7 (shipped) | 0.0268 | 0.0264 | −0.0004 |
+| 901/911 | 0.0277 | 0.0298 | +0.0021 |
+| 902/912 | 0.0260 | 0.0256 | −0.0005 |
+| 903/913 | 0.0278 | 0.0291 | +0.0012 |
+| 904/914 | 0.0289 | 0.0301 | +0.0012 |
+| 905/915 | 0.0264 | 0.0285 | +0.0020 |
+
+Mean +0.0010, sd 0.0011, negative on 2 of 6. The `clean/clean` control is **+0.0012
+on all six rows, identical to four decimals** — no corruption, no movement, so the
+spread above is the seed and nothing else.
+
+The decisive number is not the mean. It is that the **shipped baseline itself swings
+0.0260–0.0289** across draws — roughly seven times the −0.0004 that tripped the bar.
+
+**This is a finding about the instrument, not about soft-NMS.** A single-draw
+every-cell test applied to cells scoring ~0.027 cannot resolve ±0.001, and will
+accept and reject arms by coin flip *in both directions*. That indicts every
+adoption decision this project has made on the low-scoring corrupted cells — not
+only this one.
+
+### 4.6 The draw-averaged gate — and it still does not adopt
+
+So the bar was re-specified, pre-registered at `docs/prereg-snms-draw-averaged-gate.md`
+and committed at `1fbf735` **before the run existed**: 4 draws (shipped + seeds
+901/902/903), σ held at 0.5, adopt iff the draw-averaged delta is ≥ 0 on every cell
+day *and* night, TEST rejects but never selects, and sd / neg-counts / per-draw
+tables / bootstrap CIs named in advance as **diagnostics, not decision inputs**.
+
+`runs/eval/snms_gate_draw_avg.md`, 6,858 s, 21 caches rebuilt.
+
+| cell (vis/ir) | mean delta day | sd | neg | mean delta night |
+|---|---:|---:|---:|---:|
+| clean/clean | +0.0012 | 0.0000 | 0/4 | +0.0000 |
+| clean/glare_s2 | +0.0013 | 0.0001 | 0/4 | +0.0000 |
+| clean/blur_s2 | +0.0012 | 0.0000 | 0/4 | +0.0000 |
+| clean/noise_s2 | +0.0026 | 0.0001 | 0/4 | +0.0000 |
+| clean/fog_s2 | +0.0026 | 0.0002 | 0/4 | +0.0000 |
+| blur_s3/clean | +0.0007 | 0.0011 | 1/4 | +0.0000 |
+| noise_s2/clean | +0.0000 | 0.0000 | 0/4 | +0.0000 |
+| rain_s2/clean | +0.0014 | 0.0003 | 0/4 | +0.0000 |
+| fog/clean | +0.0006 | 0.0008 | 1/4 | +0.0000 |
+| lowlight/glare_s2 | +0.0000 | 0.0000 | 0/4 | +0.0000 |
+| blur_s3/glare_s2 | +0.0006 | 0.0013 | 2/4 | **−0.0000** |
+
+The redraw was right about the day arm: `blur_s3/glare_s2` averages **+0.0006**, and
+the −0.0004 was one draw of a cell whose sd is 0.0013. TEST is +0.0020 on clean, so
+rule 5 does not reject. **Every day cell passes.**
+
+The arm fails on **night**, and it fails somewhere I was not looking.
+
+| draw | night shipped | night soft-NMS | delta |
+|---|---:|---:|---:|
+| 1/7 | 0.0479743640 | 0.0479675248 | −6.84e-06 |
+| 901/911 | 0.0459421531 | 0.0459334799 | −8.67e-06 |
+| 902/912 | 0.0453137984 | 0.0453010358 | −1.28e-05 |
+| 903/913 | 0.0464279472 | 0.0464149457 | −1.30e-05 |
+
+Mean **−1.03e-5**, negative on **4 of 4**, over 1,032 night frames.
+
+This is a different animal from the day failure. The day −0.0004 flipped sign across
+draws; this does not. It is 40× smaller in magnitude and *perfectly sign-stable* —
+the corruption seed moves the night baseline by 2.6e-3 between draws, yet the delta
+stays negative every time. That is a mechanical effect, not noise: VIS is near-dead
+at night, and soft-NMS decays the few VIS scores that survive into the fused list.
+Averaging cannot rescue it, because there is nothing random to average.
+
+**DO NOT ADOPT.** `vis_soft_nms` stays off; `crossmodal26m` remains the shipped
+preset, `crossmodal26m_snms` remains available and measured.
+
+### 4.7 What I got wrong writing the bar, and what I am not doing about it
+
+Two things to put on the record, in the right order.
+
+**First, the honest verdict stands.** The rule was fixed and committed before the
+number existed. It says night ≥ 0 on every cell. Night is −1.03e-5 on one cell, on
+every draw. Arguing now that 1e-5 is *too small to count* is the identical move
+§4.4 refused and the veil veto made — loosening a bar after seeing which side the
+number fell on. The answer is no.
+
+**Second, the bar was badly written, and I wrote it.** It has no magnitude floor. A
+1e-5 sign-stable difference and a 1e-2 regression fail it identically, which is not
+a bar that expresses anything anyone believes. I wrote it with *day* noise in mind
+— the whole document argues about ±0.001 on cells scoring 0.027 — and never asked
+what the night arm would do, where VIS contributes almost nothing and the delta is
+consequently deterministic and tiny.
+
+The correct fix is an **equivalence margin**: a band around zero inside which a cell
+counts as unchanged, fixed in advance from the measured draw-to-draw sd of that
+cell. Under any margin wider than 1e-5 — and the day sd on the same cell is 1.3e-3,
+*two orders of magnitude* larger — this arm passes.
+
+I am not applying that retroactively. A margin invented after seeing that it flips
+this verdict is not a pre-registration, it is a rationalisation with a formula
+attached. If soft-NMS is worth re-gating, it is worth a third pre-registration
+written before the fourth run, and this section is the evidence for what that
+document should contain.
+
+### 4.8 Where the gain actually lands
 
 The two largest cells are `clean/noise_s2` (+0.0026) and `clean/fog_s2` (+0.0024) —
 **the cells where IR is destroyed and VIS carries the whole load**. That is the
@@ -560,14 +680,34 @@ that reads whichever column is available. Neither would have raised.
    They measure a build bug. §8.3.
 5. **The gated `cap_ir_scale` table is not a measurement of gating.** `IR vetoed` is
    0.000 everywhere. §8.2.
+6. **"Re-run the gate on a day substrate at `pohang04` scale."** Mine, §4.4, and
+   impossible. I wrote it without checking IR availability. Measured: VIS val is
+   11,352 frames (pohang00 1672, 01 2068, 02 2690, 03 2579, 04 2343) but **IR val is
+   2,234** (pohang00 836, 01 1034, 02 247, 03 117) and **`pohang04` has no IR at
+   all**. The day half of IR is 836+247+117 = **exactly the 1,200 paired frames the
+   gate already uses.** There is no wider fused substrate to move to. §4.5 takes the
+   corruption-draw axis instead, which was the un-measured one all along.
+7. **"The bar was tripped by draw noise, so the arm is fine."** Half right, and I
+   should not have implied the rest. §4.5 is correct about the *day* cell. The
+   draw-averaged gate then failed on **night**, at −1.03e-5 on 4 of 4 draws — a
+   sign-stable effect that averaging cannot touch. §4.6.
 
 ---
 
 ## 11. Open
 
-1. **The soft-NMS decision** (§4.4) — held pending either a wider gate or a narrower
-   pre-registration. The code is in the tree behind `crossmodal26m_snms`; the shipped
-   preset has not moved.
+1. **The soft-NMS decision** (§4.6) — **closed: do not adopt.** Failed a
+   draw-averaged, pre-registered bar on the night arm at −1.03e-5, 4/4 draws. The
+   code stays in the tree behind `crossmodal26m_snms`; the shipped preset has not
+   moved. Re-opening it requires a *third* pre-registration with an explicit
+   equivalence margin, written before the run — §4.7 says what it should contain.
+2. **The gate itself is the finding** (§4.5). A single corruption draw cannot
+   resolve ±0.001 on cells scoring ~0.027, and every adoption decision this project
+   made on those cells was taken with that instrument. `cap_ir_scale` ×4, the veil
+   veto repair and `iou_thr` 0.85 were all decided under it. Some turned on margins
+   far larger than the noise; **which ones did not is unmeasured.** This is now the
+   highest-value open item and it is cheap: `scripts/gate_snms_draw_avg.py` already
+   does the draw loop.
 2. **I4 full-resolution retrain** — the screen says go (§6.3). Not launched; hours of
    GPU and tens of GB.
 3. **I5 night restore** — the audit says the deletion overreached (§7). Restoring
@@ -598,7 +738,11 @@ that reads whichever column is available. Neither would have raised.
 `scripts/probe_ap_by_size.py`, `scripts/sweep_per_class.py`,
 `scripts/sweep_cap_ir_gated.py`, `scripts/sweep_merge_support_split.py`,
 `scripts/sweep_vis_soft_nms.py`, `scripts/smoke_vis_soft_nms.py`,
-`scripts/audit_night_restore.py`.
+`scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
+`scripts/gate_snms_draw_avg.py`.
+
+**Pre-registration.** `docs/prereg-snms-draw-averaged-gate.md`, committed at
+`1fbf735` before `snms_gate_draw_avg.md` existed.
 
 **Modified.** `src/uqfusion/eval/irdedup.py` (+`soft_nms_record`,
 `soft_nms_records`); `src/uqfusion/eval/ctx.py` (+`vis_soft_nms`,
@@ -608,10 +752,13 @@ that reads whichever column is available. Neither would have raised.
 `oracle_headroom`, `oracle_headroom_day`, `sigma_residual`, `sigma_residual_day`,
 `tta_o2m`, `within_modality`, `merge_support_split`, `checkpoint_ensemble`,
 `cap_ir_gated`, `per_class_levers`, `ap_by_size`, `night_restore_audit`,
-`vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`.
+`vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
+`snms_gate_draw_avg`.
 
 **New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames),
-`runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3).
+`runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3),
+`runs/cache_m_draw{901..905}/` (corruption redraws; uncorrupted members hard-linked
+from `runs/cache_m`, which is never written).
 
 **Queue.** `runs/queue_ideas/` — `run_console.log`, `state.json`, `logs/` (16 jobs,
 15 succeeded, `i1_oracle_day` failed then fixed and rerun).
@@ -619,5 +766,6 @@ that reads whichever column is available. Neither would have raised.
 **Companion.** `docs/architecture-ideas-2026-09-01.md` — the argued list these jobs
 were generated from.
 
-**Commits.** None. The tree carries the two source edits and all new scripts
-uncommitted.
+**Commits.** `44274a3` the ideas queue and the two source edits; `1fbf735` the
+pre-registration and `redraw_snms_cell.py`, deliberately committed *before* the
+draw-averaged gate ran; then this log and `gate_snms_draw_avg.py`.
