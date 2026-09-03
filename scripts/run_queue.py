@@ -511,7 +511,14 @@ def vis_benchmark_queue(cfg: dict) -> dict:
                 "the dgxanode01 A100 MIG 3g.40gb slice (batch 16 = Phase 1's "
                 "largest-common-fit on a 40 GB slice; workers 6 = the /dev/shm "
                 "ceiling measured on that box).",
-        "out_subdir": "vis_benchmark_stride4",
+        # Epoch count is part of the output path, not just the queue.json. Run ids are
+        # f"vis_bench_{variant}_seed{seed}" and the runner resumes from an existing run
+        # dir, so two campaigns at different epoch budgets sharing one out_subdir do not
+        # collide loudly -- the second one RESUMES the first. The 2026-09-03 re-scope
+        # from 100 to 25 epochs would have silently continued the 12 runs already on
+        # dgxanode01 instead of starting fresh, and their 100-epoch results would have
+        # been the thing that moved. Bake the budget into the path so that cannot happen.
+        "out_subdir": f"vis_benchmark_stride4_ep{b['epochs']}",
         "defaults": {
             "imgsz": b["imgsz"], "epochs": b["epochs"], "patience": b["patience"],
             "batch": 16, "workers": 6,
