@@ -22,6 +22,15 @@ draw-averaged bar was pre-registered and run; the day arm passed every cell and 
 (§4.6). §4.7 records that the bar I wrote had no magnitude floor, and why I am not
 fixing that after the fact.
 
+**Second headline, added 2026-09-03 — the largest result here (§7.2).** The night
+label restore came back **ALIVE**: VIS-only night `mAP@50-95` goes **0.0000 →
+0.2520** [0.2473, 0.2567], twelve and a half times the pre-registered band, with the
+day guard passing. The shipped VIS detector was never blind at night — it was
+*untrained* at night, by a filter that deleted 132,688 boxes. Nothing about the
+shipped preset moves in this run (§7.3), but the justification for a 100% night
+`veto_vis` no longer holds, and per the pre-registration that consequence needs its
+own pre-registration before a parameter changes.
+
 ---
 
 ## 0. Summary — every experiment at a glance
@@ -48,6 +57,8 @@ fixing that after the fact.
 | G5 | metric noise floor | is the macro metric its own noise source? | buoy is 5.3% of boxes and **75% of macro variance**; buoy AP is **exactly 0.0000** on 2 of 11 cells | **gate per class** |
 | G6 | paired vs unpaired delta | what is a gate actually able to resolve? | pairing buys **3–16×**; real 2σ floor **0.0014–0.0031**; shipped +0.0106 clears it 6.6× | **margin measured** |
 | G7 | re-price 3 constants | did `cap_ir_scale` 4, `iou_thr` 0.85 or the veil repair ship on noise? | no alternative dominates; veil-off costs **−0.0416** on `fog/clean`; `iou_thr` 0.95 unresolvable | **all three STAND** |
+| I5b | night restore, trained | is night VIS blind, or was it untrained? | night VIS **0.0000 → 0.2520** [0.2473, 0.2567]; day guard +0.0162 vs floor −0.0045 | **ALIVE** |
+| P1 | Phase 1 unpooled | is the night handicap uniform enough that the ranking survives? | night AP **0.0000 on all 27**, spread 0.0000; day and pooled rankings identical | **ranking stands** |
 
 ---
 
@@ -786,6 +797,101 @@ provisional and cannot separate a blind sensor from an unbudged initialisation.
 Settling that needs a from-scratch run (~13.7 h), which the prereg does not
 authorise.
 
+### 7.2 The verdict — ALIVE, by 12.6×
+
+`runs/eval/night_restore_verdict.md`, scored by `scripts/eval_night_restore.py`
+against the bands fixed in `030244e`, committed before a single label was touched.
+Training early-stopped at epoch 20 with **best at epoch 10**, patience 10, 5.82 h.
+
+| endpoint | new | old (shipped) | delta |
+|---|---:|---:|---:|
+| **night val `mAP@50-95`** (2,068 fr, 16,179 GT, all ship) | **0.2520** | **0.0000** | **+0.2520** |
+| night val `mAP@50` | 0.4957 | 0.0000 | +0.4957 |
+| paired day `mAP@50-95` (1,200 fr) | 0.3395 | 0.3233 | +0.0162 |
+
+Paired interval on the night delta **[0.2473, 0.2567]**, se 0.0024, sign-flip
+0.000. The band was **ALIVE ≥ 0.02**; the measurement is **0.2520**, twelve and a
+half times it. The day guard floor was `−max(2 × se, 0.002)` = **−0.0045** and the
+observed day delta is **+0.0162** → **PASS**.
+
+**The shipped VIS detector was not blind at night. It was untrained at night.**
+The 0.0000 that has stood in every night table since the filter ran was
+manufactured by deleting 132,688 boxes, and it reverses completely the moment they
+come back.
+
+One class question resolved itself. Night val GT is **16,179 boxes, every one class
+0** — there is not a single buoy in `pohang01` val. `presort` builds its class list
+from GT, so `map50_95` on this subset *is* ship AP, and no buoy zero is averaged
+in. The prereg bands apply as written with no interpretation.
+
+**What the +0.0162 day number is not.** It is not evidence that the restore helps
+day. The two arms differ in *two* things — the labels and ten extra epochs over the
+same day frames — and the report's own §2 carries the tell: **buoy AP gained
++0.0300 while ship gained +0.0024**. Night val contains no buoys, so the class that
+*cannot* benefit from restored night labels gained 12× more than the class that
+can. That is training budget, not the restore. The guard is one-sided, so the
+verdict is untouched; the defensible claim is **"day did not regress"**, not "day
+improved".
+
+### 7.3 What this puts in question — and what it does not
+
+`veto_vis` fires on **100% of night frames**. The justification on record for that
+was that VIS recovers 0.0000 at night. That justification was an artefact of the
+label filter, not a property of the sensor.
+
+The distinction that keeps this honest: the veto is **not wrong for the checkpoint
+it ships with**. `gauss_vis_seed0` genuinely scores 0.0000 on night val — §7.2
+measures it directly. What §7.2 shows is that a *differently trained* VIS is not
+blind, so the veto is a correct response to a detector this project crippled rather
+than to darkness.
+
+**Nothing about the veto changes in this run.** The prereg (rule: out of scope) says
+an ALIVE verdict licenses *a new pre-registration* about the night veto, not a veto
+change — and the shipped `crossmodal26m` numbers keep reproducing from
+`runs/full_scale/gauss_vis_seed0/`, which this run never wrote. The fused benchmark
+was deliberately not run at all: with the veto firing on every night frame the fused
+night number is `ir_only` by construction and cannot move, so scoring the restore on
+it would have manufactured a null that means nothing.
+
+Three earlier conclusions are now conditional on a crippled VIS and need re-reading,
+not retracting:
+
+* the night arm of every fusion gate, which has been scoring `ir_only` against
+  `ir_only` on night cells;
+* "night is single-sensor by physics" — the audit's second branch, which §7.2
+  removes the evidence for;
+* the cross-modal gate's night behaviour (`docs/…crossmodal`), whose *mechanism* is
+  untouched but whose *necessity* at night is now open.
+
+### 7.4 Phase 1, unpooled — the handicap was total, and the ranking survives
+
+`runs/eval/phase1_day_night_slice.md`, `scripts/slice_phase1_day_night.py`, 76 min
+over the 27 archived `main` checkpoints at
+`D:/Backup/Uncertain/phase1_benchmark/runs/`. No retraining, no label change — the
+same val list, simply not pooled before reporting.
+
+| check | result |
+|---|---|
+| control: 3 checkpoints re-validated on full val | reproduces published `map50_95` to **±0.00005** |
+| night AP, all 27 checkpoints | **0.0000 — every one** |
+| night AP spread across variants | **0.0000** |
+| day ranking vs pooled ranking | **identical, all 9 positions** |
+
+The slice ran `classes=[0]` and night GT is 100% ship, so that zero is a real
+ship-only zero rather than a class-averaging artefact.
+
+This was written to test an assertion I had made, not to confirm one. When I
+recommended *against* redoing Phase 1, the argument was that the night handicap is
+uniform across rows so the ranking survives — true at the time only as a claim. It
+now has a measurement and it holds in the strongest available form: the handicap is
+not merely uniform, it is **total and identical**. `day − published` runs +0.045 to
++0.056 and tracks each row's day AP, so the pooled numbers are the day numbers
+scaled by a near-constant and **the published variant selection stands unchanged**.
+
+One line in that report should not be over-read: the "by night AP" column of §3 is
+ordering nine tied zeros, so it is sort order, not a ranking. The meaningful figure
+is the spread of 0.0000.
+
 ---
 
 ## 8. I7 and I8 — one null, one non-measurement
@@ -925,9 +1031,16 @@ that reads whichever column is available. Neither would have raised.
    does the draw loop.
 2. **I4 full-resolution retrain** — the screen says go (§6.3). Not launched; hours of
    GPU and tens of GB.
-3. **I5 night restore** — the audit says the deletion overreached (§7). Restoring
-   82,694 boxes as ignore-regions and fine-tuning is the next move, and it is a
-   training decision.
+3. **I5 night restore — done, and it is the largest result in this log (§7.2).**
+   Night VIS **0.0000 → 0.2520**, day guard passes. What is now open is the
+   consequence, not the restore: `veto_vis` fires on 100% of night frames on a
+   justification that no longer holds, and per the prereg that needs **its own
+   pre-registration** before a single veto parameter moves. Two things must be in
+   it — a from-scratch (not fine-tuned) VIS run to remove the initialisation
+   caveat, and a magnitude floor per item 3 above. Also open: every night-cell
+   fusion number in this project was scored `ir_only` vs `ir_only` and is
+   uninformative about fusion, and the shipped VIS label hash now diverges from
+   `dgxanode01` (§7.1).
 4. **Per-class levers** — `support_gamma` is provably ship-only (§6.2). Splitting it
    per class is cheap and untried.
 5. **`merge_iou` as an explicit "off"** (§3.4) — naming what the architecture already
@@ -957,7 +1070,8 @@ that reads whichever column is available. Neither would have raised.
 `scripts/gate_snms_draw_avg.py`, `scripts/probe_metric_noise_floor.py`,
 `scripts/probe_delta_noise_floor.py`,
 `scripts/reprice_constants_draw_avg.py`, `scripts/restore_night_perbox.py`,
-`scripts/train_night_restore.py`.
+`scripts/train_night_restore.py`, `scripts/eval_night_restore.py`,
+`scripts/slice_phase1_day_night.py`, `scripts/queue_phase1_slice.py`.
 
 **Pre-registrations.** `docs/prereg-snms-draw-averaged-gate.md` (`1fbf735`),
 `docs/prereg-reprice-inherited-constants.md` (`6b49ca0`) and
@@ -974,7 +1088,7 @@ governs existed.
 `cap_ir_gated`, `per_class_levers`, `ap_by_size`, `night_restore_audit`,
 `vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
 `snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`,
-`reprice_constants`.
+`reprice_constants`, `night_restore_verdict`, `phase1_day_night_slice`.
 
 **New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames),
 `runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3),
