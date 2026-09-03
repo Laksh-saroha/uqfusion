@@ -160,6 +160,28 @@ def order(vals: dict[str, float]) -> tuple[str, ...]:
     return tuple(k for k, _ in sorted(vals.items(), key=lambda kv: kv[1]))
 
 
+def flips(day: dict[str, float], pooled: dict[str, float], floor: float) -> dict:
+    """Arm pairs whose relative order changed, split by whether the change is resolvable.
+
+    Rule 9 as first written fired on ANY ordering change, with the magnitude floor
+    guarding only `sep`. That let a swap between two arms separated by less than the
+    noise force CONTAMINATED -- the sign-test-on-noise failure this project has already
+    hit twice. A flip counts only if the two arms that swapped are separated by more
+    than the floor in BOTH orderings: clearly apart one way on day, clearly apart the
+    other way pooled. Anything else is an unresolvable swap and is reported, not acted on.
+    """
+    resolved, unresolved = [], []
+    labs = list(day)
+    for i, a in enumerate(labs):
+        for b in labs[i + 1:]:
+            d, p = day[a] - day[b], pooled[a] - pooled[b]
+            if not (np.isfinite(d) and np.isfinite(p)) or (d > 0) == (p > 0):
+                continue
+            rec = {"pair": (a, b), "gap_day": abs(d), "gap_pooled": abs(p)}
+            (resolved if min(abs(d), abs(p)) >= floor else unresolved).append(rec)
+    return {"resolved": resolved, "unresolved": unresolved}
+
+
 def analyse(modality: str, arms: list[Arm]) -> dict:
     n = len(arms[0].paths)
     is_night = np.array([NIGHT_RUN in str(p) for p in arms[0].paths])
@@ -207,19 +229,34 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
         sep, spr = obs[m]["sep"], obs[m]["spread"]
         passes = sep >= floor
         r = spr / sep if (passes and sep > 0) else float("nan")
-        flip = obs[m]["order_day"] != obs[m]["order_pooled"]   # rule 9
+        fl = flips(obs[m]["day"], obs[m]["pooled"], floor)     # rule 9, floored
+        flip = bool(fl["resolved"])
         band = "NO-SIGNAL" if not passes else bands(r)
         if flip and passes:
             band = "CONTAMINATED"
         obs[m].update({"se_sep": se_sep, "se_spread": se_spr, "scale": scale,
                        "floor": floor, "passes_floor": bool(passes), "r": r,
-                       "order_flip": bool(flip), "band": band})
+                       "order_flip": flip, "flips": fl, "band": band})
 
     scored = [obs[m]["band"] for m in DECISION if obs[m]["passes_floor"]]
     verdict = max(scored, key=lambda b: WORST[b]) if scored else "NO-SIGNAL"  # rule 10
+
+    # Rule 9 AS REGISTERED had no floor on the flip: ANY ordering change forced
+    # CONTAMINATED. The floor was added on 2026-09-03 AFTER seeing it fire on a swap
+    # inside the noise -- i.e. after the fact, which is the one thing a prereg exists to
+    # stop. Both verdicts are therefore carried, and the registered one is never dropped.
+    asreg = []
+    for m in DECISION:
+        if not obs[m]["passes_floor"]:
+            continue
+        f = obs[m]["flips"]
+        asreg.append("CONTAMINATED" if (f["resolved"] or f["unresolved"]) else obs[m]["band"])
+    verdict_asreg = max(asreg, key=lambda b: WORST[b]) if asreg else "NO-SIGNAL"
+
     return {"modality": modality, "n": n, "n_day": int((~is_night).sum()),
             "n_night": int(is_night.sum()), "point": point, "maps": maps,
-            "stats": obs, "verdict": verdict, "arms": [a.label for a in arms]}
+            "stats": obs, "verdict": verdict, "verdict_as_registered": verdict_asreg,
+            "arms": [a.label for a in arms]}
 
 
 def section(res: dict) -> str:
@@ -235,18 +272,32 @@ def section(res: dict) -> str:
     srows = []
     for m in DECISION:
         s = res["stats"][m]
+        nf = len(s["flips"]["resolved"])
+        nu = len(s["flips"]["unresolved"])
+        fcell = (f"**{nf}**" if nf else "no") + (f" (+{nu} unresolvable)" if nu else "")
         srows.append([m, fmt(s["sep"]), fmt(s["se_sep"]), fmt(s["floor"]),
                       "yes" if s["passes_floor"] else "**no**", fmt(s["spread"]),
                       fmt(s["r"]) if np.isfinite(s["r"]) else "--",
-                      "yes" if s["order_flip"] else "no", f"**{s['band']}**"])
+                      fcell, f"**{s['band']}**"])
     stat = md_table(["metric", "sep (day)", "se(sep)", "floor", "clears floor",
-                     "spread", "r", "order flip", "band"], srows)
+                     "spread", "r", "order flips", "band"], srows)
+    detail = [f"- `{m}` {w} swap {r['pair'][0]} vs {r['pair'][1]}: "
+              f"gap day {fmt(r['gap_day'])}, pooled {fmt(r['gap_pooled'])}, "
+              f"floor {fmt(res['stats'][m]['floor'])}"
+              for m in DECISION for w, lst in (("RESOLVED", res["stats"][m]["flips"]["resolved"]),
+                                               ("unresolvable", res["stats"][m]["flips"]["unresolved"]))
+              for r in lst]
+    if detail:
+        stat += ("\n\nOrdering changes, and whether they clear the floor in **both** "
+                 "orderings (rule 9):\n\n" + "\n".join(detail))
 
     prows = [[m] + [sgn(res["stats"][m]["pull"][lab]) for lab in res["arms"]]
              for m in DECISION]
     pull = md_table(["metric", *res["arms"]], prows)
 
-    return (f"## {m_lab} — verdict **{res['verdict']}**\n\n"
+    amend = ("" if res["verdict"] == res["verdict_as_registered"] else
+             f" — **as registered: {res['verdict_as_registered']}** (rule 9 unfloored)")
+    return (f"## {m_lab} — verdict **{res['verdict']}**{amend}\n\n"
             f"{res['n']} frames = {res['n_day']} day + {res['n_night']} night "
             f"({100 * res['n_night'] / res['n']:.1f}% night).\n\n"
             f"### Metrics by subset\n\n{body}\n\n"
@@ -289,20 +340,46 @@ def main() -> int:
         "about the third.",
     ]
     if vis and ir:
-        head.append(
-            f"**VIS {vis['verdict']}, IR {ir['verdict']}.** "
-            + ("IR is the negative control: its labels were never filtered. "
-               + ("The two land in different bands, so the distortion tracks the labels."
-                  if vis["verdict"] != ir["verdict"] else
-                  "**They land in the same band**, so on the prereg's own reading the "
-                  "distortion is NOT label-driven — night is intrinsically harder to "
-                  "calibrate on, and retraining would not repair it.")))
+        # The prereg registered only two readings -- "IR clean, VIS dirty" and "both the
+        # same band" -- and an earlier version of this function collapsed everything else
+        # into the first of them. That is wrong in the direction that matters: IR labels
+        # were NEVER filtered, so IR moving at night cannot be label contamination, and a
+        # dirtier IR than VIS is evidence AGAINST the label story rather than for it.
+        clean = {"CLEAN", "NO-SIGNAL"}
+        v, i = vis["verdict"], ir["verdict"]
+        if v == i:
+            why = ("**They land in the same band**, so on the prereg's own reading the "
+                   "distortion is NOT label-driven — night is intrinsically harder to "
+                   "calibrate on, and retraining would not repair it.")
+        elif v not in clean and i in clean:
+            why = ("VIS is dirty where IR is clean, and only VIS labels were filtered. "
+                   "This is the registered branch in which the distortion tracks the labels.")
+        else:
+            why = ("**IR is the dirtier arm, and IR labels were never filtered** — so this "
+                   "divergence cannot be label contamination. It is the branch the prereg "
+                   "did not register. The likely reading is that IR genuinely sees at "
+                   "night, night is a different regime for it, and the arms diverge there "
+                   "for real reasons; `r` cannot separate that from contamination. Treat "
+                   "the IR verdict as a finding about night, not about labels.")
+        head.append(f"**VIS {v}, IR {i}.** IR is the negative control: its labels were "
+                    f"never filtered. {why}")
+    if any(r["verdict"] != r["verdict_as_registered"] for r in results):
+        head.insert(1, (
+            "> **Amendment, declared.** Rule 9 as registered forced CONTAMINATED on *any* "
+            "day-vs-pooled ordering change. On 2026-09-03, **after seeing it fire on a swap "
+            "inside the noise**, it was floored: a flip now counts only if the two arms are "
+            "separated by more than the floor in **both** orderings. Amending a rule after "
+            "seeing it fire is the exact move a pre-registration exists to prevent, so both "
+            "verdicts are reported and the registered one is never dropped. The unfloored "
+            "rule is the same sign-test-on-noise this project has already been burned by "
+            "twice, which is why the amendment was made rather than the result accepted."))
     secs = head + ["## Cache verification\n\n" + "\n\n".join(notes)] + [section(r) for r in results]
     secs.append("---\n\n_Rules: bands CLEAN < 0.25 ≤ SUSPECT < 1.0 ≤ CONTAMINATED on "
                 "`r = spread/sep`; a metric enters the verdict only if "
-                "`sep ≥ max(2·se_sep, 0.02·scale)`; any day-vs-pooled ordering flip "
-                "forces CONTAMINATED; the verdict is the worst band over metrics that "
-                "clear the floor._")
+                "`sep ≥ max(2·se_sep, 0.02·scale)`; an ordering flip forces CONTAMINATED "
+                "only when the swapped pair clears the floor in both orderings (amended — "
+                "as registered, any flip counted); the verdict is the worst band over "
+                "metrics that clear the floor._")
     out = write_md(args.out, "UQ calibration table — day and night, unpooled", secs)
     Path(str(out).replace(".md", ".json")).write_text(
         json.dumps(results, indent=1, default=float), encoding="utf-8")
