@@ -39,10 +39,16 @@ from uqfusion.uq.train_gaussian import train_gaussian        # noqa: E402
 DATA = ROOT / "runs/derived/data_vis_stride2.yaml"
 RUN_NAME = "gauss_vis_nightfull"
 PREREG = ROOT / "docs/prereg-night-veto.md"
-#: The restored VIS train-label hash. The whole point of this run is the labels, so
-#: starting it against the pre-restore tree would burn 14 h producing the shipped
-#: detector a second time.
-EXPECT_LABEL_HASH = "b92739202127"
+#: The restored VIS **train-split** label hash. The whole point of this run is the
+#: labels, so starting it against the pre-restore tree would burn 14 h producing the
+#: shipped detector a second time.
+#:
+#: Scope matters and has already caused one false alarm. `perbox_restore_manifest.json`
+#: records `b92739202127…`, which is the **all-VIS** hash (train+val+test) that
+#: `restore_night_perbox.py` prints. `verify_dataset_state.py --expect-label-hash`
+#: and the function below both hash the **train split only**, which is a different
+#: number for the same tree. Both are correct; they are not interchangeable.
+EXPECT_LABEL_HASH = "8ed69b5974ed"        # train split; all-VIS equivalent = b92739202127
 
 
 def committed(path: Path) -> bool:
