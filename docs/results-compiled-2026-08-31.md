@@ -3,7 +3,7 @@
 **Written 2026-08-31 ~17:00 UTC / 22:30 IST.** Compiles everything both boxes
 produced since [`vis-benchmark-stride4-2026-08-27.md`](vis-benchmark-stride4-2026-08-27.md)
 was written. Server files pulled through the JupyterLab contents API
-(`http://172.16.224.131:1002`); raw pull banked at `archive/server_pull_2026-08-31/`.
+(`http://<server>:<port>`); raw pull banked at `archive/server_pull_2026-08-31/`.
 
 Compiled tables: `phase1_benchmark/compiled/`.
 

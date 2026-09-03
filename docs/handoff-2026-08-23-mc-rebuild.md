@@ -82,7 +82,7 @@ SSH, and zero contact with the training process — useful when the question is
 Simplest form — just open the URL in a browser tab and read it, no scripting:
 
 ```
-http://172.16.224.131:1002/api/contents/uqfusion/runs/mc_dropout/mc_vis_seed0/results.csv?content=1&type=file&format=text
+http://<server>:<port>/api/contents/uqfusion/runs/mc_dropout/mc_vis_seed0/results.csv?content=1&type=file&format=text
 ```
 
 The JSON comes back with the whole file in its `content` field. Equivalent from
