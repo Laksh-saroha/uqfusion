@@ -149,6 +149,13 @@ class FusionContext:
     night_weak_fallback: bool = False   # a disarmed IR may still be CONFIRMED by a dark VIS
     ir_merge_veto: bool = True          # drop a novel IR from the merge (measured harmful)
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
+    # --- the V2 night rule (docs/prereg-night-veto-v2.md). EMPTY BY DEFAULT, so
+    # every existing caller keeps the shipped `night & (dark | veil)` clause and
+    # no published number can move by importing this file. When populated, that
+    # ONE clause becomes `night & (health < thr)`; the weak fallback below it is
+    # untouched, because the registration replaces the night arm and nothing else.
+    veto_health_by_cond: dict = field(default_factory=dict)
+    veto_health_thr: float = 0.0
     single_passthrough: bool = False
     cap_note: str = ""
     _sel: dict = field(default_factory=dict)
@@ -753,7 +760,22 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
             dark = np.ones(n, dtype=bool)
             if b is not None and ctx.c_vis.mu_b is not None:
                 dark = b < float(ctx.c_vis.mu_b)
-            vv |= night & (dark | veil if ctx.veil_requires_night else dark)
+            if ctx.veto_health_by_cond:
+                # V2: gate on VIS HEALTH rather than on darkness. V1 measured the
+                # veto to be worth +0.1785 on a healthy night VIS and -0.0737 on a
+                # fogged one, i.e. the darkness proxy is firing on the wrong
+                # variable. `health` is whatever instrument Stage 0 selected under
+                # `docs/prereg-night-veto-v2.md`; it must be oriented so that HIGH
+                # means healthy, and it must be per-frame over the same frame list.
+                h = ctx.veto_health_by_cond.get(condition)
+                if h is None:
+                    raise SystemExit(
+                        f"veto_health_by_cond has no entry for condition "
+                        f"{condition!r} -- a missing condition would silently "
+                        f"disable the night veto on that cell")
+                vv |= night & (np.asarray(h, dtype=float) < float(ctx.veto_health_thr))
+            else:
+                vv |= night & (dark | veil if ctx.veil_requires_night else dark)
 
             # `night_weak_fallback` repairs what `veil_requires_night` costs at
             # night when IR is ALSO damaged. Putting the veil term behind the night
