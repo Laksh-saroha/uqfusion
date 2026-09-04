@@ -63,6 +63,55 @@
    `Pohang_dataset/`, not `runs/derived/`. `verify_dataset_state.py` errors there because
    `config.yaml` points at a laptop path.
 
+**Session 2026-09-04 (continued) — VIS UQ retrain queued, six things:**
+1. **The U1 amendment ran on the night-capable VIS checkpoint — CONTAMINATED, but
+   confounded.** [`docs/prereg-uq-day-night-slice-amendment-nightfull.md`](docs/prereg-uq-day-night-slice-amendment-nightfull.md)
+   declared the `gauss_vis_nightfull` swap as its own question before running it (no
+   silent re-run). Result in `runs/eval/uq_day_night_slice_nightfull.md`: VIS
+   CONTAMINATED (`d_ece` r=1.03), IR SUSPECT. But the VIS MC-Dropout arm
+   (`mc_vis_seed0_ft_refit`) is still trained on the pre-restore labels and is hollow
+   at night by direct count (**28** detections / 1,032 night frames vs the sigma-head's
+   **8,391**) — the CONTAMINATED verdict is driven by that population mismatch, not by
+   two comparably-populated arms diverging under restored labels. One clean signal
+   survives the confound: on the seeing checkpoint, `d_ece` degrades day→night
+   (0.1091→0.2779) while `aurc` *improves* (0.5219→0.4110) — not simply "worse
+   everywhere." Along the way, fixed a real pre-existing crash in
+   `scripts/slice_uq_day_night.py` (`KeyError: 'NO-SIGNAL'` when a metric's day-subset
+   separation is exactly 0 — floor degenerates and `sep ≥ floor` alone isn't enough).
+2. **Two more VIS UQ arms are night-blind the same way `gauss_vis_seed0_ft` was**:
+   MC-Dropout (`mc_vis_seed0_ft_refit`, trained 2026-09-01) and Ensemble×5
+   (`ens_vis_seed0_ft_control` local + `ens_vis_seed{1..4}_ft` on dgxanode01, trained
+   2026-08-25..28) — all predate the 2026-09-03 label restore.
+3. **Full VIS retrain queued**, `runs/queue_vis_uq_retrain/queue.json`, 8 runs
+   sequential on the restored labels (`data_vis_stride2.yaml`, hash `b92739202127`),
+   ~75 GPU-h total: `mc_vis_nightfull` → `gauss_vis_seed0_nightfull` →
+   `gauss_vis_seed0_nightfull_ft` → `ens_vis_nightfull_seed{0..4}`. The gaussian pair
+   (priced exactly from `gauss_vis_seed0`/`_ft`'s own measured `results.csv`: 13.65h +
+   2.68h = 16.33h) was inserted mid-run ahead of the ensemble seeds because
+   `gauss_vis_seed0_ft` — not the diagnostic `gauss_vis_nightfull` — is the checkpoint
+   actually wired into the shipped `crossmodal26m` fusion pipeline and every night-veto
+   registration (V1-V3) scored it while it was night-blind (2 detections/1,032 night
+   frames). All cold-started (not continued) so the resume-safe runner can't silently
+   resume a blind checkpoint under a shared name. Only `gauss_vis_seed0_nightfull` gets
+   the mosaic-off ft stage — see the Q&A above for why MC/ensemble don't. Full rationale
+   and restart/monitoring commands: [`docs/handoff-2026-09-04-uq-retrain.md`](docs/handoff-2026-09-04-uq-retrain.md).
+   Dashboard at `http://127.0.0.1:8771`.
+4. **Operational incident, caught and fixed**: pausing the running queue to insert the
+   gaussian pair did not stop the OS process — `pause` blocks it in a polling loop
+   rather than exiting it. Starting a second `run` process and calling `resume` woke
+   both simultaneously (two live PIDs against the same queue-dir, confirmed via
+   `Get-CimInstance Win32_Process`). Fixed by killing the stale PID; verified the
+   survivor was training cleanly (not corrupted) via `nvidia-smi` (98% util, 11.17 GB)
+   and console log inspection. No lasting damage, but `pause` ≠ process exit is now a
+   known trap for this runner.
+5. **PR #1 opened**: [github.com/Laksh-saroha/uqfusion/pull/1](https://github.com/Laksh-saroha/uqfusion/pull/1),
+   `fusion-uq-phase3` → `main` (88 commits, ~44k lines — the branch had never been
+   PR'd before today).
+6. **Correction to 2026-09-03's item 2 below**: a git remote *does* exist —
+   `origin` = `github.com/Laksh-saroha/uqfusion.git`, public, confirmed today. The
+   2026-09-03 claim ("no git remote... has only ever existed on the laptop") was wrong
+   even at the time it was written, not just stale.
+
 **Phase 4 — NOT STARTED** (needs go-ahead + Phase 1–3 server results): Table 3 runner, real VIS↔IR pairing, both-degraded row + R_sys histogram, MIT in, DETR row decision, multi-seed publication runs.
 
 ---
