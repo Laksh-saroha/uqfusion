@@ -16,10 +16,27 @@ rewrite that restores byte-identical content still moves **mtime**, and a
 partial rewrite still moves the **file and box counts** — so all three travel
 together and a change in any of them is visible.
 
-Scopes are not interchangeable ([[project-night-restore-verdict]]): `train` is
-what `verify_dataset_state.py --expect-label-hash` compares (`8ed69b5974ed` in
-the restored tree); `all` is train+val+test, what `restore_night_perbox.py`
-prints (`b92739202127`). Both are recorded, each labelled.
+THREE scopes, and they are three different ALGORITHMS, not three subsets. The
+first version of this file claimed `all` reproduces what `restore_night_perbox.py`
+prints. It does not, and the seeding run proved it: `all` came back
+`df0cb307adc9` against a recorded `b92739202127`. Nothing had drifted -- the two
+numbers were never comparable, which is the same trap this project already fell
+into once when a train-split hash was read against an all-VIS one.
+
+  `train`  `label_content_hash` over the TRAIN image list: hashes the
+           run/name line, then the bytes, then a NUL separator. That is what
+           `verify_dataset_state.py --expect-label-hash` compares, and it is
+           `8ed69b5974ed` on the restored tree.
+  `all`    the same algorithm over train+val+test. Its own number, comparable to
+           nothing published -- useful only against earlier `all` rows here.
+  `tree`   `restore_night_perbox.py`'s digest, reproduced exactly: walk every
+           `.txt` under the labels root in directory order and hash the BYTES
+           ALONE -- no filename, no separator, and no reference to any split
+           list. `b92739202127` on the restored tree.
+
+`tree` is the one that catches the OQ-13 shape of event, because that rewrite
+touched files by DIRECTORY. A file that is not in any split list is invisible to
+`train` and `all` and would be rewritten unnoticed.
 
 Exit code is 1 when the hash differs from the last recorded row, so this drops
 straight into a script as a guard:
@@ -80,6 +97,39 @@ def survey(imgs) -> dict:
     }
 
 
+def tree_survey(data) -> dict:
+    """`restore_night_perbox.py`'s digest, byte for byte.
+
+    Deliberately NOT `label_content_hash`: that one folds the filename and a
+    separator into the digest and only ever sees files named by a split list.
+    This walks the labels root itself, so a label file that belongs to no split
+    -- exactly the kind a stray rewrite would leave behind -- still moves it.
+    """
+    import hashlib
+    root = None
+    for split in ("train", "val", "test"):
+        lst = split_image_list(data, split)
+        if lst:
+            root = Path(str(lst[0]).replace("images", "labels")).parent.parent
+            break
+    if root is None or not root.is_dir():
+        raise SystemExit("cannot locate the VIS labels root from the data yaml")
+    h, boxes, n, newest = hashlib.sha256(), 0, 0, 0.0
+    for run_dir in sorted(root.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        for lp in sorted(run_dir.glob("*.txt")):
+            b = lp.read_bytes()
+            h.update(b)
+            boxes += sum(1 for ln in b.decode("utf-8").splitlines() if ln.strip())
+            n += 1
+            newest = max(newest, lp.stat().st_mtime)
+    return {"hash": h.hexdigest()[:12], "n_label_files": n, "n_boxes": boxes,
+            "n_images": n,
+            "newest_label_mtime_utc": dt.datetime.fromtimestamp(
+                newest, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if newest else ""}
+
+
 def last_row(scope: str) -> dict | None:
     if not LEDGER.is_file():
         return None
@@ -104,7 +154,10 @@ def main() -> int:
     # compares, and it is ~4x faster: `all` re-reads the val and test trees, which
     # the night filter never touched. Ask for `both` when the question is drift
     # anywhere rather than drift in what training consumes.
-    ap.add_argument("--scope", choices=("train", "all", "both"), default="train")
+    ap.add_argument("--scope", choices=("train", "all", "tree", "both", "every"),
+                    default="both",
+                    help="both = train + tree (the two with a published reference); "
+                         "every = all three")
     ap.add_argument("--expect", default=None,
                     help="compare against this hash instead of against the last row")
     ap.add_argument("--accept", default=None, metavar="REASON",
@@ -114,7 +167,8 @@ def main() -> int:
 
     cfg = load_config()
     data = load_data_yaml(resolve_data_yaml(cfg, args.data))
-    scopes = ("train", "all") if args.scope == "both" else (args.scope,)
+    scopes = ({"both": ("train", "tree"),
+               "every": ("train", "all", "tree")}.get(args.scope) or (args.scope,))
 
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
     new = not LEDGER.is_file()
@@ -124,9 +178,13 @@ def main() -> int:
         if new:
             w.writeheader()
         for scope in scopes:
-            imgs = (split_image_list(data, "train") if scope == "train" else
-                    [p for s in ("train", "val", "test") for p in split_image_list(data, s)])
-            s = survey(imgs)
+            if scope == "tree":
+                s = tree_survey(data)
+            else:
+                imgs = (split_image_list(data, "train") if scope == "train" else
+                        [p for s_ in ("train", "val", "test")
+                         for p in split_image_list(data, s_)])
+                s = survey(imgs)
             prev = last_row(scope)
             ref = args.expect or (prev["hash"] if prev else None)
             if ref is None:
