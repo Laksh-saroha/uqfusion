@@ -53,7 +53,15 @@ def d_ece(conf: np.ndarray, matched: np.ndarray, n_bins: int = 10) -> float:
 
 
 def coverage_interval_ece(err_edges: np.ndarray, sigma_edges: np.ndarray, ks=COVERAGE_K) -> dict:
-    """TP-only per-edge coverage vs Gaussian nominal. err rows with NaN (FPs) are dropped."""
+    """TP-only per-edge coverage vs Gaussian nominal. err rows with NaN (FPs) are dropped.
+
+    Unlike `gaussian_nll` this KEEPS the `_EPS` clip and stays finite, because at
+    sigma = 0 a zero-width interval that contains nothing is the correct answer
+    rather than a disguised infinity: an infinitely confident prediction that is
+    wrong should read as total under-coverage, and a coverage share is bounded by
+    1 either way. Measured sensitivity to the clip is in `runs/eval/nll_floor.md`
+    -- interval-ECE moves by <0.002 across four decades of floor.
+    """
     ok = np.isfinite(err_edges).all(axis=1)
     err = np.abs(err_edges[ok]).ravel()
     sig = np.clip(sigma_edges[ok].ravel(), _EPS, None)
@@ -68,11 +76,40 @@ def coverage_interval_ece(err_edges: np.ndarray, sigma_edges: np.ndarray, ks=COV
     return {"interval_ece": float(np.mean(gaps)), "coverage": cov}
 
 
-def gaussian_nll(err_edges: np.ndarray, sigma_edges: np.ndarray) -> float:
+def gaussian_nll(err_edges: np.ndarray, sigma_edges: np.ndarray,
+                 sigma_floor: float | None = None) -> float:
+    """Mean Gaussian NLL over TP edges. **NaN when any sigma is not positive.**
+
+    This used to clip sigma at `_EPS` and return a finite number regardless. That
+    is not a repair, it is a disguise. `cluster_records` sets a cluster's sigma to
+    the per-coordinate std over its members (ddof=0), so two members agreeing to
+    the last float give sigma **exactly 0**, where this quantity is +inf for any
+    non-zero error. Clipping rendered that infinity as ~1e17 per edge, and the
+    reported mean then measured the clip constant rather than the model: 13 of
+    34,776 VIS MC edges (0.037%) carried 100.0000% of a 1.891e16 NLL, and moving
+    `_EPS` to 1e-12 would have moved every MC/ensemble NLL in this project by six
+    orders of magnitude without a single weight changing. See
+    `runs/eval/nll_floor.md`.
+
+    So the metric now declines instead. NaN propagates to NO-SIGNAL in
+    `slice_uq_day_night.py`, which is the honest reading: the mean of a set
+    containing +inf is undefined, and no scalar summarises it.
+
+    `sigma_floor` (in pixels) opts back in to a finite number, and the caller then
+    owns the disclosure. Note from the ladder in `runs/eval/nll_floor.md` that NO
+    floor is neutral: 53% of VIS sigma-head edges sit below 0.5 px, so a 0.5 px
+    floor rewrites the sigma-head's own NLL from 5.987 to 4.336. A floor is a
+    change to the metric for every arm, not a patch for the broken ones -- which
+    is why there is no default.
+    """
     ok = np.isfinite(err_edges).all(axis=1)
     err = err_edges[ok].ravel()
-    sig = np.clip(sigma_edges[ok].ravel(), _EPS, None)
+    sig = np.asarray(sigma_edges, dtype=float)[ok].ravel()
     if err.size == 0:
+        return float("nan")
+    if sigma_floor is not None:
+        sig = np.clip(sig, float(sigma_floor), None)
+    if not np.all(sig > 0.0):
         return float("nan")
     return float((0.5 * np.log(2 * np.pi * sig**2) + err**2 / (2 * sig**2)).mean())
 
@@ -103,7 +140,8 @@ def ood_auroc(d_clean: np.ndarray, d_degraded: np.ndarray) -> float:
     return float(roc_auc_score(y, np.concatenate([d_clean, d_degraded])))
 
 
-def summarize_cache(records: list[dict], sigma_key: str = "sigma_ltrb", iou_match: float = 0.5) -> dict:
+def summarize_cache(records: list[dict], sigma_key: str = "sigma_ltrb", iou_match: float = 0.5,
+                    sigma_floor: float | None = None) -> dict:
     """One Table 2 row from one cache: D-ECE, NLL, interval-ECE, AUSE, AURC, mAP.
 
     sigma_key selects the uncertainty source: "sigma_ltrb" (trained Gaussian or
@@ -139,7 +177,10 @@ def summarize_cache(records: list[dict], sigma_key: str = "sigma_ltrb", iou_matc
         "n_detections": int(conf.size),
         "n_frames": len(records),
         "d_ece": d_ece(conf, matched),
-        "nll": gaussian_nll(err, sigma),
+        "nll": gaussian_nll(err, sigma, sigma_floor=sigma_floor),
+        "nll_sigma_floor": sigma_floor,
+        "sigma_nonpositive_share": float(np.mean(
+            np.asarray(sigma, dtype=float)[np.isfinite(err).all(axis=1)] <= 0.0)),
         **{k: v for k, v in coverage_interval_ece(err, sigma).items()},
         **{k: v for k, v in sparsification(u, risk).items() if k in ("ause", "aurc")},
         **map50_95(records, gts),

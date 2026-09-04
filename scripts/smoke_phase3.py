@@ -140,9 +140,23 @@ def main() -> int:
         table_rows[label] = summary
         shown = {k: round(summary[k], 4) for k in METRIC_KEYS if k in summary and np.isfinite(summary.get(k, np.nan))}
         print(f"[p3-smoke] {label}: {shown}")
-    for label in ("gaussian_clean", "gaussian_dfl_clean", "mc_clean", "ensemble_clean"):
+    # NLL is allowed to be NaN on the SAMPLE-STD arms, and only for the one
+    # documented reason. `cluster_records` can emit sigma exactly 0 when two
+    # members agree to the last float, where the Gaussian NLL is +inf; the metric
+    # now returns NaN there instead of reporting the clip constant (see
+    # `runs/eval/nll_floor.md`). Asserting it finite would re-encode the very
+    # assumption that fix removes -- but a NaN with NO non-positive sigma would be
+    # a different, real failure, so that is still caught.
+    SAMPLE_STD = ("mc_clean", "ensemble_clean")
+    for label in ("gaussian_clean", "gaussian_dfl_clean") + SAMPLE_STD:
         for k in METRIC_KEYS:
             v = table_rows[label].get(k)
+            if (k == "nll" and label in SAMPLE_STD and v is not None
+                    and not np.isfinite(v)
+                    and table_rows[label].get("sigma_nonpositive_share", 0.0) > 0.0):
+                print(f"[p3-smoke] {label}.nll NaN as designed: "
+                      f"{table_rows[label]['sigma_nonpositive_share']:.4%} of edges at sigma<=0")
+                continue
             assert v is not None and np.isfinite(v), f"{label}.{k} not finite: {v}"
     md = ["| source/condition | " + " | ".join(METRIC_KEYS) + " |", "|" + "---|" * (len(METRIC_KEYS) + 1)]
     for label, r in table_rows.items():
