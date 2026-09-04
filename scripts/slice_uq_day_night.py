@@ -227,8 +227,12 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
         scale = float(np.mean([abs(v) for v in obs[m]["pooled"].values()]))
         floor = max(2.0 * se_sep, FLOOR_REL * scale)      # rule 7
         sep, spr = obs[m]["sep"], obs[m]["spread"]
-        passes = sep >= floor
-        r = spr / sep if (passes and sep > 0) else float("nan")
+        # sep > 0 is required, not just sep >= floor: floor degenerates to 0 when both
+        # se_sep and scale are 0 (e.g. a metric ties exactly across arms on the day
+        # subset), and sep >= 0 alone let that count as "passing" with an undefined
+        # r = spread/0 -- a NO-SIGNAL band that then broke the WORST lookup in `verdict`.
+        passes = sep >= floor and sep > 0
+        r = spr / sep if passes else float("nan")
         fl = flips(obs[m]["day"], obs[m]["pooled"], floor)     # rule 9, floored
         flip = bool(fl["resolved"])
         band = "NO-SIGNAL" if not passes else bands(r)
@@ -310,11 +314,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="runs/eval/uq_day_night_slice.md")
     ap.add_argument("--boot", type=int, default=N_BOOT)
+    ap.add_argument("--vis-sigma-cache", default=None,
+                     help="override the VIS sigma-head arm's cache filename (relative to "
+                          "runs/cache_uqslice/). Only for a declared amendment -- see "
+                          "docs/prereg-uq-day-night-slice-amendment-nightfull.md. Leaves "
+                          "every other arm, rule and band untouched.")
     args = ap.parse_args()
     globals()["N_BOOT"] = args.boot
+    arms_spec = {mod: dict(spec) for mod, spec in ARMS.items()}
+    if args.vis_sigma_cache:
+        arms_spec["VIS"]["sigma-head"] = args.vis_sigma_cache
 
     results, notes = [], []
-    for modality, spec in ARMS.items():
+    for modality, spec in arms_spec.items():
         paths = {lab: CACHE / f for lab, f in spec.items()}
         missing = [str(p) for p in paths.values() if not p.is_file()]
         if missing:
@@ -339,6 +351,12 @@ def main() -> int:
         "CONTAMINATED but **cannot** return CLEAN — two arms agreeing says nothing "
         "about the third.",
     ]
+    if args.vis_sigma_cache:
+        head.insert(0, (
+            f"> **Amendment in effect** (`--vis-sigma-cache {args.vis_sigma_cache}`): the VIS "
+            "sigma-head arm is scored from a different checkpoint than the U1 registration — "
+            "see `docs/prereg-uq-day-night-slice-amendment-nightfull.md`. The VIS MC-Dropout "
+            "arm, the IR control, and every rule/band below are unchanged."))
     if vis and ir:
         # The prereg registered only two readings -- "IR clean, VIS dirty" and "both the
         # same band" -- and an earlier version of this function collapsed everything else
