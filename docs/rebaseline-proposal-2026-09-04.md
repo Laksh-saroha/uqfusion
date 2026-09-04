@@ -94,22 +94,47 @@ VIS corruption ladder (19 caches x 744 frames).
 **The whole re-baseline is one line item.** Everything except the ensemble is an
 afternoon. The ensemble is 40 hours and it is the only thing worth arguing about.
 
-### 2.3 The ensemble seeds that just finished may already be void
+### 2.3 The ensemble seeds that just finished ARE void — verified 2026-09-04
 
-`ens_vis_seed{1..4}_ft` completed on dgxanode01 on 2026-09-04. **Which label tree
-they trained against is unverified.** The server was on hash `287b11c50b5a` (the
-night-cut labels); the restored labels shipped as `night_labels_pohang01.zip` and
-whether they were extracted before those runs started is not recorded anywhere.
+Checked directly on dgxanode01 rather than assumed. Two facts settle it:
 
-This is not a detail. If those four seeds trained on night-cut labels they encode
-"night is empty", and Stage B of `docs/prereg-uq-day-night-slice.md` — which
-exists to ask whether the UQ table is contaminated by the night labels — would be
-answered using an arm carrying exactly that contamination.
+* **The server's labels are restored and match this laptop exactly.**
+  `/workspace/_label_stage/verify_night_labels.py` on
+  `/workspace/pohang/visible/labels/pohang01`: **18,826 files, 96,584 boxes,
+  hash `43ee6078395c` — PASS.** Directory mtimes put the restore at
+  **2026-09-03 17:00 UTC**.
+* **All four ensemble seeds started before that.** `args.yaml` timestamps are
+  `seed1` 2026-08-25 22:58, `seed2` 2026-08-26 13:12, `seed3` 2026-08-27 05:35,
+  `seed4` 2026-08-28 00:10 — eight to ten days ahead of the restore.
 
-**Action, before Stage B and before any ensemble decision:** run the shipped
-`verify_night_labels.py` on `/workspace/pohang/visible/labels/pohang01` and read
-each run's `args.yaml`/start time against it. This is minutes of work and it
-gates 40 hours.
+So `ens_vis_seed{1..4}_ft` are trained on the **night-cut** labels. They encode
+"night is empty", which is precisely the contamination
+`docs/prereg-uq-day-night-slice.md` Stage B exists to test for. **They cannot be
+used as the Stage B arm.** `seed4` is the worst case rather than the best: it was
+still running when the labels changed underneath it and only finished on
+2026-09-04, so it may straddle both trees within one run.
+
+**The 40 hours in §2.2 is therefore real, not contingent** — there is no
+night-capable VIS ensemble anywhere, and the one that exists was spent on labels
+now known to be wrong.
+
+**One thing this clears, and it matters:** the ep25 benchmark now running started
+at **2026-09-03 18:06 UTC**, an hour after the restore, so all 93 runs are on the
+correct labels. That campaign does not need to be restarted.
+
+### 2.4 A lead on OQ-13, from looking at the right machine
+
+`/workspace` on dgxanode01 keeps automatic filesystem snapshots
+(`/workspace/.snapshot/daily.*`, `hourly.*`). That is the server, not the laptop,
+so it does not explain the 2026-09-03 21:19 rewrite — but it prompted the
+question nobody had asked: is `A:` snapshotted too?
+
+Checked: `A:` is a **local NTFS fixed disk** (DriveType 3, 488 GB), not a network
+or synced volume, and both **VSS and File History are Stopped/Manual**. So no
+scheduled snapshot service was running that could have rolled the directory back
+on its own. This does not fully exclude a one-off manual `vssadmin`-style revert
+— the queries that would confirm it need admin — but it removes the most likely
+mechanical explanation. OQ-13 stays open, one hypothesis narrower.
 
 ---
 
@@ -138,7 +163,8 @@ gates 40 hours.
 
 **Do not swap the detector yet, and do not spend the 40 hours yet.** In order:
 
-1. **Verify the server's label tree** (§2.3). Minutes; gates everything else.
+1. ~~Verify the server's label tree~~ **done — §2.3.** Server labels PASS; the
+   ensemble seeds predate the restore and are void; the ep25 benchmark is clean.
 2. **Write the V2 veto pre-registration** — veto conditional on VIS health rather
    than on darkness. The instrument exists and costs nothing new to evaluate; the
    registration is the work. This is the highest-value next document.
@@ -147,7 +173,10 @@ gates 40 hours.
    that is itself an artefact — the VIS arms emit 2 detections across 1,032 night
    frames — and that reason disappears under a night-capable detector. **This is
    the cheapest way to find out whether the UQ table was ever contaminated.**
-4. Only then decide the ensemble, with §2.3 answered.
+4. **The ensemble decision is now a clean question:** there is no night-capable
+   VIS ensemble and building one costs ~40 h. Worth it only if the ensemble arm
+   is load-bearing for a claim in the paper. If it is only a comparison row, say
+   so and drop it rather than spending the compute.
 
 The thing to resist is treating +0.1785 as a fusion win. It is a measurement of
 how much was lost when 94,553 boxes were deleted, recovered through the only
