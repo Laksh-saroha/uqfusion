@@ -156,6 +156,17 @@ class FusionContext:
     # untouched, because the registration replaces the night arm and nothing else.
     veto_health_by_cond: dict = field(default_factory=dict)
     veto_health_thr: float = 0.0
+    # "night_arm"      (V2) replace ONLY `night & (dark | veil)`; the weak
+    #                  fallback keeps its own independent evidence.
+    # "sole_authority" (V3, docs/prereg-night-veto-v3.md) the night signals decide
+    #                  only WHEN to ask, and health alone decides the answer:
+    #                  `(ir_night | (ir_night_raw & ~ir_ok)) & unhealthy`, with the
+    #                  weak fallback folded in rather than left to fire beside it.
+    #                  V2 measured why: with a degraded IR the authority bound
+    #                  collapses `ir_night`, the replaced clause stops firing, and
+    #                  the fallback vetoes a HEALTHY night VIS at 46-100% through
+    #                  `concentrated` -- a VIS texture statistic IR cannot move.
+    veto_health_mode: str = "night_arm"
     single_passthrough: bool = False
     cap_note: str = ""
     _sel: dict = field(default_factory=dict)
@@ -773,7 +784,15 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
                         f"veto_health_by_cond has no entry for condition "
                         f"{condition!r} -- a missing condition would silently "
                         f"disable the night veto on that cell")
-                vv |= night & (np.asarray(h, dtype=float) < float(ctx.veto_health_thr))
+                unhealthy = np.asarray(h, dtype=float) < float(ctx.veto_health_thr)
+                ask = night
+                if ctx.veto_health_mode == "sole_authority":
+                    if ctx.ir_night_raw is not None and ctx.ir_ok is not None:
+                        ask = night | (ctx.ir_night_raw & (~ctx.ir_ok))
+                elif ctx.veto_health_mode != "night_arm":
+                    raise SystemExit(
+                        f"unknown veto_health_mode {ctx.veto_health_mode!r}")
+                vv |= ask & unhealthy
             else:
                 vv |= night & (dark | veil if ctx.veil_requires_night else dark)
 
@@ -811,7 +830,12 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
             # those frames. No global photometric threshold can do better: fogged
             # NIGHT p05 reaches 34 while clean DAY p05 starts at 21, so any
             # threshold high enough to catch the former vetoes clear daylight.
-            if ctx.night_weak_fallback and ctx.ir_night_raw is not None:
+            # Under "sole_authority" the fallback's own evidence is retired: its
+            # trigger is folded into `ask` above and health decides. Leaving it to
+            # fire beside the new clause is exactly what defeated V2.
+            if (ctx.night_weak_fallback and ctx.ir_night_raw is not None
+                    and not (ctx.veto_health_by_cond
+                             and ctx.veto_health_mode == "sole_authority")):
                 concentrated = np.zeros(n, dtype=bool)
                 lv = ctx.struct_lov_by_cond.get(condition)
                 if lv is not None:
