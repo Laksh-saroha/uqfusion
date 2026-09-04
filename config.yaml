@@ -17,9 +17,13 @@ paths:
 
 datasets:
   pohang:
-    root: "{data_root}/pohang"
-    vis_yaml: "{data_root}/pohang/data_vis.yaml"   # per-modality YOLO format (scope §5.1)
-    ir_yaml: "{data_root}/pohang/data_ir.yaml"
+    # OQ-9, this machine: the prepared 640 trees live in `Pohang_dataset/`, not
+    # `{data_root}/pohang/`. Pointed at the real folder rather than moving 33 GB —
+    # relative paths resolve against this file's directory, so the `vis`/`ir`
+    # aliases now work here. On the server, set these to wherever the trees land.
+    root: "Pohang_dataset"
+    vis_yaml: "Pohang_dataset/data_vis.yaml"       # per-modality YOLO format (scope §5.1)
+    ir_yaml: "Pohang_dataset/data_ir.yaml"
   
   mit_marine:                  # onboarded Phase 2+ (plan C4); yamls filled then
     root: "{data_root}/mit_marine"
@@ -27,6 +31,14 @@ datasets:
     ir_yaml: null
 
 device: auto                   # auto | cpu | "0" | "0,1"
+
+# --- GPU interpreter (machine-specific) --------------------------------------
+# The dev .venv is the torch+CPU build. Chain scripts that launch training must
+# use THIS interpreter and verify CUDA first (uqfusion.config.resolve_gpu_python):
+# followup-analysis-2026-08-20.md §9 records 4 epochs at a 19.8x penalty because
+# a chain inherited sys.executable from the CPU venv. null = use sys.executable
+# (correct on the server, where the launching interpreter IS the GPU one).
+gpu_python: "C:/Users/lasa2/AppData/Local/Programs/Python/Python313/python.exe"
 
 # --- Phase 1: backbone benchmark (plan C5) ----------------------------------
 benchmark:

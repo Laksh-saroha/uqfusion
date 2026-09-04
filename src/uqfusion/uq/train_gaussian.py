@@ -13,9 +13,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from ultralytics.models.yolo.detect import DetectionTrainer
-from ultralytics.utils import DEFAULT_CFG
+from ultralytics.nn.tasks import DetectionModel
+from ultralytics.utils import DEFAULT_CFG, LOGGER, RANK
 
 from uqfusion.uq.gaussian import DEFAULT_GAUSSIAN_CFG, convert_to_gaussian
+from uqfusion.uq.variants import build_variant, is_variant
 
 
 def _sync_criterion_epoch(trainer) -> None:
@@ -36,8 +38,24 @@ class GaussianTrainer(DetectionTrainer):
         self.add_callback("on_train_epoch_start", _sync_criterion_epoch)
 
     def get_model(self, cfg=None, weights=None, verbose=True):
-        model = super().get_model(cfg, weights, verbose)
-        return convert_to_gaussian(model, self.gaussian_cfg)
+        """Build the detector, convert it, THEN load weights — order is load-bearing.
+
+        `DetectionTrainer.get_model` builds and loads in one step. Calling it first
+        and converting after silently drops the σ branch on **resume**:
+        `BaseModel.load` intersects the checkpoint state dict against a model that
+        has no `cv4` yet, so every σ key falls out and the branch restarts from its
+        zero-bias init while the detector carries on from epoch N. σ that resets
+        mid-run is finite, positive and non-degenerate — it passes every aggregate
+        check while being wrong, the same failure class the end2end gate exists for.
+        Converting first puts the σ keys in the intersection. A fresh run is
+        unaffected: COCO weights carry no `cv4`, so the branch keeps its init.
+        """
+        model = DetectionModel(cfg, nc=self.data["nc"], ch=self.data["channels"],
+                               verbose=verbose and RANK == -1)
+        model = convert_to_gaussian(model, self.gaussian_cfg)
+        if weights:
+            model.load(weights)
+        return model
 
     def get_validator(self):
         validator = super().get_validator()  # parent sets 3 loss names; widen to 4
@@ -55,6 +73,107 @@ def make_gaussian_trainer(gaussian_cfg: dict | None = None) -> type[GaussianTrai
     return type("ConfiguredGaussianTrainer", (GaussianTrainer,), {"gaussian_cfg": cfg})
 
 
+def restore_early_stopping(trainer) -> None:
+    """on_train_start: re-seed the EarlyStopping counter from the run's own history.
+
+    Ultralytics rebuilds `EarlyStopping` in `_setup_train` and `resume_training`
+    never restores it, so after a resume patience counts from a *local* peak
+    instead of the run's best (observed in Phase 1 — see the experimental record).
+    Uninterrupted that is a curiosity; with pause/resume as a routine operation it
+    silently extends every paused run past the stopping rule the un-paused runs
+    obeyed, which is not a comparison you can put in a table.
+
+    Fitness must match Ultralytics' own definition or the restore is worse than
+    doing nothing. In 8.4.90 `DetMetrics.fitness` weights are [0, 0, 0, 1] — it is
+    **mAP50-95 alone**, not the 0.1·mAP50 + 0.9·mAP50-95 blend of older releases
+    (the same version fact `consolidate_phase1.py` and `recover_row.py` record).
+    Using the blend here inflates the restored best by ~15%: the stopper then
+    never sees a real improvement, so it freezes `best_epoch` at the resume point
+    and stops exactly `patience` epochs later, and `trainer.best_fitness` is
+    seeded high enough that `best.pt` may never be written again. A run paused
+    near its peak would silently return the checkpoint it happened to hold at the
+    pause. Verified against `best.pt`'s stored `train_metrics.fitness`, which
+    equals that epoch's mAP50-95 exactly.
+    """
+    stopper = getattr(trainer, "stopper", None)
+    csv_path = Path(trainer.save_dir) / "results.csv"
+    if stopper is None or not csv_path.is_file():
+        return
+
+    import csv as _csv
+
+    best_fitness, best_epoch = 0.0, 0
+    with open(csv_path, "r", encoding="utf-8", newline="") as f:
+        for row in _csv.DictReader(f):
+            try:
+                fitness = float(row["metrics/mAP50-95(B)"])
+                epoch = int(float(row["epoch"]))
+            except (KeyError, ValueError, TypeError):
+                continue
+            if fitness > best_fitness:
+                best_fitness, best_epoch = fitness, epoch
+    if best_fitness <= 0:
+        return
+
+    stopper.best_fitness, stopper.best_epoch = best_fitness, best_epoch
+    if not trainer.best_fitness:
+        trainer.best_fitness = best_fitness
+    LOGGER.info(f"[gaussian] early-stopping restored: best fitness {best_fitness:.5f} "
+                f"at epoch {best_epoch} (patience {stopper.patience})")
+
+
+def _is_resumable_checkpoint(path: Path) -> bool:
+    """True if `path` still carries mid-training state (epoch >= 0, optimizer set).
+
+    Ultralytics strips both whenever a run ends via `trainer.stop = True` — the
+    divergence alarm's mechanism (`run_queue.check_divergence`), and also normal
+    early-stopping or reaching max epochs. `final_eval()` calls
+    `strip_optimizer()`, which sets `epoch=-1` and `optimizer=None` on the saved
+    checkpoint. Only a run that exited via the `PauseRequested` exception (raised
+    from `on_model_save`, before that finalization runs) keeps a genuinely
+    resumable one.
+
+    Without this check, `train_gaussian` would hand a stripped checkpoint to
+    `model.train(resume=True, ...)` and Ultralytics silently trains from *its own
+    defaults* instead of raising: no `data`/`project`/`name` survive the
+    checkpoint's missing `train_args`-driven resume path the way they would on a
+    real resume, so the run lands in `runs/detect/train-N` on `coco8.yaml`
+    instead of this run's actual data (2026-08-26, `ir_bench_yolov8n_seed0`,
+    redone after its divergence alarm — a warning printed but nothing failed).
+    """
+    try:
+        import torch
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception:
+        return False
+    return ckpt.get("epoch", -1) >= 0 and ckpt.get("optimizer") is not None
+
+
+def reseed_at_train_start(seed: int, deterministic: bool):
+    """on_train_start: re-seed every RNG just before the first batch is drawn.
+
+    §12.1 needs the σ and parity arms to be the same experiment, and they were
+    not: probing the Python `random` state at `on_pretrain_routine_start` showed
+    the two arms already diverged during trainer construction, while numpy and
+    torch matched. Ultralytics augments with Python `random`, so the two arms saw
+    different augmentations from batch 1 and drifted apart for reasons unrelated
+    to σ — 0.011 mAP50-95 on the first real pair, 2.4x the Phase 1 seed sd, which
+    reads exactly like "the σ branch costs accuracy".
+
+    Rather than chase which construction-time call consumed a draw (model build,
+    conversion and weight load are all clean in isolation), this resets all three
+    generators after the dataloaders exist and before any augmentation is drawn.
+    Both arms therefore enter the epoch loop from an identical state by
+    construction. It is the same seed Ultralytics already used, so nothing about
+    the run changes except that it stops depending on setup-time RNG traffic.
+    """
+    def cb(trainer):
+        from ultralytics.utils.torch_utils import init_seeds
+
+        init_seeds(seed, deterministic=deterministic)
+    return cb
+
+
 def train_gaussian(
     cfg: dict,
     data_yaml: str | Path,
@@ -66,36 +185,121 @@ def train_gaussian(
     workers: int | None = None,
     run_name: str | None = None,
     gaussian_overrides: dict | None = None,
+    resume: bool = True,
+    callbacks: dict[str, list] | None = None,
+    sigma: bool = True,
+    out_subdir: str = "gaussian",
+    weights: str | Path | None = None,
+    train_overrides: dict | None = None,
 ):
-    """Train one Gaussian-head model with the shared project config. Returns (best_weights_path, run_dir)."""
+    """Train one Gaussian-head model with the shared project config. Returns (best_weights_path, run_dir).
+
+    `sigma=False` trains the same variant, data, seed and hyperparameters through
+    the stock `DetectionTrainer` — the §12.1 parity arm. It lives here rather than
+    in a separate entry point on purpose: the parity row's whole claim is that it
+    differs from the σ row in exactly one thing, the trainer class, and two code
+    paths that "look the same" are how that claim quietly stops being true.
+
+    `resume=True` continues an interrupted run from its own `weights/last.pt`
+    instead of restarting at epoch 0, matching the grid runner's behaviour. On
+    resume Ultralytics reloads every hyperparameter from the checkpoint's own
+    args; only a short allow-list (imgsz, batch, device, workers, patience,
+    close_mosaic, cache, val, plots, ...) can be changed, so the rest is passed
+    only on a fresh start.
+
+    Whether a resume is actually possible is decided by
+    `_is_resumable_checkpoint`, not merely by `last.pt` existing: a checkpoint
+    from a run that ended via `trainer.stop = True` (the divergence alarm
+    included) has had its epoch/optimizer state stripped and is treated exactly
+    like "no checkpoint" — a genuine fresh start with this call's own data,
+    project and name, not a silent misfire into Ultralytics' own defaults.
+
+    `weights` starts from an existing checkpoint instead of the COCO weights —
+    the §7.2 option (C) mosaic stage trains a run, lets it early-stop, then
+    continues from its own `best.pt` with `train_overrides={"mosaic": 0.0}`.
+    That two-stage shape exists because Ultralytics closes mosaic at the fixed
+    epoch `epochs - close_mosaic` (90 here), which an early-stopping run at ~33
+    epochs never reaches: without it, every model would be trained entirely on
+    mosaicked frames and evaluated on clean ones — a mismatch that lands directly
+    on σ, which is fitted to the spread of whatever distribution it is shown.
+    """
     from ultralytics import YOLO
 
     from uqfusion.bench.grid import resolve_device
 
     b = cfg["benchmark"]
     g = {**DEFAULT_GAUSSIAN_CFG, **(cfg.get("gaussian") or {}), **(gaussian_overrides or {})}
-    out_root = Path(cfg["paths"]["outputs_root"]) / "gaussian"
-    name = run_name or f"gauss_{variant}_seed{seed}"
+    out_root = Path(cfg["paths"]["outputs_root"]) / out_subdir
+    name = run_name or f"{'gauss' if sigma else 'parity'}_{variant}_seed{seed}"
+    run_dir = out_root / name
 
-    model = YOLO(f"{variant}.pt" if b.get("pretrained", True) else f"{variant}.yaml")
-    model.train(
-        trainer=make_gaussian_trainer(g),
-        data=str(data_yaml),
-        epochs=epochs if epochs is not None else b["epochs"],
+    last_ckpt = run_dir / "weights" / "last.pt"
+    resuming = bool(resume) and last_ckpt.is_file() and _is_resumable_checkpoint(last_ckpt)
+
+    extra = dict(train_overrides or {})
+    # Split the overrides: on resume Ultralytics only honours a short allow-list,
+    # and silently ignores the rest (they come from the checkpoint's own args).
+    resume_safe = {k: extra.pop(k) for k in
+                   ("patience", "close_mosaic", "cache", "val", "plots", "save_period")
+                   if k in extra}
+
+    shared = dict(
         imgsz=imgsz if imgsz is not None else b["imgsz"],
         batch=batch if batch is not None else b["batch"],
-        seed=seed,
-        deterministic=b["deterministic"],
-        optimizer=b.get("optimizer", "auto"),
-        patience=b["patience"],
-        amp=b["amp"],
         workers=workers if workers is not None else b["workers"],
+        patience=b["patience"],
         device=resolve_device(cfg),
-        project=str(out_root),
-        name=name,
-        exist_ok=True,
-        verbose=True,
     )
-    run_dir = out_root / name
+    shared.update(resume_safe)  # per-run overrides win over the config defaults
+
+    if resuming:
+        LOGGER.info(f"[gaussian] === {name}: RESUME from {last_ckpt}")
+        model = YOLO(str(last_ckpt))
+    elif weights is not None:
+        if not Path(weights).is_file():
+            raise FileNotFoundError(f"start weights not found: {weights}")
+        LOGGER.info(f"[gaussian] === {name}: starting from {weights}")
+        model = YOLO(str(weights))
+    elif is_variant(variant):
+        # An architecture edit with no released checkpoint. Built from its yaml and
+        # seeded from the nearest base model through a declared index remap, because
+        # inserting a neck level renumbers every layer after it and the stock
+        # name-matched load would drop the whole bottom-up PAN (see uq/variants.py).
+        model, transfer_pct = build_variant(variant)
+        LOGGER.info(f"[gaussian] === {name}: variant {variant}, {transfer_pct:.1f}% seeded")
+    else:
+        model = YOLO(f"{variant}.pt" if b.get("pretrained", True) else f"{variant}.yaml")
+
+    for event, fns in (callbacks or {}).items():
+        for fn in fns:
+            model.add_callback(event, fn)
+    model.add_callback("on_train_start", reseed_at_train_start(seed, b["deterministic"]))
+    model.add_callback("on_train_start", restore_early_stopping)
+
+    # sigma=False -> stock DetectionTrainer; every other argument is identical.
+    trainer_kw = {"trainer": make_gaussian_trainer(g)} if sigma else {}
+    if resuming:
+        model.train(resume=True, **trainer_kw, **shared)
+    else:
+        # Built as one dict and merged in precedence order rather than spread as
+        # keywords: `**shared, **extra` alongside explicit keywords raises
+        # "got multiple values for keyword argument" the moment an override names
+        # something already set here — which is exactly what a per-run override is
+        # for. Merging lets the caller override anything, silently and correctly.
+        kwargs = dict(
+            data=str(data_yaml),
+            epochs=epochs if epochs is not None else b["epochs"],
+            seed=seed,
+            deterministic=b["deterministic"],
+            optimizer=b.get("optimizer", "auto"),
+            amp=b["amp"],
+            project=str(out_root),
+            name=name,
+            exist_ok=True,
+            verbose=True,
+        )
+        kwargs.update(shared)
+        kwargs.update(extra)  # per-run overrides win over everything above
+        model.train(**trainer_kw, **kwargs)
     best = run_dir / "weights" / "best.pt"
     return (best if best.is_file() else run_dir / "weights" / "last.pt"), run_dir

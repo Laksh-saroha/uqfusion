@@ -67,6 +67,34 @@ def load_config(path: str | os.PathLike | None = None) -> dict[str, Any]:
     return cfg
 
 
+def resolve_gpu_python(cfg: dict[str, Any] | None = None, require_cuda: bool = True) -> str:
+    """The interpreter GPU work must be launched with — never bare `sys.executable`.
+
+    The dev `.venv` is the torch+CPU build; a chain script that inherits it
+    trains at a ~20x penalty (followup-analysis-2026-08-20.md §9). `gpu_python`
+    in config.yaml names the CUDA interpreter for this machine; null falls back
+    to `sys.executable` (correct on the server). With `require_cuda`, the
+    interpreter is probed for `torch.cuda.is_available()` before being returned,
+    so the failure is a loud refusal instead of a silent 20x slowdown.
+    """
+    import subprocess
+
+    cfg = cfg or load_config()
+    py = cfg.get("gpu_python") or sys.executable
+    py = str(Path(py))
+    if not Path(py).is_file():
+        raise FileNotFoundError(f"gpu_python interpreter not found: {py} — fix config.yaml")
+    if require_cuda:
+        probe = subprocess.run(
+            [py, "-c", "import torch; raise SystemExit(0 if torch.cuda.is_available() else 3)"],
+            capture_output=True, text=True, timeout=120)
+        if probe.returncode == 3:
+            raise RuntimeError(f"{py} has torch WITHOUT CUDA — refusing to launch GPU work on it")
+        if probe.returncode != 0:
+            raise RuntimeError(f"could not probe {py} for CUDA torch: {probe.stderr.strip()[:500]}")
+    return py
+
+
 def resolve_data_yaml(cfg: dict[str, Any], data: str) -> str:
     """Map a CLI --data value to a dataset yaml path.
 

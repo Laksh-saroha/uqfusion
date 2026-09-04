@@ -1,0 +1,674 @@
+{
+  "config": {
+    "cap_vis": 0.3351592611625077,
+    "cap_ir": 0.009246512091269591,
+    "iou_thr": 0.85,
+    "veto": 0.5,
+    "veto_filter": [
+      "dilate",
+      15
+    ],
+    "bright_soft": false,
+    "n_boot": 1000
+  },
+  "main": [
+    {
+      "condition": "clean",
+      "split": "day",
+      "visible_only": 0.3351592611625077,
+      "ir_only": 0.009246512091269591,
+      "gated": 0.3357467342065419,
+      "delta_vs_ir": 0.3265002221152723,
+      "ci": [
+        0.3181675756407034,
+        0.33766576586881325
+      ],
+      "spans_zero": false,
+      "flip": 0.0,
+      "veto_rate": 0.0,
+      "ship_visible_only": 0.36833683026662467,
+      "ship_ir_only": 0.01773456325937317,
+      "ship_gated": 0.37146251478165093,
+      "ship_delta_vs_ir": 0.35372795152227776,
+      "ship_ci": [
+        0.3444575978332552,
+        0.36299976905688375
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0,
+      "buoy_visible_only": 0.30198169205839076,
+      "buoy_gated": 0.3000309536314328,
+      "buoy_ir_only": 0.0007584609231660127
+    },
+    {
+      "condition": "clean",
+      "split": "night",
+      "visible_only": 0.0,
+      "ir_only": 0.08100671909646116,
+      "gated": 0.08133396379777062,
+      "delta_vs_ir": 0.00032724470130945926,
+      "ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "spans_zero": true,
+      "flip": 0.114,
+      "veto_rate": 1.0,
+      "ship_visible_only": 0.0,
+      "ship_ir_only": 0.08100671909646116,
+      "ship_gated": 0.08133396379777062,
+      "ship_delta_vs_ir": 0.00032724470130945926,
+      "ship_ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "ship_spans_zero": true,
+      "ship_flip": 0.114,
+      "buoy_visible_only": 0.0,
+      "buoy_gated": 0.0,
+      "buoy_ir_only": 0.0
+    },
+    {
+      "condition": "fog",
+      "split": "day",
+      "visible_only": 0.0012147895461815088,
+      "ir_only": 0.009246512091269591,
+      "gated": 0.0066905154278369666,
+      "delta_vs_ir": -0.0025559966634326244,
+      "ci": [
+        -0.0031171623490200617,
+        -0.0015065909314551935
+      ],
+      "spans_zero": false,
+      "flip": 0.0,
+      "veto_rate": 0.0,
+      "ship_visible_only": 0.001989535087962578,
+      "ship_ir_only": 0.01773456325937317,
+      "ship_gated": 0.01260338994405932,
+      "ship_delta_vs_ir": -0.005131173315313851,
+      "ship_ci": [
+        -0.006242528444058426,
+        -0.0030142893488552943
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0,
+      "buoy_visible_only": 0.00044004400440044003,
+      "buoy_gated": 0.0007776409116146143,
+      "buoy_ir_only": 0.0007584609231660127
+    },
+    {
+      "condition": "fog",
+      "split": "night",
+      "visible_only": 0.0,
+      "ir_only": 0.08100671909646116,
+      "gated": 0.08094825527181763,
+      "delta_vs_ir": -5.846382464352873e-05,
+      "ci": [
+        -0.0005922801810342073,
+        0.00040673425324800467
+      ],
+      "spans_zero": true,
+      "flip": 0.362,
+      "veto_rate": 0.7073643410852714,
+      "ship_visible_only": 0.0,
+      "ship_ir_only": 0.08100671909646116,
+      "ship_gated": 0.08094825527181763,
+      "ship_delta_vs_ir": -5.846382464352873e-05,
+      "ship_ci": [
+        -0.0005922801810342073,
+        0.00040673425324800467
+      ],
+      "ship_spans_zero": true,
+      "ship_flip": 0.362,
+      "buoy_visible_only": 0.0,
+      "buoy_gated": 0.0,
+      "buoy_ir_only": 0.0
+    },
+    {
+      "condition": "lowlight",
+      "split": "day",
+      "visible_only": 0.01730866357008191,
+      "ir_only": 0.009246512091269591,
+      "gated": 0.008695097381530802,
+      "delta_vs_ir": -0.0005514147097387886,
+      "ci": [
+        -0.0008915052087374413,
+        -0.000199380746948665
+      ],
+      "spans_zero": false,
+      "flip": 0.001,
+      "veto_rate": 1.0,
+      "ship_visible_only": 0.03461732714016382,
+      "ship_ir_only": 0.01773456325937317,
+      "ship_gated": 0.01662778686142094,
+      "ship_delta_vs_ir": -0.0011067763979522305,
+      "ship_ci": [
+        -0.001788492013563284,
+        -0.000403856595927526
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.001,
+      "buoy_visible_only": 0.0,
+      "buoy_gated": 0.0007624079016406666,
+      "buoy_ir_only": 0.0007584609231660127
+    },
+    {
+      "condition": "lowlight",
+      "split": "night",
+      "visible_only": 0.0,
+      "ir_only": 0.08100671909646116,
+      "gated": 0.08133396379777062,
+      "delta_vs_ir": 0.00032724470130945926,
+      "ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "spans_zero": true,
+      "flip": 0.114,
+      "veto_rate": 1.0,
+      "ship_visible_only": 0.0,
+      "ship_ir_only": 0.08100671909646116,
+      "ship_gated": 0.08133396379777062,
+      "ship_delta_vs_ir": 0.00032724470130945926,
+      "ship_ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "ship_spans_zero": true,
+      "ship_flip": 0.114,
+      "buoy_visible_only": 0.0,
+      "buoy_gated": 0.0,
+      "buoy_ir_only": 0.0
+    },
+    {
+      "condition": "glare",
+      "split": "day",
+      "visible_only": 0.26262479712727577,
+      "ir_only": 0.009246512091269591,
+      "gated": 0.2648599441767309,
+      "delta_vs_ir": 0.25561343208546133,
+      "ci": [
+        0.24530195047108175,
+        0.2677666398375705
+      ],
+      "spans_zero": false,
+      "flip": 0.0,
+      "veto_rate": 0.0,
+      "ship_visible_only": 0.2892097605425389,
+      "ship_ir_only": 0.01773456325937317,
+      "ship_gated": 0.29279455538840193,
+      "ship_delta_vs_ir": 0.27505999212902876,
+      "ship_ci": [
+        0.2643192241499129,
+        0.286661123781613
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0,
+      "buoy_visible_only": 0.23603983371201248,
+      "buoy_gated": 0.23692533296505988,
+      "buoy_ir_only": 0.0007584609231660127
+    },
+    {
+      "condition": "glare",
+      "split": "night",
+      "visible_only": 0.0,
+      "ir_only": 0.08100671909646116,
+      "gated": 0.08133396379777062,
+      "delta_vs_ir": 0.00032724470130945926,
+      "ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "spans_zero": true,
+      "flip": 0.114,
+      "veto_rate": 1.0,
+      "ship_visible_only": 0.0,
+      "ship_ir_only": 0.08100671909646116,
+      "ship_gated": 0.08133396379777062,
+      "ship_delta_vs_ir": 0.00032724470130945926,
+      "ship_ci": [
+        -0.0001782551789423166,
+        0.0007803619252406298
+      ],
+      "ship_spans_zero": true,
+      "ship_flip": 0.114,
+      "buoy_visible_only": 0.0,
+      "buoy_gated": 0.0,
+      "buoy_ir_only": 0.0
+    }
+  ],
+  "vs_visible": [
+    {
+      "condition": "clean",
+      "gated": 0.3357467342065419,
+      "visible_only": 0.3351592611625077,
+      "delta": 0.0005874730440341702,
+      "ci": [
+        -0.0012500995665235368,
+        0.003044995794151216
+      ],
+      "spans_zero": true,
+      "flip": 0.186,
+      "ship_gated": 0.37146251478165093,
+      "ship_visible_only": 0.36833683026662467,
+      "ship_delta": 0.0031256845150262613,
+      "ship_ci": [
+        0.0014472582431053955,
+        0.005391309324777961
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0
+    },
+    {
+      "condition": "fog",
+      "gated": 0.0066905154278369666,
+      "visible_only": 0.0012147895461815088,
+      "delta": 0.005475725881655458,
+      "ci": [
+        0.004156528447341812,
+        0.00729518085165784
+      ],
+      "spans_zero": false,
+      "flip": 0.0,
+      "ship_gated": 0.01260338994405932,
+      "ship_visible_only": 0.001989535087962578,
+      "ship_delta": 0.010613854856096741,
+      "ship_ci": [
+        0.007952947935211022,
+        0.014067767647456687
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0
+    },
+    {
+      "condition": "lowlight",
+      "gated": 0.008695097381530802,
+      "visible_only": 0.01730866357008191,
+      "delta": -0.008613566188551108,
+      "ci": [
+        -0.010421874715924205,
+        -0.007261731765211749
+      ],
+      "spans_zero": false,
+      "flip": 0.0,
+      "ship_gated": 0.01662778686142094,
+      "ship_visible_only": 0.03461732714016382,
+      "ship_delta": -0.01798954027874288,
+      "ship_ci": [
+        -0.021634843018375264,
+        -0.015263523943324643
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0
+    },
+    {
+      "condition": "glare",
+      "gated": 0.2648599441767309,
+      "visible_only": 0.26262479712727577,
+      "delta": 0.002235147049455155,
+      "ci": [
+        0.0003813467658186201,
+        0.004236002241808638
+      ],
+      "spans_zero": false,
+      "flip": 0.015,
+      "ship_gated": 0.29279455538840193,
+      "ship_visible_only": 0.2892097605425389,
+      "ship_delta": 0.0035847948458630485,
+      "ship_ci": [
+        0.0015282170865697484,
+        0.0051831006608572885
+      ],
+      "ship_spans_zero": false,
+      "ship_flip": 0.0
+    }
+  ],
+  "ablation": [
+    {
+      "variant": "no_maha",
+      "condition": "clean",
+      "split": "day",
+      "map": 0.3359399742997617,
+      "delta": 0.00019324009321980418,
+      "ship_map": 0.37178640543707314,
+      "ship_delta": 0.00032389065542220985,
+      "ci": [
+        6.991005559094237e-05,
+        0.0003167059655088594
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        0.0002438442529254875,
+        0.0004013780561778868
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_maha",
+      "condition": "clean",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_maha",
+      "condition": "fog",
+      "split": "day",
+      "map": 0.0065294959801827646,
+      "delta": -0.000161019447654202,
+      "ship_map": 0.011924048210436133,
+      "ship_delta": -0.0006793417336231865,
+      "ci": [
+        -0.0011904221637196177,
+        0.0011061964639780954
+      ],
+      "spans_zero": true,
+      "ship_ci": [
+        -0.002801153878717167,
+        0.0016981202278094159
+      ],
+      "ship_spans_zero": true
+    },
+    {
+      "variant": "no_maha",
+      "condition": "fog",
+      "split": "night",
+      "map": 0.07812444284632826,
+      "delta": -0.002823812425489375,
+      "ship_map": 0.07812444284632826,
+      "ship_delta": -0.002823812425489375,
+      "ci": [
+        -0.003636136722874381,
+        -0.002078905993037782
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.003636136722874381,
+        -0.002078905993037782
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_maha",
+      "condition": "lowlight",
+      "split": "day",
+      "map": 0.008695097381530802,
+      "delta": 0.0,
+      "ship_map": 0.01662778686142094,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_maha",
+      "condition": "lowlight",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_maha",
+      "condition": "glare",
+      "split": "day",
+      "map": 0.26716402206937373,
+      "delta": 0.0023040778926428085,
+      "ship_map": 0.2960593600932464,
+      "ship_delta": 0.0032648047048444706,
+      "ci": [
+        0.0014250295628083151,
+        0.002877253111738641
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        0.0024093918633278032,
+        0.00409322222389495
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_maha",
+      "condition": "glare",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "cap_only",
+      "condition": "clean",
+      "split": "day",
+      "map": 0.3358984136983594,
+      "delta": 0.0001516794918174913,
+      "ship_map": 0.3717359986528939,
+      "ship_delta": 0.00027348387124298545,
+      "ci": [
+        4.679965924389612e-07,
+        0.00029778418800384664
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        0.0001676296641223013,
+        0.00034998687425348974
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "cap_only",
+      "condition": "clean",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "cap_only",
+      "condition": "fog",
+      "split": "day",
+      "map": 0.0071554897468667795,
+      "delta": 0.0004649743190298129,
+      "ship_map": 0.013146756471577457,
+      "ship_delta": 0.0005433665275181368,
+      "ci": [
+        -0.0005577140739051129,
+        0.001670560205330167
+      ],
+      "spans_zero": true,
+      "ship_ci": [
+        -0.0014484914126221173,
+        0.002782705694356442
+      ],
+      "ship_spans_zero": true
+    },
+    {
+      "variant": "cap_only",
+      "condition": "fog",
+      "split": "night",
+      "map": 0.07812175974586658,
+      "delta": -0.002826495525951059,
+      "ship_map": 0.07812175974586658,
+      "ship_delta": -0.002826495525951059,
+      "ci": [
+        -0.003640706795861393,
+        -0.002081493835657183
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.003640706795861393,
+        -0.002081493835657183
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "cap_only",
+      "condition": "lowlight",
+      "split": "day",
+      "map": 0.008695097381530802,
+      "delta": 0.0,
+      "ship_map": 0.01662778686142094,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "cap_only",
+      "condition": "lowlight",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "cap_only",
+      "condition": "glare",
+      "split": "day",
+      "map": 0.26714769936257643,
+      "delta": 0.002287755185845508,
+      "ship_map": 0.2960428548567034,
+      "ship_delta": 0.003248299468301463,
+      "ci": [
+        0.0013978034881545435,
+        0.0028668740755899828
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        0.002371833167501085,
+        0.004076782855764062
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "cap_only",
+      "condition": "glare",
+      "split": "night",
+      "map": 0.08133396379777062,
+      "delta": 0.0,
+      "ship_map": 0.08133396379777062,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_veto",
+      "condition": "clean",
+      "split": "day",
+      "map": 0.3357467342065419,
+      "delta": 0.0,
+      "ship_map": 0.37146251478165093,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_veto",
+      "condition": "clean",
+      "split": "night",
+      "map": 0.07625637501789664,
+      "delta": -0.005077588779873979,
+      "ship_map": 0.07625637501789664,
+      "ship_delta": -0.005077588779873979,
+      "ci": [
+        -0.006006111535253037,
+        -0.0036069222314013866
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.006006111535253037,
+        -0.0036069222314013866
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_veto",
+      "condition": "fog",
+      "split": "day",
+      "map": 0.0066905154278369666,
+      "delta": 0.0,
+      "ship_map": 0.01260338994405932,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_veto",
+      "condition": "fog",
+      "split": "night",
+      "map": 0.07724666847975765,
+      "delta": -0.00370158679205998,
+      "ship_map": 0.07724666847975765,
+      "ship_delta": -0.00370158679205998,
+      "ci": [
+        -0.004615034546064017,
+        -0.0022214498555843303
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.004615034546064017,
+        -0.0022214498555843303
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_veto",
+      "condition": "lowlight",
+      "split": "day",
+      "map": 0.008038545659427236,
+      "delta": -0.0006565517221035662,
+      "ship_map": 0.015339620428398074,
+      "ship_delta": -0.0012881664330228661,
+      "ci": [
+        -0.0011796965205701452,
+        0.0006173145954021911
+      ],
+      "spans_zero": true,
+      "ship_ci": [
+        -0.0023372598677124327,
+        0.0012987082692955483
+      ],
+      "ship_spans_zero": true
+    },
+    {
+      "variant": "no_veto",
+      "condition": "lowlight",
+      "split": "night",
+      "map": 0.07752032540854562,
+      "delta": -0.0038136383892250075,
+      "ship_map": 0.07752032540854562,
+      "ship_delta": -0.0038136383892250075,
+      "ci": [
+        -0.004729327414449474,
+        -0.0024447334618917732
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.004729327414449474,
+        -0.0024447334618917732
+      ],
+      "ship_spans_zero": false
+    },
+    {
+      "variant": "no_veto",
+      "condition": "glare",
+      "split": "day",
+      "map": 0.2648599441767309,
+      "delta": 0.0,
+      "ship_map": 0.29279455538840193,
+      "ship_delta": 0.0
+    },
+    {
+      "variant": "no_veto",
+      "condition": "glare",
+      "split": "night",
+      "map": 0.06404475197216175,
+      "delta": -0.01728921182560887,
+      "ship_map": 0.06404475197216175,
+      "ship_delta": -0.01728921182560887,
+      "ci": [
+        -0.018588539961021232,
+        -0.014932224784866428
+      ],
+      "spans_zero": false,
+      "ship_ci": [
+        -0.018588539961021232,
+        -0.014932224784866428
+      ],
+      "ship_spans_zero": false
+    }
+  ]
+}

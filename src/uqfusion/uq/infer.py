@@ -12,6 +12,10 @@ The stock DetectionPredictor infers class count from the channel dimension
 (nc=0 for detect), so σ channels would be misread as classes — this module
 drives the model directly and passes nc explicitly to NMS; σ rides through NMS
 as the extra trailing columns (ultralytics.utils.nms contract, pinned 8.4.90).
+
+On end2end heads (YOLO26) there is no NMS: the head's own `postprocess` has already
+done top-k selection and returns (bs, k, 6 + extra). Both layouts put σ at columns
+6:10 and DFL-derived σ at 10:14, so everything downstream of `det` is shared.
 """
 
 from __future__ import annotations
@@ -27,7 +31,12 @@ from uqfusion.uq.gaussian import GaussianDetect, GaussianDetectionModel
 def _register_safe_globals() -> None:
     """Allow-list our classes for torch weights_only checkpoint loading."""
     try:
-        torch.serialization.add_safe_globals([GaussianDetect, GaussianDetectionModel])
+        # Imported here, not at module scope: uq.mc_dropout imports this module.
+        from uqfusion.uq.mc_dropout import MCDropoutConv2d
+
+        torch.serialization.add_safe_globals(
+            [GaussianDetect, GaussianDetectionModel, MCDropoutConv2d]
+        )
     except Exception:  # noqa: BLE001 - older torch or already registered
         pass
 
@@ -75,6 +84,9 @@ class PlainPredictor:
             self.has_sigma = True
 
         self.nc = len(self.names)
+        self.end2end = bool(getattr(head, "end2end", False))
+        if self.end2end:
+            head.max_det = max_det  # the head owns selection; there is no NMS to cap it
         self.device = device
         self.imgsz = imgsz
         self.conf = conf
@@ -112,7 +124,13 @@ class PlainPredictor:
             out = self.model(t)
         y = out[0] if isinstance(out, (tuple, list)) else out
 
-        det = nms.non_max_suppression(y, self.conf, self.iou, nc=self.nc, max_det=self.max_det)[0]
+        if self.end2end:
+            # GaussianDetect.postprocess already ran top-k and gathered σ with the
+            # boxes; rows are [x1 y1 x2 y2 | conf | cls | σ...] in letterboxed px.
+            det = y[0]
+            det = det[det[:, 4] >= self.conf]
+        else:
+            det = nms.non_max_suppression(y, self.conf, self.iou, nc=self.nc, max_det=self.max_det)[0]
 
         boxes = det[:, :4].clone()
         if boxes.shape[0]:
