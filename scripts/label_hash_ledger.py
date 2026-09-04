@@ -100,7 +100,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", default="vis")
-    ap.add_argument("--scope", choices=("train", "all", "both"), default="both")
+    # `train` is the default because it is the scope every gate in this project
+    # compares, and it is ~4x faster: `all` re-reads the val and test trees, which
+    # the night filter never touched. Ask for `both` when the question is drift
+    # anywhere rather than drift in what training consumes.
+    ap.add_argument("--scope", choices=("train", "all", "both"), default="train")
     ap.add_argument("--expect", default=None,
                     help="compare against this hash instead of against the last row")
     ap.add_argument("--accept", default=None, metavar="REASON",
@@ -144,6 +148,8 @@ def main() -> int:
                 "utc": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "host": socket.gethostname(), "git_head": git_head(),
                 "scope": scope, "verdict": verdict, "note": note, **s})
+            fh.flush()      # a scope over the full VIS tree takes tens of minutes;
+                            # an unflushed ledger looks like a hung one
             mark = {"MATCH": "ok", "FIRST": "first record", "ACCEPTED": "accepted",
                     "DRIFT": "**DRIFT**"}[verdict]
             print(f"[ledger] {scope:5s} {s['hash']}  {s['n_label_files']:>6} files  "
