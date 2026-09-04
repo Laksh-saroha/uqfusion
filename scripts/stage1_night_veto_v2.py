@@ -95,7 +95,16 @@ def youden(score: np.ndarray, y: np.ndarray) -> tuple[float, float, float, float
     p, n = float((y == 1).sum()), float((y == 0).sum())
     tp = np.cumsum(yy == 1) / p
     fp = np.cumsum(yy == 0) / n
-    j = tp - fp
+    # ONLY TIE-GROUP BOUNDARIES ARE REAL OPERATING POINTS. The first version took
+    # argmax over every index, which lands INSIDE a tie block and reports a
+    # (TPR, FPR) that no threshold can achieve. On this instrument that was not
+    # academic: q saturates at exactly 1.0 for 100% of clean-night frames AND for
+    # 1.59% of degraded ones, so the naive argmax reported FPR 0.0000 / J 1.0000
+    # where the true point at the SAME threshold is FPR 0.0159 / J 0.9841. The
+    # threshold it picked was right and the mAP it drives is unaffected; the
+    # operating point it printed was not.
+    last = np.r_[s[1:] != s[:-1], True]          # last index of each tie group
+    j = np.where(last, tp - fp, -np.inf)
     k = int(np.argmax(j))
     return float(s[k]), float(j[k]), float(tp[k]), float(fp[k])
 
@@ -234,6 +243,13 @@ def main() -> int:
         f"`crossmodal26m`, `iou_thr` 0.85, {len(DRAWS)} paired draws, n_boot "
         f"{args.boot}. Arms differ in one clause: `night & (dark | veil)` becomes "
         f"`night & (q < thr)`.",
+        "",
+        "**The instrument is saturated, and its ROC has one useful point.** "
+        "`q = clip(bound / d2, 0, 1)` pins to exactly 1.0 for **100% of "
+        "clean-night frames** and for **1.59% of degraded-night frames**, so "
+        "`q_refit` is not a graded score here -- it is the binary test *is this "
+        "frame inside the refit novelty bound*. AUROC 0.9921 reads richer than the "
+        "instrument is, and the Youden search has essentially one candidate.",
         "",
         f"## Verdict — **{final}**",
         "",
