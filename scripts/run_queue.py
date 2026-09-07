@@ -651,6 +651,30 @@ def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
     tick = {"last": 0.0, "i": 0, "n": 0, "t_epoch": time.time()}
     alarm = {"seen": 0, "fired": False, "limits": divergence_thresholds()}
 
+    def on_pretrain_routine_end(trainer):
+        # Ultralytics builds a brand-new EarlyStopping() and only THEN calls
+        # resume_training(ckpt) (engine/trainer.py _setup_train), so a resumed
+        # run's stopper.best_fitness/best_epoch reset to 0 even though
+        # trainer.best_fitness itself is correctly restored from the checkpoint.
+        # Left alone, patience counts from the resume point instead of the
+        # run's true best epoch, and state.json's best_epoch/best_fitness
+        # silently jump forward to whatever epoch comes next after resume.
+        stopper = getattr(trainer, "stopper", None)
+        start_epoch = getattr(trainer, "start_epoch", 0)
+        if stopper is None or start_epoch <= 0:
+            return  # fresh run, nothing to carry forward
+        rs = run_state(state, run_id)
+        prev_epoch = rs.get("best_epoch")
+        if prev_epoch is None:
+            log(f"=== {run_id}: resumed but no prior best_epoch in state.json — "
+                f"stopper left at its post-resume default, patience will count "
+                f"from epoch {start_epoch}")
+            return
+        stopper.best_fitness = float(trainer.best_fitness)  # authoritative: from ckpt
+        stopper.best_epoch = int(prev_epoch)  # not in the ckpt; carried from state.json
+        log(f"=== {run_id}: resumed — restored stopper to best_epoch {prev_epoch}, "
+            f"best_fitness {stopper.best_fitness:.5f}")
+
     def on_epoch_start(trainer):
         tick["i"], tick["n"] = 0, len(trainer.train_loader)
         tick["t_epoch"] = time.time()
@@ -715,6 +739,7 @@ def make_callbacks(run_id: str, state: dict, spec: dict) -> dict[str, list]:
             raise PauseRequested(f"paused after epoch {int(trainer.epoch) + 1}")
 
     return {
+        "on_pretrain_routine_end": [shielded(on_pretrain_routine_end)],
         "on_train_epoch_start": [shielded(on_epoch_start)],
         "on_train_batch_end": [shielded(on_batch_end)],
         "on_fit_epoch_end": [shielded(on_fit_epoch_end)],
