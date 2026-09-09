@@ -133,6 +133,49 @@ class Arm:
         return d
 
 
+def arm_range(vals: dict[str, float]) -> tuple[float, list[str]]:
+    """Rule 5's `max_a - min_a`, with an EXPLICIT policy for arms that have no value.
+
+    Python's builtin `max`/`min` mis-handle NaN, and *which way* depends on where the
+    NaN sits, because every comparison against NaN is False and the builtins simply
+    keep their running candidate::
+
+        max([3.9, nan, 1.2]) -> 3.9     max([nan, 3.9, 1.2]) -> nan
+        max([3.9, nan, nan]) -> 3.9     min([3.9, nan, nan]) -> 3.9   (range 0.0)
+
+    So the same three arm values yield a range of 2.7, nan or 0.0 depending purely on
+    the order the arms happen to appear in `ARMS`. That is what produced the
+    `nll  sep 0.0000` rows in the 2026-09-04 and 2026-09-09 reports: two of three arms
+    have no NLL at all (an M-member sample std is exactly 0 when members agree, and
+    `gaussian_nll` returns NaN rather than clipping since `runs/eval/nll_floor.md`),
+    and the surviving arm was silently differenced against itself. It reads as an exact
+    tie between arms. It is not a measurement.
+
+    **The policy.** Rule 5 quantifies over *all* arms, so if any arm has no value the
+    range is undefined: return NaN. That fails rule 7's floor and reports NO-SIGNAL,
+    which is what NO-SIGNAL already means -- "carries no arm-ranking information at
+    all". Ranging over the finite subset instead would answer a different question (a
+    two-arm separation presented as a three-arm one) without saying so; that number is
+    still computed by `finite_range` and reported, but it never enters a band.
+
+    No past verdict moves: `nll` was NO-SIGNAL in all three prior runs of this slice.
+    """
+    bad = sorted(lab for lab, v in vals.items() if not np.isfinite(v))
+    if bad:
+        return float("nan"), bad
+    return max(vals.values()) - min(vals.values()), []
+
+
+def finite_range(vals: dict[str, float]) -> float:
+    """`arm_range` over only the arms that have a value -- a disclosed secondary.
+
+    Reported so the information is not destroyed, never used for a band. NaN when
+    fewer than two arms have a value, since a range needs two.
+    """
+    fin = [v for v in vals.values() if np.isfinite(v)]
+    return (max(fin) - min(fin)) if len(fin) >= 2 else float("nan")
+
+
 def _boot_one(arms: list[Arm], is_night: np.ndarray, draw: np.ndarray) -> dict:
     """One bootstrap draw -> {metric: (sep, spread)}. Pure; no shared state."""
     dnight = is_night[draw]
@@ -142,8 +185,7 @@ def _boot_one(arms: list[Arm], is_night: np.ndarray, draw: np.ndarray) -> dict:
     for m in DECISION:
         day = {lab: bpt[lab]["day"][m] for lab in bpt}
         pull = {lab: bpt[lab]["pooled"][m] - day[lab] for lab in bpt}
-        dv, pv = list(day.values()), list(pull.values())
-        out[m] = (max(dv) - min(dv), max(pv) - min(pv))
+        out[m] = (arm_range(day)[0], arm_range(pull)[0])
     return out
 
 
@@ -197,8 +239,15 @@ WORST = {"CLEAN": 0, "SUSPECT": 1, "CONTAMINATED": 2}
 
 
 def order(vals: dict[str, float]) -> tuple[str, ...]:
-    """Arm ordering, best first. All five decision metrics are lower-is-better."""
-    return tuple(k for k, _ in sorted(vals.items(), key=lambda kv: kv[1]))
+    """Arm ordering, best first. All five decision metrics are lower-is-better.
+
+    Arms with no value sort last, as a block, in input order. NaN compares False
+    against everything, so leaving it in the sort key made the printed ordering depend
+    on the order arms were fed in rather than on the metric.
+    """
+    return tuple(k for k, _ in sorted(
+        vals.items(),
+        key=lambda kv: (0, kv[1]) if np.isfinite(kv[1]) else (1, 0.0)))
 
 
 def flips(day: dict[str, float], pooled: dict[str, float], floor: float) -> dict:
@@ -240,8 +289,12 @@ def analyse(modality: str, arms: list[Arm], jobs: int = 1) -> dict:
             day = {lab: pt[lab]["day"][m] for lab in pt}
             pool = {lab: pt[lab]["pooled"][m] for lab in pt}
             pull = {lab: pool[lab] - day[lab] for lab in pt}
-            dv, pv = list(day.values()), list(pull.values())
-            o[m] = {"sep": max(dv) - min(dv), "spread": max(pv) - min(pv),
+            sep, sep_bad = arm_range(day)
+            spr, spr_bad = arm_range(pull)
+            o[m] = {"sep": sep, "spread": spr,
+                    "nan_arms": sorted(set(sep_bad) | set(spr_bad)),
+                    "sep_finite_only": finite_range(day),
+                    "spread_finite_only": finite_range(pull),
                     "pull": pull, "day": day, "pooled": pool,
                     "order_day": order(day), "order_pooled": order(pool)}
         return o
@@ -266,16 +319,31 @@ def analyse(modality: str, arms: list[Arm], jobs: int = 1) -> dict:
             for m in DECISION}
 
     for m in DECISION:
-        se_sep = float(np.nanstd(boot[m]["sep"], ddof=1))
-        se_spr = float(np.nanstd(boot[m]["spread"], ddof=1))
-        scale = float(np.mean([abs(v) for v in obs[m]["pooled"].values()]))
-        floor = max(2.0 * se_sep, FLOOR_REL * scale)      # rule 7
+        # Under the `arm_range` NaN policy a metric with an arm that has no value gives
+        # NaN on every draw, and nanstd over an all-NaN slice warns and returns NaN.
+        # Say "undefined" explicitly instead of emitting a RuntimeWarning per metric.
+        def _se(xs: list[float]) -> float:
+            fin = np.asarray([x for x in xs if np.isfinite(x)], dtype=float)
+            return float(fin.std(ddof=1)) if fin.size >= 2 else float("nan")
+
+        se_sep, se_spr = _se(boot[m]["sep"]), _se(boot[m]["spread"])
+        vals = [abs(v) for v in obs[m]["pooled"].values()]
+        scale = float(np.nanmean(vals)) if any(np.isfinite(v) for v in vals) else float("nan")
+        # rule 7. Guarded rather than left to `max`, which has the same NaN
+        # position-dependence documented on `arm_range`: max(nan, 0.02) is nan but
+        # max(0.02, nan) is 0.02, so an unguarded floor would silently vary with
+        # argument order exactly as `sep` did.
+        floor = (max(2.0 * se_sep, FLOOR_REL * scale)
+                 if np.isfinite(se_sep) and np.isfinite(scale) else float("nan"))
         sep, spr = obs[m]["sep"], obs[m]["spread"]
         # sep > 0 is required, not just sep >= floor: floor degenerates to 0 when both
         # se_sep and scale are 0 (e.g. a metric ties exactly across arms on the day
         # subset), and sep >= 0 alone let that count as "passing" with an undefined
         # r = spread/0 -- a NO-SIGNAL band that then broke the WORST lookup in `verdict`.
-        passes = sep >= floor and sep > 0
+        # NaN anywhere here means the quantity is undefined, not small: an arm with no
+        # value (see `arm_range`) makes rule 5's max_a/min_a undefined, and NO-SIGNAL is
+        # the registered destination for a metric carrying no arm-ranking information.
+        passes = bool(np.isfinite(sep) and np.isfinite(floor) and sep >= floor and sep > 0)
         r = spr / sep if passes else float("nan")
         fl = flips(obs[m]["day"], obs[m]["pooled"], floor)     # rule 9, floored
         flip = bool(fl["resolved"])
@@ -367,6 +435,22 @@ def section(res: dict) -> str:
     if detail:
         stat += ("\n\nOrdering changes, and whether they clear the floor in **both** "
                  "orderings (rule 9):\n\n" + "\n".join(detail))
+
+    # An arm with no value makes rule 5's max_a/min_a undefined. Say so, and say what
+    # the surviving arms would have given, rather than printing a range silently taken
+    # over a subset -- which is what the pre-fix builtin max/min did.
+    nanrows = [[m, ", ".join(res["stats"][m]["nan_arms"]),
+                str(len(res["arms"]) - len(res["stats"][m]["nan_arms"])),
+                fmt(res["stats"][m]["sep_finite_only"]),
+                fmt(res["stats"][m]["spread_finite_only"])]
+               for m in DECISION if res["stats"][m]["nan_arms"]]
+    if nanrows:
+        stat += ("\n\n**Arms with no value on a metric** — `sep` and `spread` are "
+                 "reported as undefined (NaN -> NO-SIGNAL), not as a range over "
+                 "whoever is left. The finite-subset columns are a **disclosed "
+                 "secondary and enter no band**:\n\n"
+                 + md_table(["metric", "arms with no value", "arms remaining",
+                             "sep (finite only)", "spread (finite only)"], nanrows))
 
     prows = [[m] + [sgn(res["stats"][m]["pull"][lab]) for lab in res["arms"]]
              for m in DECISION]
