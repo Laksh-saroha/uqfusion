@@ -32,3 +32,8 @@ pyyaml==6.0.2                # config loading
 # wandb                      # cloud tracking alternative (scope §11.2)
 # fiftyone                   # label QA for MIT annotation onboarding (scope §14)
 # torchcp                    # conformal stretch goal (scope §11.3 B.7)
+
+# R-A1: the authoritative COCO evaluator the local AP is checked against
+# (scripts/smoke_cocoparity.py, scripts/ap_convention_parity.py). Prebuilt wheel on
+# Windows/py3.13 -- no compiler needed. Not imported on any training path.
+pycocotools==2.0.11

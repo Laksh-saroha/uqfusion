@@ -19,6 +19,17 @@ import numpy as np
 
 IOU_LEVELS = np.round(np.arange(0.5, 1.0, 0.05), 2)  # 0.50 ... 0.95
 
+SORT_KIND = "stable"
+"""Tie semantics for every descending-confidence sort in this module (R-A1/R-A2).
+
+`np.argsort` defaults to an unstable introsort, so detections sharing a confidence
+were ordered arbitrarily -- and both the greedy match and the cumulative TP/FP run
+down that order. `apmetrics.SORT_KIND` documents the measured size (0.0067 mAP on a
+tie-dense synthetic fixture, 2.7e-7 on a real cache, where 99.9% of confidences are
+unique). Pinned here too so `cocoparity.TASK_CONFIG`'s "stable score sort" is true of
+the local evaluator as well -- pycocotools sorts with mergesort, which is stable, so
+the two now agree on tie handling by construction rather than by luck."""
+
 
 def label_path_for(image_path: str | Path) -> Path:
     p = Path(image_path)
@@ -72,7 +83,7 @@ def match_image(record: dict, gt: dict, iou_thr: float = 0.5) -> dict:
         same = pred_cls[:, None] == gt["cls"][None, :]
         ious = ious * same
         gt_used = np.zeros(len(gt["cls"]), dtype=bool)
-        for i in np.argsort(-conf):
+        for i in np.argsort(-conf, kind=SORT_KIND):
             if ious.shape[1] == 0:
                 break
             j = int(np.argmax(np.where(gt_used, -1.0, ious[i])))
@@ -93,7 +104,7 @@ def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.nda
     ious = iou_matrix(record["boxes_xyxy"], gt["boxes_xyxy"])
     same = record["cls"][:, None] == gt["cls"][None, :]
     ious = ious * same
-    order = np.argsort(-record["conf"])
+    order = np.argsort(-record["conf"], kind=SORT_KIND)
     for k, thr in enumerate(levels):
         gt_used = np.zeros(len(gt["cls"]), dtype=bool)
         for i in order:
@@ -155,7 +166,7 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
             per_class[int(c)] = {"ap50_95": 0.0, "ap50": 0.0,
                                  "n_gt": int(n_gt), "n_pred": int(mask.sum())}
             continue
-        order = np.argsort(-conf[mask])
+        order = np.argsort(-conf[mask], kind=SORT_KIND)
         tpc = tp[mask][order]
         fpc = ~tpc
         cum_tp = np.cumsum(tpc, axis=0)

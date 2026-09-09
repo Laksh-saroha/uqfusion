@@ -1,0 +1,81 @@
+{
+ "absolute": {
+  "VIS sigma-head|all": {
+   "local": 0.3078157450098699,
+   "coco": 0.3082010910256193
+  },
+  "VIS sigma-head|day": {
+   "local": 0.33842800378986243,
+   "coco": 0.33880856740386767
+  },
+  "VIS sigma-head|night": {
+   "local": 0.24289896542453732,
+   "coco": 0.24290502256209426
+  },
+  "VIS MC-Dropout|all": {
+   "local": 0.28425835789434,
+   "coco": 0.28441577256799405
+  },
+  "VIS MC-Dropout|day": {
+   "local": 0.31030716223434257,
+   "coco": 0.31046373962340557
+  },
+  "VIS MC-Dropout|night": {
+   "local": 0.22539629152363325,
+   "coco": 0.22540232557664916
+  },
+  "VIS ensemble|all": {
+   "local": 0.32015232048534875,
+   "coco": 0.32059474944206995
+  },
+  "VIS ensemble|day": {
+   "local": 0.3463568681838776,
+   "coco": 0.34678945153317553
+  },
+  "VIS ensemble|night": {
+   "local": 0.27222673601221103,
+   "coco": 0.27223274894908994
+  },
+  "IR sigma-head|all": {
+   "local": 0.07059266999201615,
+   "coco": 0.07059322831630943
+  },
+  "IR sigma-head|day": {
+   "local": 0.07067698030920336,
+   "coco": 0.07067768797318046
+  },
+  "IR sigma-head|night": {
+   "local": 0.15378954665524364,
+   "coco": 0.15379139252340437
+  },
+  "IR MC-Dropout|all": {
+   "local": 0.06328361451777717,
+   "coco": 0.06328399097395823
+  },
+  "IR MC-Dropout|day": {
+   "local": 0.06908312320575068,
+   "coco": 0.06908348011549109
+  },
+  "IR MC-Dropout|night": {
+   "local": 0.11769886254222242,
+   "coco": 0.11770012207265039
+  },
+  "IR ensemble|all": {
+   "local": 0.0735260352998938,
+   "coco": 0.07352627218737895
+  },
+  "IR ensemble|day": {
+   "local": 0.07439967426769631,
+   "coco": 0.07440085156959998
+  },
+  "IR ensemble|night": {
+   "local": 0.1590848868767992,
+   "coco": 0.15908574207759604
+  }
+ },
+ "worst_delta_disagreement": 0.00028501428306715315,
+ "noise_floor": [
+  0.0014,
+  0.0031
+ ]
+}
