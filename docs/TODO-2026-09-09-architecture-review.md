@@ -117,7 +117,7 @@ bites only on small subsets (per-cell tables, per-run slices, LORO folds). The t
 the AP *interpolation convention* (F03) is untouched by this task and is the one with a
 plausibly material effect.
 
-### R-A3 — dependence-aware intervals (F04) · P1 · M
+### R-A3 — dependence-aware intervals (F04) · P1 · M · **DONE 2026-09-09 (`e2ba483`)**
 Frame-level resampling of a 10 Hz recording does not give 1,032 independent observations. Move
 headline intervals to **paired contiguous-block** resampling within runs, with a block-length
 sensitivity table, and report run-level effects separately. State explicitly that with one night run
@@ -125,6 +125,28 @@ the between-run night component **cannot** be estimated.
 
 *Acceptance:* every reported interval names its resampling unit and the randomness it covers. Stop
 presenting bootstrap sign-flip fractions as p-values or as posterior probabilities of the hypothesis.
+
+**Closed 2026-09-09.** `src/uqfusion/eval/blockboot.py` adds a paired moving-block bootstrap drawn
+within runs, and `describe()` returns the resampling unit and the uncovered randomness with every
+interval. `bootstrap_delta` keeps working for continuity, with a docstring that now says its
+interval is the too-narrow one; `sign_flip_fraction` replaces `p_sign_flip`, which survives only as
+a deprecated alias.
+
+**The number: intervals are ~1.9× too narrow, as a LOWER BOUND**
+([`runs/eval/interval_block_sensitivity_v3.md`](../runs/eval/interval_block_sensitivity_v3.md)).
+se/se(L=1) is 1.61× at a one-second block and 1.95× (worst 1.99×) at L=20, and the curve is still
+rising there. Unlike R-A1/R-A2 this **does** move things: the 0.0014–0.0031 noise floor was itself
+computed with the iid bootstrap, so it is understated by the same factor, and every margin defended
+as "just outside the CI" needs re-reading.
+
+**Bound on what is measurable here.** `pohang03` holds 117 frames, so blocks past shortest-run/5 = 23
+collapse the variance (at L=200 that run admits exactly one block start). Larger rows are shown
+marked invalid — the collapse is the evidence for the bound, not a result. Where the inflation levels
+off cannot be measured on this dataset.
+
+**Not estimable at any block length:** night is entirely `pohang01`, so the between-night-run
+component does not exist in this data. Every night interval is conditional on that one recording.
+Training-seed variance is a separate component this does not cover either.
 
 ### R-A4 — metric contract audit (F12) · P1 · M
 Rename and re-scope the metric suite to what it actually measures:
