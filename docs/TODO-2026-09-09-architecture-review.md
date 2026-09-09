@@ -163,13 +163,43 @@ Rename and re-scope the metric suite to what it actually measures:
 Also: cross-stream support can exceed 1 (reviewer's local example: 1.47015), so support scores must
 not be presented as probabilities without recalibration.
 
-### R-A5 — **re-score existing caches; change-impact table** (F03/F04/F12) · P1 · M
+### R-A5 — **re-score existing caches; change-impact table** (F03/F04/F12) · P1 · M · **FIRST PASS DONE 2026-09-09 (`f8c6b7e`)**
 The deliverable everything else waits on. Re-score every cached prediction set under the corrected
 evaluator and dependence-aware intervals, then publish: which claimed gains, rankings, and adoption
 decisions survive, which move, and which invert. Cover at minimum the veil-veto reprice, the
 inherited-constants reprice, the soft-NMS reject, the crossmodal gate cells, and the D27 ablations.
 
 *Blocked on:* R-A1, R-A2, R-A3. *Then unblocks:* everything in C, D, and the UQ table.
+
+**First pass 2026-09-09** — [`runs/eval/change_impact_v3.md`](../runs/eval/change_impact_v3.md).
+**16 of 53 findings that were defended by a zero-excluding interval no longer are.** Not refuted —
+the effects may be real — but the interval used to defend them no longer supports them.
+
+| claim | cells | still supported | reading |
+|---|---:|---:|---|
+| `no_veto` ("the veto is load-bearing") | 18 | 12 | stands, down to \|delta\| 0.0037 |
+| gated vs `visible_only` | 14 | 10 | **which** ones matters — see below |
+| `with_maha` / `no_maha` / `cap_only` | 6 each | 4 each | clean/day cells lost; were razor-thin already |
+| `photometric_veto`, veil veto repair | 2, 1 | all | hold |
+
+**The one to read carefully:** the shipped `crossmodal` preset keeps glare (+0.0045 macro, +0.0068
+ship) while the older 2026-08-20 D27 system loses it (+0.0022 → [−0.0017, +0.0064]). The recorded
+headline *"glare/day beats both single streams (+0.0022 [+0.0004, +0.0042])"* is the **old** system's
+number and is now indeterminate; what survives is the shipped system's larger effect.
+
+**Also newly indeterminate in both systems:** gated vs `visible_only` clean/ship. That is the very
+instance quoted inside `matching.map50_95`'s docstring — *"ship AP +0.0031 CI [+0.0015, +0.0052], not
+spanning zero"* — to show macro dilution hiding a real ship gain. The structural argument is
+untouched; the empirical instance cited for it no longer clears the bar.
+
+**Remaining work.** This RE-ADJUDICATES recorded intervals; it does not RE-SCORE. The 1.95× factor
+was measured on VIS UQ-arm deltas and transported to fusion cells, which assumes a comparable
+dependence structure (same frames, same runs, same cadence — reasonable, but an assumption). A full
+re-score through `blockboot.block_bootstrap_delta` on each decision's own caches is mechanical now
+and is the right next step for any row in doubt. Three named families cannot be re-adjudicated this
+way at all and are excluded rather than fudged: the inherited-constants reprice (a *worse-somewhere*
+sign rule), the soft-NMS reject (draw noise, not frame-resampling noise), and the crossmodal tuning
+sweeps (selection without intervals — R-B2's territory).
 
 ### R-A6 — decision-rule statistics (F16) · P2 · S
 The draw-averaged rules mix draw SD, bootstrap uncertainty and fixed floors in quadrature. Those
