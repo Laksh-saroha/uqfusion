@@ -269,28 +269,38 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 4. **Phase 3:** baselines → caches → `evaluate_uq` (Table 2) → `ablate_gate` (HOW_TO_RUN §4).
 5. Answer the OQ table above (OQ-1/2/3 gate real-data training; OQ-5 calibration files gate the homography).
 
-**Immediate, 2026-09-04 — the one decision that gates GPU time:**
-1. **Is the VIS ensemble arm load-bearing for the paper?** There is no night-capable
-   VIS ensemble and building one is **~40 h** on the 4080 (measured: 9.80 h for one
-   cold start). If yes, launch 4 cold seeds -- the laptop GPU is idle and the server is
-   busy for ~10 days. If it is only a comparison row, **amend
-   [`docs/prereg-uq-day-night-slice.md`](docs/prereg-uq-day-night-slice.md) to drop the
-   ensemble arm** and close Stage A with its caveat stated. Stage B cannot complete
-   either way with the seeds that exist.
-2. **Re-run the UQ slice on `gauss_vis_nightfull` (~35 min).** Stage A returned VIS
-   CLEAN only because the shipped detector emits **2 detections across 1,032 night
-   frames** -- there was never anything there to contaminate. Under a night-capable
-   detector that reason evaporates and the question becomes real for the first time.
-   **Needs one declared line in the prereg first:** it is a different question from the
-   registered one.
-3. **The rest of [`docs/rebaseline-proposal-2026-09-04.md`](docs/rebaseline-proposal-2026-09-04.md) §4**,
-   which prices the full swap at **~2.5 h** of caching and refitting plus that 40 h.
-   Most of the gate turns out detector-free: `fit_structure_gate.py` reads only image
-   statistics, `crossmodal26m` makes the 4,000-frame Mahalanobis reference inert, and
-   the capability prior recomputes itself at every `load_context`. Only `mu_b`/`tau_b`
-   genuinely move.
-4. **Server: nothing to do but watch.** `runs/queue_vis_benchmark_ep25/status.xlsx`;
-   its HEALTH line reads STALLED if the queue stops writing `state.json`.
+**Immediate, 2026-09-09 — what the U2 verdict did and did not settle:**
+
+*Resolved, and struck from this list:* the VIS ensemble arm was built (all 5 seeds, local,
+cold-started) so Stage B is closed; the UQ slice re-ran on night-capable arms under its own
+pre-registration ([`docs/prereg-uq-day-night-slice-u2-stageb.md`](docs/prereg-uq-day-night-slice-u2-stageb.md),
+`4a4a84b`), and it returned **VIS SUSPECT / IR SUSPECT**.
+
+1. **Do NOT spend the re-baseline budget on the strength of U2.** Both modalities landed in the
+   same band, which is the pre-registered reading that the distortion is **not label-driven**.
+   IR labels were never filtered. Night is intrinsically harder to calibrate on for both
+   sensors, and **no amount of retraining repairs that.** U2 §7 fixes the consequence in
+   advance: day-only becomes the primary reporting basis, pooled is retained as secondary with
+   its 46.2% night share in the caption. No retrain, no detector swap.
+2. **Give `nll` an explicit NaN policy** (S, CPU-only). `sep 0.0000` on both modalities is an
+   artifact: Python's `max`/`min` silently skip NaN, so `max(dv)-min(dv)` over
+   `[3.9057, nan, nan]` collapses to zero. NO-SIGNAL is the right *outcome* with two of three
+   arms unmeasurable, but the table reads as an exact tie, and with only ONE arm NaN the
+   statistic would be computed over a subset while the prereg specifies `max_a` over all arms.
+   No verdict moves; it is a live trap for the next run.
+3. **[`docs/rebaseline-proposal-2026-09-04.md`](docs/rebaseline-proposal-2026-09-04.md) §4 is now
+   decidable on its own terms** — `gauss_vis_seed0_nightfull` is the drop-in for the
+   `gauss_vis_seed0_ft` wired into `preset=crossmodal26m`, at ~2.5 h of caching and refitting.
+   One caveat on record: the new run is **single-stage**, so it is not a bit-for-bit replacement
+   for the two-stage `_ft` checkpoint. Needs its own registration; U2 licenses none of it.
+4. **The architecture review backlog**
+   ([`docs/TODO-2026-09-09-architecture-review.md`](docs/TODO-2026-09-09-architecture-review.md))
+   argues workstream A precedes everything. **It did not gate U2, checked rather than assumed:**
+   none of the five decision metrics routes through the AP path — only the reported,
+   non-decision `map50_95` column does. It still gates every mAP-ranked table.
+5. **Server: nothing to do but watch.** `runs/queue_vis_benchmark_ep25/status.xlsx`;
+   its HEALTH line reads STALLED if the queue stops writing `state.json`. The 31-run redo pass
+   is in [`docs/handoff-2026-09-06-redo31.md`](docs/handoff-2026-09-06-redo31.md).
 
 **Then (me):** selection memo + §7.2 resolution from Table 1 → port Gaussian conversion if the winner isn't v8/11-family → analyze Table 2/ablation outputs → **phase gate: Laksh's go-ahead for Phase 4** (Table 3 runner with real VIS↔IR pairing + homography, both-degraded row + R_sys histogram, MIT onboarding, DETR row decision, multi-seed publication runs, landscape re-check per plan C1).
 
@@ -298,6 +308,8 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 
 | Date | Phase | Run | Config / commit | Result | Notes |
 |---|---|---|---|---|---|
+| 2026-09-09 | 3 | **U2 — day/night UQ slice at Stage B**, `scripts/slice_uq_day_night.py`, 3 night-capable VIS arms + the unchanged IR control, 3 new caches in `runs/cache_uqslice/`, 2,000 paired bootstrap draws | prereg `4a4a84b`, code `0c88ae7` | **VIS SUSPECT, IR SUSPECT** (IR also **CONTAMINATED as registered**, rule 9 unfloored, on one unresolvable `ause` swap). **Same band on both modalities**, which is the pre-registered reading that the distortion is **not label-driven**: IR labels were never filtered, so night is intrinsically harder to calibrate on for both sensors and **retraining repairs nothing**. VIS driven by `ause` r=0.5982; `aurc` 0.3119 and `d_ece` 0.2992 sit just above the 0.25 CLEAN boundary and are weak on their own; `interval_ece` CLEAN; no VIS ordering flips. Consequence per U1 §7: day-only becomes the primary reporting basis, pooled retained as secondary with its 46.2% night share disclosed. **No retrain, no detector swap.** Report: `runs/eval/uq_day_night_slice_u2.md` | **The first non-hollow VIS measurement of this slice.** The pre-declared §4 diagnostic (not a decision input) confirms the retrain worked: night detections per 1,032 frames went 2 -> 7,694 (sigma-head), 28 -> 11,567 (MC), and the ensemble arm exists for the first time at 16,700. Both prior runs were decided partly by arms emitting almost nothing at night. **A reporting defect the run exposed:** `nll` shows `sep 0.0000` on both modalities and that is an artifact, not a measurement — MC and ensemble NLL are NaN (the 2026-09-04 sigma repair; an M=5 sample std is exactly 0 when members agree) and Python's builtin `max`/`min` silently skip NaN, collapsing `max(dv)-min(dv)` over `[3.9057, nan, nan]` to 0. NO-SIGNAL is the right outcome with two of three arms unmeasurable, but the table reads as an exact tie, and with only ONE arm NaN `sep` would be computed over a subset while the prereg specifies `max_a` over all arms. No verdict moves; it needs an explicit NaN policy |
+| 2026-09-09 | 3 | **VIS UQ retrain complete** — `runs/queue_vis_uq_retrain`, 7 runs sequential, cold starts on the restored labels (`b92739202127`), `yolo26m` / imgsz 640 / batch 16 / epochs 100 / patience 20 | queue `runs/queue_vis_uq_retrain/queue.json` | All 7 **done**, 2026-09-04 16:56 -> 2026-09-09 21:41 IST. `mc_vis_nightfull` 97 ep, best ep 76, **0.25858**; `gauss_vis_seed0_nightfull` 37 ep, best ep 16, **0.26983**; `ens_vis_nightfull_seed{0..4}` 35–61 ep, **0.27894 / 0.26982 / 0.26808 / 0.26607 / 0.27109** | The `_ft` continuation stage was queued and then **reversed** during construction — all three VIS arms are single-stage cold starts, which makes the VIS side internally symmetric but the VIS-vs-IR comparison less so (IR control arms are all two-stage `_ft`). Disclosed in the U2 prereg §5 rather than left to be discovered. `runs/ensemble/ensemble_members.csv` does **not** need updating — it is written only by `smoke_phase3.py` and its toy `yolov8n` rows are a smoke artifact; the real per-member registry is `runs/ensemble/csv/`, where all five new members already are |
 | 2026-09-04 | 3 | **Night veto V1** — `scripts/eval_night_veto.py`, cold-start `gauss_vis_nightfull`, 4 paired draws, 22 new VIS caches in `runs/cache_nv_*` (3,854 s) | prereg `5761e9f`, code `6552d68` | **INCONCLUSIVE** (band as registered: ADOPT, capped by guard 2). Clean-night **+0.1785** (0.0850 -> 0.2635) against floor 0.0054. **All 5 VIS-healthy cells ADOPT (+0.1785..+0.2255); all 5 VIS-degraded cells REJECT (-0.0102..-0.0737).** Guard 2 fired on `lowlight`/IR-glare (-0.0358) and `blur_s3`/IR-glare (-0.0159). Secondary arm `gauss_vis_nightrestore` (reported, not decision): **+0.1962**, same verdict, same two cells | Negative control passed before launch: on the shipped checkpoint the OFF arm moves night by nothing (0.0850 both ways) and day is bit-identical at 0.328562. **Rule 5 was mis-specified and was reported as such rather than silently reinterpreted** — it voids on ANY day movement, which is only sound where the veto never fires on day, and it fires on 0.8% in one cell. Partner rate at `iou_thr` 0.85 on the clean night cell is **0.143%**, so the gain is union recall and not consensus |
 | 2026-09-04 | 3 | **Night veto V2** — Stage 0 screening then Stage 1 gate, `scripts/stage0_night_veto_v2.py` / `scripts/stage1_night_veto_v2.py` | prereg `c9a215c`, code `f3a24e9` | Stage 0 **PROCEED with `q_refit`** (AUROC 0.9921 vs a bar of 0.90; `sigma_frame` 0.9446, `conf_mean` 0.9263, `n_det` 0.4317 FAIL). Stage 1 **INCONCLUSIVE**: clause (a) PASS at +0.1785, clause (b) **FAIL on 5 of 11** night cells, day guard PASS | **The obvious instrument was disqualified in the registration, before the fact:** `vis_health` as shipped flags 100% of night frames unhealthy in every condition including clean, so "night AND unhealthy" is arithmetically "night". **`n_det` fails as an anti-correlated discriminator** (fog: 35.6 detections at mean conf 0.0107 vs clean 8.1 at 0.2706) and the sign was NOT flipped post hoc. V2 failed because `night_weak_fallback` — deliberately out of scope — still vetoes a HEALTHY night VIS at 46-100% through `concentrated`, a VIS texture statistic IR corruption cannot move |
 | 2026-09-04 | 3 | **Night veto V3** — `scripts/v3_night_veto.py`, `veto_health_mode="sole_authority"` | prereg `0890a1a`, code `78df4fc`, record `ccf76d2` | **VOID, and the axis is CLOSED.** Clause (a) +0.1785 PASS; clause (b) **0 breaches** (V2 had 5) PASS; clause (c) 0 clean-VIS cells with a day veto PASS — then the day guard tripped on `lowlight`/IR-glare, day veto **0.8% -> 19.9%**, day delta 0.004669 vs floor 0.00200 | Night behaviour was exactly right: veto 100% -> 0% on all five clean-VIS night cells, 96-100% on the degraded ones. **The day break is the rule working as written, not a leak** — V3's trigger contains `ir_night_raw AND ~ir_ok`, which is not night-confined by construction. V3's own VOID wording conflated "leak" with "any day movement"; **that imprecision is recorded rather than exploited**, and changes nothing, since V3 is not an ADOPT under either reading |
