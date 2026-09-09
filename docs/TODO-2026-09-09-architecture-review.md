@@ -229,7 +229,7 @@ bound fit.
 
 *Blocked on:* the partition decision (§11 Q1).
 
-### R-B2 — the development set has become the test set (F02) · P1 · M
+### R-B2 — the development set has become the test set (F02) · P1 · M · **LABEL + GUARD DONE 2026-09-09 (`38a128c`); nested LORO open**
 `capability_sel` defaults to `"fit"`, so the capability prior uses the larger repeatedly-inspected
 set unless overridden. The 2026-09-01 log §147 discusses keeping support IoU 0.30 after 0.55 scored
 poorly **on TEST** — a test that rejects candidates is participating in selection.
@@ -245,6 +245,30 @@ genuinely untouched release. Change the `capability_sel` default or make it a re
 *Acceptance:* the final scoring command cannot fit constants or select checkpoints. Do not describe
 night held out from the **gate** as night held out from **detector training** — D6-rev explicitly
 permits night training frames.
+
+**Done 2026-09-09** — [`docs/exposure-ledger-2026-09-09.md`](exposure-ledger-2026-09-09.md) states,
+per run, what it has been used for. `DEVELOPMENT_RUNS` names all three paired day runs as
+development data. **Confirmed in code, not inferred: `sel("fit") == sel("day")` is `True`.**
+
+`load_context()` gains `role`. `role="develop"` is the default so all 63 call sites are unaffected
+and recorded numbers reproduce bit-for-bit (verified by stashing `ctx.py` — `cap_vis` and `cap_ir`
+identical to the last digit). `role="final"` makes `capability_sel` **required** and refuses any
+selector spanning the scoring frames; `assert_final_scorable()` then intersects the prior's fit
+frames with the frames about to be scored and refuses on overlap. That meets the acceptance
+criterion — the final scoring path structurally cannot fit on what it reports. `sel()` also gains
+`tune`/`test`/`dev`, which had been constants `sel()` could not resolve.
+
+Making `capability_sel` required *unconditionally* would have broken 56 of 63 call sites and
+silently rewritten every recorded number, so it is required exactly where it can do harm.
+
+**Still open, and it is the expensive half:** nested leave-one-run-out with every fitted component
+inside the fold. The guard can now refuse a contaminated final score; **there is still no
+uncontaminated data to run one on.** The ledger §5 prices the three options.
+
+**Found while doing this, logged not diagnosed (R-E1 / F14):** `final_system_crossmodal.json`
+records `cap_ir = 0.009246512091269591`; the current tree reproduces `0.0023539426113108287` from
+the same preset, while `cap_vis` is bit-identical. Ratio 3.93 against a `cap_ir_scale` of 4.0, with
+a residual **1.83%** after that. A shipped result that does not regenerate is its own finding.
 
 ### R-B3 — annotation releases (F05) · P1 · M
 Publish three immutable, separately named annotation releases: **original**, **frame-filtered
