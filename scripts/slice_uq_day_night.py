@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -117,6 +119,45 @@ class Arm:
         gts = [self.gts[j] for j in frames]
         return map50_95(recs, gts)
 
+    def __getstate__(self) -> dict:
+        """Drop `records`/`gts` when shipping this arm to a bootstrap worker.
+
+        They are by far the heaviest part of the object and `metrics()` -- the only
+        thing a worker calls -- never touches them; `maps()` runs main-process only,
+        on the point estimate. Without this the per-worker pickle is tens of MB of
+        raw prediction records for no gain.
+        """
+        d = self.__dict__.copy()
+        d["records"] = None
+        d["gts"] = None
+        return d
+
+
+def _boot_one(arms: list[Arm], is_night: np.ndarray, draw: np.ndarray) -> dict:
+    """One bootstrap draw -> {metric: (sep, spread)}. Pure; no shared state."""
+    dnight = is_night[draw]
+    bpt = {a.label: {"pooled": a.metrics(draw), "day": a.metrics(draw[~dnight])}
+           for a in arms}
+    out = {}
+    for m in DECISION:
+        day = {lab: bpt[lab]["day"][m] for lab in bpt}
+        pull = {lab: bpt[lab]["pooled"][m] - day[lab] for lab in bpt}
+        dv, pv = list(day.values()), list(pull.values())
+        out[m] = (max(dv) - min(dv), max(pv) - min(pv))
+    return out
+
+
+_BOOT_CTX: tuple = ()
+
+
+def _boot_init(arms: list[Arm], is_night: np.ndarray) -> None:
+    global _BOOT_CTX
+    _BOOT_CTX = (arms, is_night)
+
+
+def _boot_task(draw: np.ndarray) -> dict:
+    return _boot_one(_BOOT_CTX[0], _BOOT_CTX[1], draw)
+
 
 def _load(path: Path):
     obj = load_cache(path)
@@ -182,7 +223,7 @@ def flips(day: dict[str, float], pooled: dict[str, float], floor: float) -> dict
     return {"resolved": resolved, "unresolved": unresolved}
 
 
-def analyse(modality: str, arms: list[Arm]) -> dict:
+def analyse(modality: str, arms: list[Arm], jobs: int = 1) -> dict:
     n = len(arms[0].paths)
     is_night = np.array([NIGHT_RUN in str(p) for p in arms[0].paths])
     all_f = np.arange(n)
@@ -207,19 +248,22 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
 
     obs = stats(point)
 
+    # Rule 6 pins 2,000 frame-level resamples at seed 0, paired across arms. The draws
+    # are generated up front from that one seeded stream, in the same order the original
+    # serial loop consumed it, so evaluating them across processes is **bit-identical**
+    # to evaluating them in a loop -- not merely equivalent. Nothing about the registered
+    # statistic changes; only who computes which draw. `executor.map` preserves order.
     rng = np.random.default_rng(BOOT_SEED)
-    boot = {m: {"sep": [], "spread": []} for m in DECISION}
-    for _ in range(N_BOOT):
-        draw = rng.integers(0, n, n)                      # rule 6: paired across arms
-        dnight = is_night[draw]
-        bpt = {a.label: {"pooled": a.metrics(draw), "day": a.metrics(draw[~dnight])}
-               for a in arms}
-        for m in DECISION:
-            day = {lab: bpt[lab]["day"][m] for lab in bpt}
-            pull = {lab: bpt[lab]["pooled"][m] - day[lab] for lab in bpt}
-            dv, pv = list(day.values()), list(pull.values())
-            boot[m]["sep"].append(max(dv) - min(dv))
-            boot[m]["spread"].append(max(pv) - min(pv))
+    draws = [rng.integers(0, n, n) for _ in range(N_BOOT)]
+    if jobs > 1:
+        chunk = max(1, len(draws) // (jobs * 4))
+        with ProcessPoolExecutor(max_workers=jobs, initializer=_boot_init,
+                                 initargs=(arms, is_night)) as ex:
+            rows = list(ex.map(_boot_task, draws, chunksize=chunk))
+    else:
+        rows = [_boot_one(arms, is_night, d) for d in draws]
+    boot = {m: {"sep": [r[m][0] for r in rows], "spread": [r[m][1] for r in rows]}
+            for m in DECISION}
 
     for m in DECISION:
         se_sep = float(np.nanstd(boot[m]["sep"], ddof=1))
@@ -343,6 +387,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="runs/eval/uq_day_night_slice.md")
     ap.add_argument("--boot", type=int, default=N_BOOT)
+    ap.add_argument("--jobs", type=int, default=0,
+                     help="processes for the bootstrap. 0 = auto (cores-2, capped at 16), "
+                          "1 = serial. The draws are pre-generated from the single rule-6 "
+                          "seed-0 stream in the serial loop's own order, so any --jobs "
+                          "gives bit-identical sep/spread -- this is a speed knob, not a "
+                          "statistical one. Verified against --jobs 1; see the report's "
+                          "reproduction line.")
     ap.add_argument("--vis-sigma-cache", default=None,
                      help="override the VIS sigma-head arm's cache filename (relative to "
                           "runs/cache_uqslice/). Only for a declared amendment -- see "
@@ -359,6 +410,7 @@ def main() -> int:
                           "docs/prereg-uq-day-night-slice-u2-stageb.md.")
     args = ap.parse_args()
     globals()["N_BOOT"] = args.boot
+    jobs = args.jobs if args.jobs > 0 else max(1, min(16, (os.cpu_count() or 2) - 2))
     arms_spec = {mod: dict(spec) for mod, spec in ARMS.items()}
     if args.vis_mc_cache:
         arms_spec["VIS"]["MC-Dropout"] = args.vis_mc_cache
@@ -377,8 +429,9 @@ def main() -> int:
         arms = [Arm(lab, p) for lab, p in paths.items()]
         notes.append(f"**{modality}** — " + ", ".join(verify(arms, modality)))
         diags.append(night_detection_diagnostic(modality, arms))
-        print(f"[{modality}] scoring {len(arms)} arms x 3 subsets + {args.boot} bootstrap draws")
-        res = analyse(modality, arms)
+        print(f"[{modality}] scoring {len(arms)} arms x 3 subsets + {args.boot} "
+              f"bootstrap draws on {jobs} process(es)")
+        res = analyse(modality, arms, jobs=jobs)
         print(f"[{modality}] verdict {res['verdict']}")
         results.append(res)
 
