@@ -60,7 +60,7 @@ the artifact the rest of the backlog waits on.
 
 **P1. Blocks: every table, every adoption decision, the UQ arms comparison, the 93-run grid readout.**
 
-### R-A1 — official-AP parity harness (F03) · P1 · M · **HARNESS DONE 2026-09-09 (`a3182ba`); (a)/(b) call open**
+### R-A1 — official-AP parity harness (F03) · P1 · M · **DONE 2026-09-09 (`a3182ba`) + 2026-09-10 (`99a6bc9`)**
 Stand up `pycocotools` as the authoritative evaluator behind an explicit task config (IoU sweep,
 area ranges, maxDets, ignore policy, stable score sort). Decide per table whether we (a) replace the
 local AP, or (b) keep it for historical continuity under an honest name (`custom_ap_linear_interp`)
@@ -86,9 +86,39 @@ floor, and it does *not* rescue decisions made below it (soft-NMS rejected at �
 than this disagreement). Unexplained and reported as observed: the gap is much larger on day than
 night, consistently across arms.
 
-**Open:** the (a) replace / (b) rename-and-companion decision. Recommendation on the measurement
-above is **(b)** — deltas are safe at 5× margin, so re-scoring everything buys little, but every
-published *absolute* number must name its convention.
+**Closed 2026-09-10 (`99a6bc9`) as NEITHER (a) nor (b).** Checking the ground before executing my
+own (b) recommendation turned up two facts that disqualified it:
+
+* `map50_95` has **322 call sites across 70 files** plus 12 documents, so the rename half of (b) is
+  a project-wide edit for a 0.00029 delta effect.
+* `cocoparity.TASK_CONFIG` pins `max_dets: None`, not COCO's 100 — deliberately, so a truncating cap
+  cannot masquerade as an interpolation gap. **A column labelled "COCO" would therefore be a
+  mislabel of exactly the kind this review item is about** (cf. `preset="crossmodal"` naming three
+  different systems, `docs/exposure-ledger-2026-09-09.md` §6). Fixing a naming defect by adding a
+  second naming defect is not a fix.
+
+Resolved instead by **declaring the convention and pinning the measurement**:
+
+* **(c)** `apmetrics.AP_CONVENTION = "local-linear-interp"`, a third declared policy constant beside
+  `MISSING_CLASS_POLICY` and `SORT_KIND`, plus `declared_policies()` for stamping all three into a
+  result's config block.
+* **(d)** `matching.local_ap50_95` is the honest name; `map50_95` remains a working alias and the
+  returned dict keys are unchanged, so **no call site and no recorded number moves**. Its docstring
+  had claimed "COCO-style" since the function was written — it is linear interpolation, not a
+  first-attained-recall lookup. No deprecation warning: 70 files emitting one per eval is noise, and
+  the old name is imprecise rather than wrong.
+* **(e)** `cocoparity.PARITY_BOUND = 0.00028501` / `PARITY_TOLERANCE = 1.5`.
+  `ap_convention_parity.py` now **fails** above 0.00042751 instead of only printing the number, and
+  `smoke_cocoparity.py` case 9 asserts on every run that the trip point stays under the 0.0014 floor,
+  that `max_dets` is still `None`, and that the alias stays wired.
+* **(f)** `docs/ap-convention-rule-2026-09-10.md` — the standing rule: paired deltas are
+  convention-safe, absolute APs are not, and Phase 1 ultralytics numbers (~0.034 between *versions*)
+  never share a table with custom fusion AP.
+
+All three smoke suites pass and `preset="crossmodal"` still reproduces
+`cap_ir = 0.0023539426113108287` bit-for-bit. **Carried into R-E1 by the same commit:**
+`FusionContext` now records `ir_nms` and `cap_ir_scale` — previously local variables applied and
+discarded, which is precisely why no artifact could record them.
 
 ### R-A2 — bootstrap fast/reference equivalence (F04) · P1 · S · **DONE 2026-09-09 (`a4cf208`)**
 Declare a missing-class policy (drop the class from the macro mean, or score it 0 — the review's
@@ -707,10 +737,26 @@ development plus new data for the frozen evaluation, or a narrowed claim limited
 My read, consistent with `project-benchmark-holdout`, is that there was never held-out day data — so
 this is confirmation, not news, and the honest options are "new recording" or "narrow the claim".
 
-**Q2 — re-score scope (blocks R-A5, step 3).** Full re-score under corrected AP, accepting that some
-adoption decisions may not survive — or freeze current results as a named custom-AP variant and use
-official AP only going forward? **Recommendation: full re-score.** The change-impact table is worth
-more than the decisions it might cost, and §1 shows the bias is the size of our own noise floor.
+**Q2 — re-score scope (blocks R-A5, step 3). ~~Open~~ ANSWERED 2026-09-10 by measurement; the
+question's premise did not survive R-A1.** As written it asked: full re-score under *corrected AP*,
+or freeze current results as a named custom-AP variant and use *official AP* only going forward?
+Both branches assumed a "corrected AP" exists to move to. It does not:
+
+* The local convention is not **wrong**, it was **undeclared**. Measured delta disagreement is
+  0.00028501, 5× below the 0.0014–0.0031 paired floor, so re-scoring on AP grounds buys nothing.
+* "Use official AP going forward" is not available either — `TASK_CONFIG` sets `max_dets: None`, so
+  `cocoparity` is not COCO in the knob that decides leaderboard comparability, and calling it that
+  would repeat F14's naming defect.
+
+We took half of branch two — `local_ap50_95` names the variant (R-A1 (d)) — and declined the other
+half on the evidence above.
+
+**What actually drove the re-score was R-A3's 1.95× interval inflation, not the AP convention**, and
+R-A5 has already applied it (`f8c6b7e`, rebuilt `6e6bbac`). The live remainder of Q2 is therefore a
+narrower question: **re-adjudicate vs genuinely re-score.** R-A5 widened *recorded* intervals by a
+factor measured on VIS UQ-arm deltas and transported to fusion cells — an assumption. A true
+re-score through `blockboot` is mechanical now. **Recommendation: re-score the rows R-A5 left
+indeterminate (20 of 74), not all 74.**
 
 **Q3 — UQ estimand (blocks R-C2, the UQ table, step 5).** Disagreement ranking, or predictive
 likelihood? Ranking is a small honest table from the runs already on disk. Likelihood means
