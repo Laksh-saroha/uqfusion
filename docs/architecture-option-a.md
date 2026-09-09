@@ -1,14 +1,10 @@
 # Option A architecture — `yolo26m` deployed, `yolo12m` as the §7.2 ablation control
 
-Status: **§7.2 decision still open.** The code below supports *both* options — the
-end2end port is required either way, so nothing here presumes an answer. Option A is
-the only one that additionally trains `yolo12m`.
+Status: **§7.2 decision still open.** The code supports *both* options — the end2end port
+is required either way. Option A is the only one that additionally trains `yolo12m`.
 
-Colour key in both diagrams:
-
-- **green** — implemented and gated on this machine
-- **amber** — implemented, but the training run has not happened yet (GPU work)
-- **grey** — stock Ultralytics, untouched
+Colour key (both diagrams): **green** = implemented and gated on this machine; **amber** =
+implemented, training run not yet done (GPU work); **grey** = stock Ultralytics, untouched.
 
 ---
 
@@ -54,10 +50,10 @@ flowchart TB
     class N1,N2,O2M,O2O stock
 ```
 
-The whole §7.2 question is the single node **`histogram width`**. It exists on the
-right because `yolo12m` predicts a 16-bar histogram per box edge; it cannot exist on
-the left because `yolo26m` predicts one number per edge. Nothing else about the two
-heads differs — `cv4` is the same code in both.
+The whole §7.2 question is the single node **`histogram width`**: it exists on the right
+because `yolo12m` predicts a 16-bar histogram per box edge, and cannot exist on the left
+because `yolo26m` predicts one number per edge. Nothing else about the two heads differs —
+`cv4` is identical code in both.
 
 ---
 
@@ -95,9 +91,8 @@ flowchart TB
     class SV,MV,SI,MI,RV,RI,FUSE,FINAL,T2A stock
 ```
 
-`yolo12m` is a **dead-end branch**: it produces two Table 2 rows and touches nothing
-else. It is never fused, never evaluated in Table 3, and its weights ship with no
-part of the system. Deleting it removes exactly two table rows.
+`yolo12m` is a **dead-end branch**: two Table 2 rows and nothing else. Never fused, never
+in Table 3, weights ship with no part of the system. Deleting it removes exactly two rows.
 
 ---
 
@@ -111,15 +106,14 @@ part of the system. Deleting it removes exactly two table rows.
 | Table 2 | Gaussian / MC / Ensemble | + explicit-vs-DFL pair |
 | Risk added | — | none to the deployed system; `12m` path already verified |
 
-`yolo12m` is the right control because it is compute-matched to `yolo26m`, so the
-head design is the only variable:
+`yolo12m` is the right control because it is compute-matched to `yolo26m`, leaving head
+design as the only variable:
 
 | | params | GFLOPs | FPS fp32 | Phase 1 mAP50-95 |
 |---|---|---|---|---|
 | `yolo26m` | 21.9 M | 75.4 | 56.4 | 0.3016 ± 0.0050 |
 | `yolo12m` | 20.2 M | 68.1 | 56.1 | 0.2906 ± 0.0046 |
 
-**The claim this buys, stated honestly:** the ablation answers "is the free DFL signal
-as good as an explicit variance branch?" *on a DFL backbone*. It does not compare
-across the two backbones — that comparison is confounded by the backbone itself and
-must not be made.
+**The claim this buys, stated honestly:** the ablation answers "is the free DFL signal as
+good as an explicit variance branch?" *on a DFL backbone*. It does not compare across the
+two backbones — that comparison is confounded by the backbone and must not be made.

@@ -1,12 +1,9 @@
 # Same recipe, two machines: the best-epoch estimator flips the answer (2026-09-01)
 
-`mc_vis_seed0_ft_server` on dgxanode01, run to compare against the laptop's
-`mc_vis_seed0_ft_refit`. Same seed, same recipe, same data, 10 epochs each.
-Server run: started 04:50:42 UTC, finished 07:08:33 UTC, 794.3 s/epoch, status
-`done`, queue idle.
-
-Read via the Jupyter Contents API from Chrome (`runs/queue_mc_server/state.json`,
-`runs/mc_dropout/mc_vis_seed0_ft_server/results.csv`).
+`mc_vis_seed0_ft_server` on dgxanode01, run against the laptop's `mc_vis_seed0_ft_refit`.
+Same seed, recipe, data; 10 epochs each. Server: started 04:50:42 UTC, finished 07:08:33
+UTC, 794.3 s/epoch, status `done`, queue idle. Read via the Jupyter Contents API from Chrome
+(`runs/queue_mc_server/state.json`, `runs/mc_dropout/mc_vis_seed0_ft_server/results.csv`).
 
 ## 1. The two curves
 
@@ -36,81 +33,63 @@ mAP50-95 by epoch:
 
 ## 2. The finding
 
-**The two machines disagree about which is better, and the sign depends entirely
-on the estimator.**
+**The two machines disagree about which is better, and the sign depends entirely on the
+estimator.** By **best-epoch** the laptop wins by **+0.00884**; by **epoch-mean** the server
+wins by **+0.00497**. Same seed, recipe, data — only the hardware changed.
 
-- By **best-epoch**, the laptop wins by **+0.00884**.
-- By **epoch-mean**, the server wins by **+0.00497**.
-
-Same seed, same recipe, same data. The only thing that changed is the hardware.
-
-The mechanism is visible in the table: **the laptop's epoch-to-epoch scatter is
-2.4× the server's** (sd 0.01056 vs 0.00440). `max` over 10 noisy validations
-rewards the noisiest run, so the laptop's *selection premium* — best minus mean —
-is **+0.02258 against the server's +0.00878, a factor of 2.6**. The laptop does
-not train a better model; it produces a wider spread for `max` to pick from.
-
-This is the selection-bias mechanism flagged when the arms were first compiled,
-now measured directly rather than argued from first principles.
+Mechanism: **the laptop's epoch-to-epoch scatter is 2.4× the server's** (sd 0.01056 vs
+0.00440). `max` over 10 noisy validations rewards the noisiest run, so the laptop's
+*selection premium* (best − mean) is **+0.02258 against the server's +0.00878, a factor of
+2.6**. The laptop does not train a better model; it produces a wider spread for `max` to
+pick from. This is the selection-bias mechanism flagged when the arms were first compiled,
+now measured rather than argued.
 
 ## 3. There is no stable machine offset
 
 Per-epoch `server − laptop`: mean **+0.00497**, sd **0.00789**, range
-**[−0.00884, +0.01421]**, **7 epochs positive / 3 negative**.
+**[−0.00884, +0.01421]**, **7 positive / 3 negative**. Not a constant that can be subtracted
+out, and comparable in size to the between-arm differences the three-arm comparison was
+trying to resolve. This confirms the earlier correction to the record — an apparent stable
+offset from a single epoch-1 observation was an n=1 artifact.
 
-The delta is not a constant that can be subtracted out. It is comparable in size
-to the between-arm differences the three-arm comparison was trying to resolve.
-This confirms the earlier correction to the record — an apparent stable offset
-from a single epoch-1 observation was an artifact of n=1.
-
-**Consequence: best-epoch numbers measured on different machines are not
-comparable.** The compiled three-arm result had arms trained on different boxes,
-which is precisely why this single-machine control was run. It was the right call.
+**Consequence: best-epoch numbers measured on different machines are not comparable.** The
+compiled three-arm result had arms trained on different boxes, which is exactly why this
+single-machine control was run. It was the right call.
 
 ## 4. What reproduced and what did not
 
-**Location reproduced.** Both runs peak at **epoch 4**. Given hardware
-nondeterminism (cuDNN autotune, atomic reduction order, different GPU), identical
-seeds do *not* guarantee identical trajectories across boxes, so the peak
-surviving a hardware change makes it more likely to be a real feature of the
-trajectory — the LR schedule and data order — than a lucky validation.
+**Location reproduced.** Both runs peak at **epoch 4**. Given hardware nondeterminism (cuDNN
+autotune, atomic reduction order, different GPU), identical seeds do *not* guarantee
+identical trajectories across boxes, so the peak surviving a hardware change makes it more
+likely a real feature of the trajectory (LR schedule, data order) than a lucky validation.
 
-**Magnitude did not.** The peak stands **+0.02258** above the mean on the laptop
-and only **+0.00878** on the server. The best-epoch comparison depends entirely
-on the magnitude, and the magnitude is the half that failed to reproduce.
+**Magnitude did not.** The peak stands **+0.02258** above the mean on the laptop, only
+**+0.00878** on the server. The best-epoch comparison depends entirely on magnitude, and
+magnitude is the half that failed to reproduce. This tempers, without overturning, the
+earlier reading of the ep4 spike as noise: a real bump whose *height* is largely
+machine-dependent.
 
-This tempers, without overturning, the earlier reading of the ep4 spike as noise:
-it is a real bump in the trajectory whose *height* is largely machine-dependent.
-
-**The decay signature also weakened.** The laptop's −0.00216/epoch decline — cited
-as evidence the MC arm degrades with training, against the control's
-−0.0002/epoch — is **−0.00034/epoch** on the server, an order of magnitude
-smaller and essentially flat. That specific piece of evidence for "MC declines"
-does not survive the machine change.
+**The decay signature also weakened.** The laptop's −0.00216/epoch decline — cited as
+evidence the MC arm degrades with training, against the control's −0.0002/epoch — is
+**−0.00034/epoch** on the server, an order of magnitude smaller and essentially flat. That
+evidence for "MC declines" does not survive the machine change.
 
 ## 5. Bearing on the open decisions
 
-**Decision 1 (how to report the three arms).** The recommendation stands and is
-now measured rather than argued: **do not rank the arms on best-epoch mAP.** The
-estimator alone flips the laptop/server ordering, the machine contributes
-±0.008–0.014 per epoch with no stable offset, and the selection premium varies by
-2.6× across boxes. Report epoch-mean with the spread, and state that the arms
-were not all trained on one machine.
+**Decision 1 (how to report the three arms).** Recommendation stands, now measured: **do not
+rank the arms on best-epoch mAP.** The estimator alone flips the laptop/server ordering, the
+machine contributes ±0.008–0.014 per epoch with no stable offset, and the selection premium
+varies 2.6× across boxes. Report epoch-mean with spread, and state the arms were not all
+trained on one machine.
 
-**Decision 2 (best-epoch, settled).** Retaining best-epoch for *checkpoint
-selection* is unaffected — that is a within-run choice and this is a
-between-run comparability problem. The two questions were correctly separated
-in `docs/D31-checkpoint-selection-2026-09-01.md`; this run supports keeping them
-separate.
+**Decision 2 (best-epoch, settled).** Retaining best-epoch for *checkpoint selection* is
+unaffected — a within-run choice, whereas this is a between-run comparability problem. The
+two questions were correctly separated in `docs/D31-checkpoint-selection-2026-09-01.md`.
 
 ## 6. Caveats
 
-- **n = 1 pair.** One laptop run against one server run. Hardware and
-  fixed-seed nondeterminism are confounded and cannot be separated here; what is
-  measured is "same seed, different box", which is the operationally relevant
-  quantity but not a clean hardware effect.
-- 10 epochs is short. `patience` was 20 and never engaged, so neither run
-  converged; these are early-training curves and the decay slopes in particular
-  should not be extrapolated.
-- Only the VIS MC arm was re-run. The ensemble and σ-head arms remain as
-  originally measured.
+- **n = 1 pair.** Hardware and fixed-seed nondeterminism are confounded; what is measured is
+  "same seed, different box" — operationally relevant, not a clean hardware effect.
+- 10 epochs is short. `patience` was 20 and never engaged, so neither run converged; these
+  are early-training curves and the decay slopes especially should not be extrapolated.
+- Only the VIS MC arm was re-run. Ensemble and σ-head arms remain as originally measured.
