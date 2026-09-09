@@ -182,15 +182,18 @@ the effects may be real — but the interval used to defend them no longer suppo
 | `with_maha` / `no_maha` / `cap_only` | 6 each | 4 each | clean/day cells lost; were razor-thin already |
 | `photometric_veto`, veil veto repair | 2, 1 | all | hold |
 
-**The one to read carefully:** the shipped `crossmodal` preset keeps glare (+0.0045 macro, +0.0068
-ship) while the older 2026-08-20 D27 system loses it (+0.0022 → [−0.0017, +0.0064]). The recorded
-headline *"glare/day beats both single streams (+0.0022 [+0.0004, +0.0042])"* is the **old** system's
-number and is now indeterminate; what survives is the shipped system's larger effect.
+**REBUILT 2026-09-09 (`6e6bbac`), and the correction matters.** The first pass was built against
+`final_system_crossmodal.json` and labelled it the shipped preset. That file is **two revisions
+behind** — see the R-B2 entry and ledger §6. Rebuilt against `final_system_crossmodal_v2.json`, the
+artifact the current code reproduces (`runs/eval/change_impact_v4.md`, 20 of 74 indeterminate).
 
-**Also newly indeterminate in both systems:** gated vs `visible_only` clean/ship. That is the very
-instance quoted inside `matching.map50_95`'s docstring — *"ship AP +0.0031 CI [+0.0015, +0.0052], not
-spanning zero"* — to show macro dilution hiding a real ship gain. The structural argument is
-untouched; the empirical instance cited for it no longer clears the bar.
+**Under the current system all seven `gated vs visible_only` cells SURVIVE**, including glare
+(+0.0054 macro, +0.0086 ship) and clean/ship (+0.0052). Both were reported as casualties on the
+strength of superseded artifacts and are **not** casualties of the system that ships. The
+`matching.map50_95` docstring instance likewise stands under the current system.
+
+The overall shape is unchanged — the smallest cells break first, and `no_veto` still holds on 18 of
+26 cells.
 
 **Remaining work.** This RE-ADJUDICATES recorded intervals; it does not RE-SCORE. The 1.95× factor
 was measured on VIS UQ-arm deltas and transported to fusion cells, which assumes a comparable
@@ -265,10 +268,13 @@ silently rewritten every recorded number, so it is required exactly where it can
 inside the fold. The guard can now refuse a contaminated final score; **there is still no
 uncontaminated data to run one on.** The ledger §5 prices the three options.
 
-**Found while doing this, logged not diagnosed (R-E1 / F14):** `final_system_crossmodal.json`
-records `cap_ir = 0.009246512091269591`; the current tree reproduces `0.0023539426113108287` from
-the same preset, while `cap_vis` is bit-identical. Ratio 3.93 against a `cap_ir_scale` of 4.0, with
-a residual **1.83%** after that. A shipped result that does not regenerate is its own finding.
+**Found while doing this, then chased to the end (`6e6bbac`) — see the exposure ledger §6.**
+**There is no drift**; every value is deterministic and bit-reproducible, and the "1.83% residual"
+in the first write-up was an arithmetic error. What is broken is the **manifest**: three artifacts
+all record `"preset": "crossmodal"` with different `cap_ir` (0.0092465 / 0.0094158 / 0.0023539),
+because the preset gained `ir_nms=0.70` and `cap_ir_scale=4.0` in `b3d8371` and the config block
+records neither. **This is R-E1's case, made concrete.** It also invalidated R-A5's input — see
+that entry.
 
 ### R-B3 — annotation releases (F05) · P1 · M
 Publish three immutable, separately named annotation releases: **original**, **frame-filtered
