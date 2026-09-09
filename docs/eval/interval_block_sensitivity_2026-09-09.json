@@ -1,0 +1,55 @@
+{
+ "ratios": {
+  "sigma-mc|L1": 1.0,
+  "sigma-mc|L2": 1.049365504081307,
+  "sigma-mc|L5": 1.3311395945363134,
+  "sigma-mc|L10": 1.5780147060030811,
+  "sigma-mc|L20": 1.9201776300369935,
+  "sigma-mc|L50": 2.8950633495965814,
+  "sigma-mc|L100": 3.228148092787743,
+  "sigma-mc|L200": 1.5115160499137266,
+  "sigma-ens|L1": 1.0,
+  "sigma-ens|L2": 1.1235777880883442,
+  "sigma-ens|L5": 1.3937336749382592,
+  "sigma-ens|L10": 1.7491130439301807,
+  "sigma-ens|L20": 1.9893085997621962,
+  "sigma-ens|L50": 2.1628532286793303,
+  "sigma-ens|L100": 1.740133109049472,
+  "sigma-ens|L200": 1.3589323374224558,
+  "mc-ens|L1": 1.0,
+  "mc-ens|L2": 1.109063427399501,
+  "mc-ens|L5": 1.3310398362149838,
+  "mc-ens|L10": 1.6128823664077643,
+  "mc-ens|L20": 1.9451845862420614,
+  "mc-ens|L50": 2.9889922339410258,
+  "mc-ens|L100": 3.738677327956343,
+  "mc-ens|L200": 1.4651893308638584
+ },
+ "blocks": [
+  1,
+  2,
+  5,
+  10,
+  20,
+  50,
+  100,
+  200
+ ],
+ "n_boot": 1000,
+ "provenance": {
+  "resampling_unit": "single frame, drawn within run",
+  "covers": "scene sampling within these recordings, paired across systems",
+  "does_not_cover": [
+   "between-run variation (runs are held fixed by construction)",
+   "between-night-run variation \u2014 night is entirely pohang01, so this component is not estimable from this data at any block length",
+   "training-seed variation \u2014 each cache is one trained model"
+  ],
+  "runs": {
+   "pohang00": 836,
+   "pohang01": 1032,
+   "pohang02": 247,
+   "pohang03": 117
+  },
+  "n_runs": 4
+ }
+}

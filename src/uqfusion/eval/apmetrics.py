@@ -296,6 +296,21 @@ def bootstrap_delta(parts_a: list[dict], parts_b: list[dict], sel: np.ndarray | 
 
     Returns the observed delta, a percentile CI, and the share of resamples where
     the sign flips — the number that decides whether a +0.0003 headline survives.
+
+    **Two warnings, both from R-A3 (`docs/TODO-2026-09-09-architecture-review.md`).**
+
+    ``p_sign_flip`` is **not a p-value** and not the probability that a hypothesis is
+    true. It is a descriptive property of the resampling distribution. The name invites
+    the wrong reading; `blockboot` calls the same quantity ``sign_flip_fraction`` and
+    keeps ``p_sign_flip`` only as a deprecated alias.
+
+    This resamples **individual frames**, and the frames come from 10 Hz recordings
+    where consecutive frames are nearly the same picture. The interval it returns is
+    therefore **too narrow — measured at ~1.9x too narrow, as a lower bound**
+    (`runs/eval/interval_block_sensitivity_v3.md`). Prefer
+    `blockboot.block_bootstrap_delta`, which resamples contiguous blocks within runs and
+    reports what its interval covers. This function is kept for continuity with already
+    published numbers, which must be read with that factor in mind.
     """
     pa = presort(parts_a, sel)
     pb = presort(parts_b, sel)
