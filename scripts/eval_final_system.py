@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from uqfusion.eval.apmetrics import declared_policies
+from uqfusion.eval.identity import system_identity
 from uqfusion.eval.apmetrics import ap_from_parts, bootstrap_delta, frame_parts  # noqa: E402
 from uqfusion.eval.ctx import load_context, run_systems  # noqa: E402
 
@@ -331,8 +331,13 @@ def main() -> int:
                    # difference; neither was recorded, so `cap_ir` was their only
                    # witness. See docs/exposure-ledger-2026-09-09.md section 6.
                    "ir_nms": ctx.ir_nms, "cap_ir_scale": ctx.cap_ir_scale,
-                   # R-A1: which AP convention produced every number in this file.
-                   **declared_policies()},
+                   # R-A1: which AP convention produced every number in this file
+                   # is carried by the `identity` block below, with the source rev.
+                   },
+        # R-E1/F14: source revision (HEAD *and* a dirty hash), declared AP policies,
+        # and every FusionContext value that changes the numbers. A future reader can
+        # identify this run without inferring it from whichever code was checked out.
+        "identity": system_identity(ctx, n_boot=args.n_boot),
         "main": rows_main, "vs_visible": rows_vis, "ablation": rows_abl},
         indent=2), encoding="utf-8")
     print(f"[final] wrote {out} in {time.time() - t0:.0f}s")

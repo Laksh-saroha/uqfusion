@@ -206,13 +206,26 @@ def md_table(header: list[str], rows: list[list], align: str | None = None) -> s
     return "\n".join(out)
 
 
-def write_md(path, title: str, sections: list[str]) -> Path:
+def write_md(path, title: str, sections: list[str], identity=None,
+             provenance: bool = True) -> Path:
+    """Write a report to a NEW file, with a provenance footer.
+
+    R-E1/F14: every report now records the source revision (HEAD *and* a dirty hash,
+    because most analysis here is run before it is committed) and the declared AP
+    policies. `identity` accepts a dict from `uqfusion.eval.identity.system_identity`
+    when the caller has a `FusionContext` worth pinning; without one the footer still
+    carries source and metric identity. `provenance=False` opts out -- there is no
+    current caller that should.
+    """
     p = ROOT / path if not Path(path).is_absolute() else Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.exists():
         raise FileExistsError(
             f"{p} exists -- the project rule is that every new result goes to a NEW "
             f"filename so nothing published is overwritten. Pass a different --out.")
+    if provenance:
+        from uqfusion.eval.identity import identity_markdown
+        sections = [*sections, identity_markdown(identity)]
     p.write_text("# " + title + "\n\n" + "\n\n".join(sections) + "\n", encoding="utf-8")
     print(f"[out] {p}")
     return p

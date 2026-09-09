@@ -207,6 +207,20 @@ class FusionContext:
     # local variables in `load_context`, applied and then discarded, so no result file
     # could record them and `cap_ir` was their only witness. Recorded here so a config
     # block can stamp the VALUES rather than the preset NAME.
+    # The preset AS THE CALLER ASKED FOR IT, kept separate from the resolved name.
+    # `crossmodal26m` and `crossmodal26m_snms` both rewrite themselves to
+    # `crossmodal` internally, so recording only the resolved name loses which one
+    # ran -- and recording only the request loses nothing, which is why both are here.
+    # R-E1: every `load_context` argument as resolved, so a result file records the
+    # INPUTS and not just a preset name. 15 of the 26 parameters previously reached
+    # no attribute at all -- `capability_sel` (which frames the capability prior was
+    # fit on, R-B2's whole subject), `vis_soft_nms` (the ONLY thing separating
+    # `crossmodal26m_snms` from `crossmodal26m`), `ir_condition`, and every path to a
+    # constants file. A dict rather than 15 new fields so a parameter added later is
+    # captured without anyone remembering to.
+    inputs: dict = field(default_factory=dict)
+    preset: str | None = None
+    preset_resolved: str | None = None
     ir_nms: float | None = None
     cap_ir_scale: float | None = None
     _sel: dict = field(default_factory=dict)
@@ -381,6 +395,9 @@ def load_context(
     +0.0003, and -0.0003 (CI spans zero) on each of the four night cells. Every one
     of the eight cells lands at or above max(VIS, IR).
     """
+    # R-E1: captured before the rewrites below, which are lossy.
+    preset_requested = preset
+
     if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms"):
         raise ValueError(f"unknown preset {preset!r}")
     # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
@@ -675,7 +692,12 @@ def load_context(
         ir_merge_veto = True
         support_iou, support_gamma = 0.0, 0.0
 
+    # snapshot AFTER the preset defaults have been applied, so the record shows
+    # what actually ran rather than what the caller happened to pass.
+    _inputs = {k: v for k, v in locals().items() if k in _LOAD_CONTEXT_PARAMS}
     ctx = FusionContext(
+        inputs=_inputs,
+        preset=preset_requested, preset_resolved=preset,
         ir_nms=(float(ir_nms) if ir_nms else None),
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
@@ -715,6 +737,9 @@ def load_context(
             f"selector disjoint from the scoring set, or capability_sel=None.")
     if role not in ("develop", "final"):
         raise ValueError(f"role must be 'develop' or 'final', not {role!r}")
+    # resolved after ctx construction, like cap_ir_scale -- record the value that ran,
+    # never the `_UNSET` sentinel, which is meaningless outside this call.
+    ctx.inputs["capability_sel"] = capability_sel
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
         ctx.cap_fit_frames = (np.arange(len(ctx.runs)) if sel is None
@@ -742,6 +767,7 @@ def load_context(
             cap_ir_scale = 4.0 if preset == "crossmodal" else 1.0
         ctx.cap_ir = ctx.cap_ir / float(cap_ir_scale)
         ctx.cap_ir_scale = float(cap_ir_scale)
+        ctx.inputs["cap_ir_scale"] = float(cap_ir_scale)
         ctx.cap_note = f"capability prior over {capability_sel} frames"
 
     if verbose:
@@ -1039,3 +1065,11 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
 def run_table(ctx: FusionContext, **overrides) -> dict[str, dict]:
     """The full condition sweep. Returns {condition: evaluate_systems result}."""
     return {cond: run_systems(ctx, cond, **overrides) for cond in ctx.conditions}
+
+
+
+# Resolved once, from the signature itself, so this cannot drift out of date the way
+# a hand-maintained list would. `verbose` is excluded: it changes no number.
+_LOAD_CONTEXT_PARAMS = frozenset(
+    p for p in __import__("inspect").signature(load_context).parameters
+    if p != "verbose")

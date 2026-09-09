@@ -62,8 +62,8 @@ So the convention is **declared and recorded** instead of replaced.
 * `apmetrics.AP_CONVENTION = "local-linear-interp"` — the third declared policy
   constant, beside `MISSING_CLASS_POLICY` and `SORT_KIND`.
 * `apmetrics.declared_policies()` returns all three for stamping into a result's
-  config block. Wired into `scripts/eval_final_system.py`; **not yet wired into the
-  other result writers** — see §5.
+  config block, and `eval.identity.system_identity()` wraps them with the source
+  revision and the system values — see §6.
 * `matching.local_ap50_95` is the honest name. `matching.map50_95` remains as a
   working alias and the returned dict keys are unchanged, so no call site and no
   recorded number moves. Its docstring no longer claims to be "COCO-style", which it
@@ -79,10 +79,11 @@ So the convention is **declared and recorded** instead of replaced.
 
 ## 5. What this does not fix
 
-**The other result writers still stamp nothing.** `declared_policies()` is wired into
-one script. Roughly forty others write result JSON with a hand-built config block, and
-each is a place a future reader will have to infer the convention from whatever code
-was checked out. That is the general form of R-E1 and it is not done.
+**Superseded 2026-09-10 — see §6.** This section originally said "roughly forty" other
+scripts hand-build a config block. That was an estimate and it was wrong. Measured:
+**two** scripts write a `"config"` key, **29** write reports through
+`_ideas_common.write_md`, and **73** write JSON of some shape. The write_md path is now
+covered; the JSON writers mostly are not.
 
 **The bound is pinned to specific caches.** `PARITY_BOUND` was measured on the three
 VIS UQ arms. A new arm or a re-trained detector can legitimately move it. The trip
@@ -94,3 +95,56 @@ the assertion pass would defeat the entire point.
 −1.03e-5 (`project-snms-not-adopted`); the convention gap alone is ~20× that margin.
 This rule adds a second independent reason those decisions carry no information. It
 does not rescue any of them.
+
+---
+
+## 6. Follow-on: `eval.identity`, and what R-E1 now covers
+
+Written the same day, because the two findings are one defect.
+
+`src/uqfusion/eval/identity.py` answers, for a result file, *what was the system and
+what was the source*:
+
+* `git_revision()` returns HEAD **and** a `dirty_sha256` of `git diff HEAD`. R-E1 notes
+  that HEAD alone misses uncommitted source, and most analysis here is run before it is
+  committed — so two runs at one HEAD with different working trees now get different
+  identities.
+* `system_identity(ctx, **extra)` adds the three declared AP policies and every
+  `FusionContext` value that changes a number.
+* `_ideas_common.write_md` appends a **Provenance** section automatically, so all 29
+  report scripts gained this with no caller changes and no opt-in.
+
+**The audit that motivated the shape.** `load_context` takes 26 parameters and
+**15 of them reached no attribute at all** — they were applied and discarded. Among
+them:
+
+| parameter | why its absence mattered |
+|---|---|
+| `capability_sel` | which frames the capability prior was fit on — R-B2's entire subject |
+| `vis_soft_nms` | the **only** thing separating `crossmodal26m_snms` from `crossmodal26m` |
+| `ir_condition` | which IR degradation stream was in play |
+| the 9 path arguments | which constants file and which caches produced the number |
+
+So `FusionContext` gained `inputs`, a dict of every resolved `load_context` argument,
+snapshotted after the preset defaults apply and patched for the two values resolved
+later (`cap_ir_scale`, `capability_sel` — the latter previously leaked an `_UNSET`
+sentinel). A dict rather than 15 new fields, so a parameter added later is captured
+without anyone remembering to. The parameter set is derived from the signature by
+`inspect`, so it cannot drift.
+
+`FusionContext` also gained `preset` **and** `preset_resolved`. This matters more than
+it looks: `crossmodal`, `crossmodal26m` and `crossmodal26m_snms` all resolve internally
+to `crossmodal` with an identical `cap_ir`, so the resolved name alone still cannot
+tell them apart. Recording only the request would have lost the rewrite; recording only
+the resolution loses which preset ran.
+
+**Verified:** `crossmodal` still gives `cap_ir = 0.0023539426113108287` and `adopted`
+still gives `0.009246512091269591`, both bit-for-bit against the recorded artifacts,
+with `cap_vis` unchanged.
+
+**Still not done.** This is not the immutable hashed manifest R-E1 asks for. There are
+no ordered pair IDs, no annotation-release hash, no checkpoint content hash, and
+**nothing here is validated on cache load** — `load_cache:55` still validates nothing
+and `fusion_eval.py:185` still checks lengths rather than pair identities. Those are the
+parts of R-E1 that can *refuse* a bad run; this part can only describe a run after the
+fact. The ~73 JSON writers outside `write_md` also still stamp nothing.
