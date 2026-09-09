@@ -71,7 +71,7 @@ and publish an official-AP companion column. Recommendation: (a) for everything 
 classes, no predictions, wrong classes, per-image detection caps, and image resampling. Ultralytics'
 own convention is a **third** convention — do not treat "matches Ultralytics" as "matches COCO".
 
-### R-A2 — bootstrap fast/reference equivalence (F04) · P1 · S
+### R-A2 — bootstrap fast/reference equivalence (F04) · P1 · S · **DONE 2026-09-09 (`a4cf208`)**
 Declare a missing-class policy (drop the class from the macro mean, or score it 0 — the review's
 counterexample is 1.0 vs 0.5 on the same resample) and make `presort`/`ap_weighted` and
 `ap_from_parts` agree under it. Replace default unstable `argsort` with a specified stable sort so
@@ -79,6 +79,24 @@ tie semantics are reproducible.
 
 *Acceptance:* randomized small-fixture equivalence between the fast and literal paths, including
 sparse-class resamples.
+
+**Closed 2026-09-09.** Policy declared as `MISSING_CLASS_POLICY = "drop"` (COCO: a class with
+no GT is undefined, not zero) and `SORT_KIND = "stable"`, both module constants in
+`src/uqfusion/eval/apmetrics.py` with the reasoning in their docstrings. The divergence was
+**reproduced before it was fixed** — reference 1.0000 vs fast 0.5000 on a two-class fixture,
+the review's own counterexample on our code. `_score` returned 0.0 for an undefined per-class
+request and now returns NaN; `bootstrap_delta` excludes those draws and reports
+`n_undefined`/`n_effective`. Acceptance met by `smoke_apmetrics.py` sections E (200 randomized
+sparse-class draws, with a guard asserting ≥10 actually dropped a class so it cannot pass
+vacuously) and F (tie determinism); A–D unchanged and still passing.
+
+**Blast radius: nothing published moves, measured not assumed.** Buoy GT sits in 153 of the
+2,232 paired val frames, so P(a draw deletes all of them) = 1.5e-69 — the missing-class bug
+bites only on small subsets (per-cell tables, per-run slices, LORO folds). The tie effect is
+0.0067 mAP on a deliberately tie-dense synthetic fixture but **2.7e-7 on a real cache**, since
+99.9% of 31,110 real confidence values are unique. This does not reduce the case for R-A1/R-A5:
+the AP *interpolation convention* (F03) is untouched by this task and is the one with a
+plausibly material effect.
 
 ### R-A3 — dependence-aware intervals (F04) · P1 · M
 Frame-level resampling of a 10 Hz recording does not give 1,032 independent observations. Move
