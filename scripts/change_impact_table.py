@@ -115,8 +115,16 @@ def main() -> int:
 
     ev = ROOT / "runs/eval"
     items: list[dict] = []
+    # final_system_crossmodal_v2 is the artifact whose config the CURRENT code
+    # reproduces: cap_ir 0.0023539426113108287 == IR NMS 0.70 then /cap_ir_scale 4.0.
+    # Three files record `"preset": "crossmodal"` with three different cap_ir, because
+    # the preset acquired both defaults during 2026-09-01 and the config block records
+    # neither -- see docs/exposure-ledger-2026-09-09.md section 6. Using the 12:36 file
+    # would re-adjudicate a system two revisions behind the one that ships.
+    items += rows_from_final_system(ev / "final_system_crossmodal_v2.json",
+                                    "crossmodal_v2 (reproduces under current code)")
     items += rows_from_final_system(ev / "final_system_crossmodal.json",
-                                    "final_system_crossmodal (shipped preset)")
+                                    "crossmodal 12:36 (superseded: no IR NMS, no cap scale)")
     items += rows_from_final_system(ev / "final_system.json",
                                     "final_system (D27, 2026-08-20)")
     items += rows_from_veil(ev / "veil_veto_repair_26m.json")

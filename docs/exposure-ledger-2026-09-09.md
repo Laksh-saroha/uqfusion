@@ -103,12 +103,34 @@ from the detector" are different claims and only the first is true.
   night minimum, and the IR health fit covers all clean paired IR frames including night.
   Its 0% clean outlier rate is an in-sample construction. Same family of problem, different
   constant.
-* **R-E1 / F14** — cache identity. Noticed while writing this: the shipped
-  `runs/eval/final_system_crossmodal.json` records `cap_ir = 0.009246512091269591`, but the
-  current tree reproduces `0.0023539426113108287` from the same preset. `cap_vis` is
-  bit-identical, which rules out a whole-cache drift and points at something IR-specific.
-  The ratio is 3.93 against a `cap_ir_scale` of 4.0, so the recorded field looks like a
-  pre-scale value — but even after accounting for that, the underlying prior differs by
-  **1.83%**. Verified not to be caused by the R-B2 changes: `git stash` of `ctx.py` gives
-  the current numbers exactly. **A shipped result that does not regenerate is its own
-  finding** and is logged here rather than diagnosed.
+* **R-E1 / F14 — the manifest is insufficient to identify a run.** Noticed while writing
+  this and then chased to the end. **Correction to the first version of this section: there
+  is no drift and nothing fails to regenerate.** Every number is deterministic and
+  bit-reproducible. What is broken is the *manifest*.
+
+  Three artifacts all record `"preset": "crossmodal"` and disagree on `cap_ir`:
+
+  | file | written | `cap_ir` | what it actually is |
+  |---|---|---:|---|
+  | `final_system_crossmodal.json` | 2026-09-01 12:36 | 0.009246512091269591 | no IR NMS, no cap scale |
+  | `final_system_crossmodal_irnms.json` | 17:09 | 0.009415770445243315 | IR NMS 0.70, no cap scale |
+  | `final_system_crossmodal_v2.json` | 19:03 | 0.0023539426113108287 | IR NMS 0.70, ÷ `cap_ir_scale` 4.0 |
+
+  All three reproduce exactly. `preset="crossmodal"` acquired two defaults during that
+  single day — `ir_nms = 0.70` and `cap_ir_scale = 4.0`, both in `b3d8371` — and the
+  config block records **neither**, so the artifact cannot say which system produced it.
+  The 12:36 run log gives it away only by omission: it prints `IR 0.0092 (ratio 36.2x)`
+  with no "IR scaled 1/…" clause, because that clause did not exist yet.
+
+  Verified rather than argued: recomputing the prior from
+  `gauss_ir_paired_clean.pkl` gives `0.009246512091269591` bit-for-bit (the 12:36 value),
+  and applying NMS 0.70 then dividing by 4 gives `0.0023539426113108287` bit-for-bit (the
+  current value). `cap_vis` is identical throughout, and the result is independent of
+  `SORT_KIND`, so neither R-A1's stable sort nor the R-B2 changes are involved.
+
+  **Consequence, already acted on:** R-A5's change-impact table was built against the
+  12:36 file and labelled it the shipped preset. It is two revisions behind. Rebuilt
+  against `final_system_crossmodal_v2.json` — see `runs/eval/change_impact_v4.md`.
+
+  **The fix this points at:** a config block must record every value that changes the
+  system, not the preset *name*, since a preset name is a moving target. That is R-E1.
