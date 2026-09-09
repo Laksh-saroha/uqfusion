@@ -32,8 +32,11 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from uqfusion.eval.cocoparity import coco_ap, to_coco_dicts  # noqa: E402
-from uqfusion.eval.matching import map50_95  # noqa: E402
+from uqfusion.eval.apmetrics import AP_CONVENTION, declared_policies  # noqa: E402
+from uqfusion.eval.cocoparity import (  # noqa: E402
+    NOISE_FLOOR, PARITY_BOUND, PARITY_TOLERANCE, TASK_CONFIG, coco_ap,
+    to_coco_dicts)
+from uqfusion.eval.matching import local_ap50_95, map50_95  # noqa: E402
 
 TOL = 1e-12
 
@@ -172,6 +175,29 @@ def main() -> int:
     assert len(gt_dict["images"]) == 3, "8: duplicated frames must be distinct COCO images"
     assert len({d["image_id"] for d in dets}) == 3, "8: detections must not merge across copies"
     compare(dup_r, dup_g, "8 image resampling (dup frames)")
+    # 9. the pinned parity bound is COHERENT and the convention is DECLARED.
+    #    R-A1 option (e): the real-cache gap is asserted by
+    #    `scripts/ap_convention_parity.py`, which needs the GPU caches and cannot run
+    #    here. What CAN run here, always, is the check that the bound still means what
+    #    the write-ups claim -- that it sits well under the noise floor, that the
+    #    tolerance does not swallow that margin, and that the convention constants are
+    #    exported for stamping into result files.
+    trip = PARITY_BOUND * PARITY_TOLERANCE
+    assert trip < NOISE_FLOOR[0], (
+        f"9: parity trip point {trip:.8f} must stay below the noise-floor lower "
+        f"bound {NOISE_FLOOR[0]} -- otherwise the convention gap would be allowed to "
+        f"grow until it could flip a decision")
+    pol = declared_policies()
+    assert pol["ap_convention"] == AP_CONVENTION == "local-linear-interp", pol
+    assert set(pol) == {"ap_convention", "missing_class_policy", "sort_kind"}, pol
+    # and the thing that would make a "COCO column" a lie: this is NOT COCO's cap.
+    assert TASK_CONFIG["max_dets"] is None, (
+        "9: TASK_CONFIG uses max-per-image, not COCO's 100 -- if that ever changes, "
+        "the docs saying a 'COCO' label would be a mislabel need revisiting")
+    assert map50_95 is local_ap50_95, "9: the compat alias must stay wired"
+    print(f"[smoke] {'9 parity bound + declared policy':34s} "
+          f"trip {trip:.8f} < floor {NOISE_FLOOR[0]}  convention {AP_CONVENTION!r}")
+
 
     print("\nCOCOPARITY SMOKE OK")
     return 0

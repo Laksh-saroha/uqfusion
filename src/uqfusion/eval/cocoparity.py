@@ -41,6 +41,38 @@ import numpy as np
 
 from uqfusion.eval.matching import IOU_LEVELS
 
+PARITY_BOUND = 0.00028501
+"""Worst local-vs-COCO disagreement in a DELTA, measured on this project's caches.
+
+Measured by `scripts/ap_convention_parity.py` and recorded in
+`docs/eval/ap_convention_parity_2026-09-09.md`. Pinned here (R-A1, option (e)) so the
+fact is ASSERTED rather than merely written down once: the parity script now fails if
+the gap exceeds `PARITY_BOUND * PARITY_TOLERANCE`, which catches the day a change to
+matching, sorting or the envelope quietly widens it.
+
+A companion "COCO" column on every results table was the alternative and was rejected
+twice over: it would always agree to 5x below the noise floor, which teaches readers
+to skip it, and `TASK_CONFIG` sets `max_dets: None` rather than COCO's 100, so a
+column labelled "COCO" would be mislabelled in precisely the way this whole review
+item is about.
+"""
+
+PARITY_TOLERANCE = 1.5
+"""Headroom on `PARITY_BOUND` before the parity script fails.
+
+Not zero: the bound is a measurement over specific caches, and a legitimate change
+(a new arm, a re-run detector) can move it slightly. 1.5x still leaves the trip point
+at 0.00043, well under the 0.0014 noise-floor lower bound, so an assertion failure
+means the gap grew toward mattering -- not that it wobbled.
+"""
+
+NOISE_FLOOR = (0.0014, 0.0031)
+"""Paired 2-sigma noise floor (`runs/eval/metric_noise_floor.md`), for context.
+
+`PARITY_BOUND` is 5x below the lower end. That ratio is the reason the local
+convention is kept rather than replaced.
+"""
+
 TASK_CONFIG: dict[str, Any] = {
     "iou_thrs": [float(x) for x in IOU_LEVELS],
     "rec_thrs": 101,

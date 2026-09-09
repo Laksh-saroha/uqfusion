@@ -96,6 +96,55 @@ order-invariance, and a genuinely canonical result would need an explicit second
 sort key.
 """
 
+AP_CONVENTION = "local-linear-interp"
+"""WHICH AP integration rule this module implements. Added 2026-09-10 for R-A1.
+
+There is no single "mAP@50-95". At least three conventions are in play on this
+project and they do not agree:
+
+* ``"local-linear-interp"`` -- what the code here does. The precision envelope is
+  linearly interpolated onto ``RECALL_GRID`` (``np.interp``), then averaged.
+* COCO / pycocotools -- looks up the envelope at the FIRST ATTAINED recall
+  (``searchsorted``) rather than interpolating between attained points.
+  `uqfusion.eval.cocoparity` implements it for comparison.
+* Ultralytics -- a third rule again, and `docs/phase1-experimental-record.md`
+  records a ~0.034 mAP difference between ultralytics *versions* on identical
+  weights, two orders above the local-vs-COCO gap.
+
+**Why this is declared rather than renamed.** `matching.map50_95` had called itself
+"COCO-style" since it was written, which is the same defect as `preset="crossmodal"`
+naming three different systems (see `docs/exposure-ledger-2026-09-09.md` section 6): a
+NAME that does not pin a computation. The fix that generalises is to record the
+value. Renaming 322 call sites would have moved no number and fixed no ambiguity that
+this constant does not fix; the honest alias `matching.local_ap50_95` exists for new
+code, and the old name still works.
+
+**Measured gap, not asserted.** On this project's own caches the worst
+local-vs-COCO disagreement in a DELTA is 0.00028501, 5x below the 0.0014-0.0031
+paired 2-sigma noise floor -- see `docs/eval/ap_convention_parity_2026-09-09.md`,
+and `cocoparity.PARITY_BOUND`, which pins it so a code change cannot widen it
+silently. Absolute APs differ by more (-0.0033 and -0.0050 on the hand-built cases),
+so the cancellation is a property of paired comparison, not of the metric.
+
+**The rule this implies:** never compare an absolute AP across conventions. See
+`docs/ap-convention-rule-2026-09-10.md`.
+"""
+
+
+def declared_policies() -> dict[str, str]:
+    """The three policy constants above, for stamping into a result's config block.
+
+    R-E1: a config block must record every value that changes the number, because a
+    preset or function NAME is a moving target. These three all change AP and all
+    used to be implicit. A result that carries them can be re-read years later
+    without inferring the convention from the code that happened to be checked out.
+    """
+    return {
+        "ap_convention": AP_CONVENTION,
+        "missing_class_policy": MISSING_CLASS_POLICY,
+        "sort_kind": SORT_KIND,
+    }
+
 
 def frame_parts(records: list[dict], gts: list[dict]) -> list[dict]:
     """Per-frame (tp, conf, cls, gt class counts). Computed once, reused forever."""

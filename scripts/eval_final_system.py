@@ -42,6 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
+from uqfusion.eval.apmetrics import declared_policies
 from uqfusion.eval.apmetrics import ap_from_parts, bootstrap_delta, frame_parts  # noqa: E402
 from uqfusion.eval.ctx import load_context, run_systems  # noqa: E402
 
@@ -324,7 +325,14 @@ def main() -> int:
                    "single_passthrough": ctx.single_passthrough,
                    "cap_vis": ctx.cap_vis, "cap_ir": ctx.cap_ir, "iou_thr": ctx.iou_thr,
                    "veto": ctx.veto, "veto_filter": list(ctx.veto_filter or ()),
-                   "bright_soft": ctx.c_vis.bright_soft, "n_boot": args.n_boot},
+                   "bright_soft": ctx.c_vis.bright_soft, "n_boot": args.n_boot,
+                   # R-E1: the VALUES, not just the preset NAME. `preset="crossmodal"`
+                   # meant three different systems on 2026-09-01 and these two were the
+                   # difference; neither was recorded, so `cap_ir` was their only
+                   # witness. See docs/exposure-ledger-2026-09-09.md section 6.
+                   "ir_nms": ctx.ir_nms, "cap_ir_scale": ctx.cap_ir_scale,
+                   # R-A1: which AP convention produced every number in this file.
+                   **declared_policies()},
         "main": rows_main, "vs_visible": rows_vis, "ablation": rows_abl},
         indent=2), encoding="utf-8")
     print(f"[final] wrote {out} in {time.time() - t0:.0f}s")

@@ -28,11 +28,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _ideas_common import ROOT, fmt, md_table, write_md  # noqa: E402
 
 from uqfusion.eval.cache import load_cache  # noqa: E402
-from uqfusion.eval.cocoparity import coco_ap  # noqa: E402
+from uqfusion.eval.cocoparity import (  # noqa: E402
+    PARITY_BOUND, PARITY_TOLERANCE, coco_ap)
+from uqfusion.eval.apmetrics import declared_policies  # noqa: E402
 from uqfusion.eval.matching import load_gt, map50_95  # noqa: E402
 
 NIGHT_RUN = "pohang01"
 NOISE_FLOOR = (0.0014, 0.0031)      # runs/eval/metric_noise_floor.md, paired 2-sigma
+# R-A1 option (e): the parity number is now ASSERTED, not just written into a report
+# once and left to rot. If a change to matching, sorting or the precision envelope
+# widens the local-vs-COCO delta gap toward the noise floor, this script fails.
+TRIP = PARITY_BOUND * PARITY_TOLERANCE
 
 ARMS = {
     "VIS sigma-head": "sigma_vis_seed0_nightfull.pkl",
@@ -94,6 +100,18 @@ def main() -> int:
             delta_rows.append([f"{a} − {b}", sub, fmt(dl, 8), fmt(dc, 8),
                                fmt(dl - dc, 8)])
 
+    if worst > TRIP:
+        raise SystemExit(
+            f"PARITY REGRESSION: worst local-vs-COCO delta disagreement {worst:.8f} "
+            f"exceeds the pinned bound {PARITY_BOUND:.8f} x {PARITY_TOLERANCE} "
+            f"= {TRIP:.8f}. "
+            "The convention gap has grown. Either a real change "
+            f"widened it -- in which case re-measure, re-argue that it still sits "
+            f"below the {NOISE_FLOOR[0]}-{NOISE_FLOOR[1]} noise floor, and move "
+            f"`cocoparity.PARITY_BOUND` in a commit that says so -- or something "
+            f"broke. Do not raise the bound to make this pass.")
+    print(f"[parity] worst delta disagreement {worst:.8f} <= trip {TRIP:.8f}  OK")
+
     lo, hi = NOISE_FLOOR
     verdict = (
         f"**Worst delta disagreement across every pair and subset: {worst:.8f}.** The "
@@ -153,7 +171,9 @@ def main() -> int:
     Path(str(out).replace(".md", ".json")).write_text(json.dumps(
         {"absolute": {f"{k[0]}|{k[1]}": {"local": v[0], "coco": v[1]} for k, v in pt.items()},
          "worst_delta_disagreement": worst,
-         "noise_floor": NOISE_FLOOR}, indent=1), encoding="utf-8")
+         "noise_floor": NOISE_FLOOR,
+         "parity_bound": PARITY_BOUND, "parity_trip": TRIP,
+         "policies": declared_policies()}, indent=1), encoding="utf-8")
     print(f"[out] {out}")
     return 0
 

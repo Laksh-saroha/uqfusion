@@ -117,8 +117,25 @@ def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.nda
     return tp
 
 
-def map50_95(records: list[dict], gts: list[dict]) -> dict:
-    """COCO-style mAP@50-95 and mAP@50 over a frame set (101-point interpolation).
+def local_ap50_95(records: list[dict], gts: list[dict]) -> dict:
+    """This project's OWN mAP@50-95 and mAP@50 over a frame set.
+
+    Renamed from `map50_95` on 2026-09-10 (R-A1). The old name is kept as a working
+    alias below, and the returned dict keys are unchanged, so no call site and no
+    recorded number moves.
+
+    **This is not COCO AP.** The docstring said "COCO-style" for as long as the
+    function existed, and that was a mislabel of exactly the kind
+    `docs/exposure-ledger-2026-09-09.md` section 6 documents for
+    `preset="crossmodal"`: a name that does not pin a computation. The precision
+    envelope here is LINEARLY INTERPOLATED onto a 101-point recall grid
+    (`np.interp`); COCO looks it up at the first attained recall (`searchsorted`).
+    Ultralytics is a third rule again. See `apmetrics.AP_CONVENTION` for the full
+    statement and `uqfusion.eval.cocoparity` for the COCO implementation.
+
+    The measured delta gap is 0.00028501, 5x below the paired noise floor, so paired
+    comparisons are safe; ABSOLUTE numbers are not interchangeable across conventions
+    (`docs/ap-convention-rule-2026-09-10.md`).
 
     Also returns `per_class` — `{cls: {ap50_95, ap50, n_gt, n_pred}}`, the same
     shape `apmetrics.ap_from_parts` returns, pinned equal by `smoke_apmetrics.py`.
@@ -185,3 +202,11 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
         return {"map50_95": 0.0, "map50": 0.0, "per_class": {}}
     return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()),
             "per_class": per_class}
+
+
+# Backwards-compatible alias. 322 call sites across 70 files use this name, and the
+# dict keys it returns (`map50_95`, `map50`) are unchanged, so nothing breaks and no
+# recorded number moves. New code should prefer `local_ap50_95`, which does not claim
+# to be COCO. Deliberately NOT a deprecation warning: 70 files emitting one on every
+# eval would be noise, and the name is not wrong, only imprecise.
+map50_95 = local_ap50_95

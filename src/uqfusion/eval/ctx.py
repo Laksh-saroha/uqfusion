@@ -202,6 +202,13 @@ class FusionContext:
     veto_health_mode: str = "night_arm"
     single_passthrough: bool = False
     cap_note: str = ""
+    # R-E1: the two values that made `preset="crossmodal"` name three different
+    # systems on 2026-09-01 (docs/exposure-ledger-2026-09-09.md section 6). They were
+    # local variables in `load_context`, applied and then discarded, so no result file
+    # could record them and `cap_ir` was their only witness. Recorded here so a config
+    # block can stamp the VALUES rather than the preset NAME.
+    ir_nms: float | None = None
+    cap_ir_scale: float | None = None
     _sel: dict = field(default_factory=dict)
     _order: dict | None = None
 
@@ -669,6 +676,7 @@ def load_context(
         support_iou, support_gamma = 0.0, 0.0
 
     ctx = FusionContext(
+        ir_nms=(float(ir_nms) if ir_nms else None),
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
         h_frames=h_frames, gts=gts,
@@ -733,6 +741,7 @@ def load_context(
         if cap_ir_scale is None:
             cap_ir_scale = 4.0 if preset == "crossmodal" else 1.0
         ctx.cap_ir = ctx.cap_ir / float(cap_ir_scale)
+        ctx.cap_ir_scale = float(cap_ir_scale)
         ctx.cap_note = f"capability prior over {capability_sel} frames"
 
     if verbose:
