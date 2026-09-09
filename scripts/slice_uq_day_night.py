@@ -263,6 +263,35 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
             "arms": [a.label for a in arms]}
 
 
+def night_detection_diagnostic(modality: str, arms: list[Arm]) -> str:
+    """Detections emitted on the night subset, per arm. **Not a decision input.**
+
+    U2 §4 registers this in advance so it cannot later be presented as though it had
+    moved a band. It exists only to confirm a retrained arm actually sees at night: a
+    checkpoint trained on the emptied night labels emits almost nothing there
+    (`gauss_vis_seed0_ft`: 2 detections / 1,032 frames; `mc_vis_seed0_ft_refit`: 28),
+    and every calibration metric computed over ~zero detections is hollow rather than
+    good. Both prior runs of this slice were decided partly by that artefact.
+    """
+    rows = []
+    for a in arms:
+        is_night = np.array([NIGHT_RUN in str(p) for p in a.paths])
+        n_night = int(is_night.sum())
+        det_n = int(a.counts[is_night].sum())
+        det_d = int(a.counts[~is_night].sum())
+        rows.append([a.label, f"{n_night:,}", f"{det_n:,}",
+                     f"{det_n / max(n_night, 1):.1f}", f"{det_d:,}",
+                     Path(str((a.meta.get("weights") or ["?"])[0])).parts[-3]
+                     if a.meta.get("weights") else "?"])
+    return ("### Night detection counts — diagnostic, **not a decision input** (U2 §4)\n\n"
+            + md_table(["arm", "night frames", "night detections", "per frame",
+                        "day detections", "checkpoint"], rows)
+            + "\n\nAn arm emitting near-zero detections at night produces calibration "
+              "numbers that are hollow rather than good, which is how both prior runs of "
+              "this slice were partly decided. This table enters no band and moves no "
+              "verdict.")
+
+
 def section(res: dict) -> str:
     m_lab = res["modality"]
     rows = []
@@ -319,13 +348,26 @@ def main() -> int:
                           "runs/cache_uqslice/). Only for a declared amendment -- see "
                           "docs/prereg-uq-day-night-slice-amendment-nightfull.md. Leaves "
                           "every other arm, rule and band untouched.")
+    ap.add_argument("--vis-mc-cache", default=None,
+                     help="override the VIS MC-Dropout arm's cache filename. Declared in "
+                          "docs/prereg-uq-day-night-slice-u2-stageb.md.")
+    ap.add_argument("--vis-ens-cache", default=None,
+                     help="ADD the VIS ensemble(n=5) arm from this cache filename. This is "
+                          "the Stage A -> Stage B switch: it makes sep/spread three-arm "
+                          "quantities on VIS and makes a CLEAN verdict reachable, which "
+                          "U1's staging rule forbids at Stage A. Declared in "
+                          "docs/prereg-uq-day-night-slice-u2-stageb.md.")
     args = ap.parse_args()
     globals()["N_BOOT"] = args.boot
     arms_spec = {mod: dict(spec) for mod, spec in ARMS.items()}
+    if args.vis_mc_cache:
+        arms_spec["VIS"]["MC-Dropout"] = args.vis_mc_cache
+    if args.vis_ens_cache:
+        arms_spec["VIS"]["ensemble(n=5)"] = args.vis_ens_cache
     if args.vis_sigma_cache:
         arms_spec["VIS"]["sigma-head"] = args.vis_sigma_cache
 
-    results, notes = [], []
+    results, notes, diags = [], [], []
     for modality, spec in arms_spec.items():
         paths = {lab: CACHE / f for lab, f in spec.items()}
         missing = [str(p) for p in paths.values() if not p.is_file()]
@@ -334,6 +376,7 @@ def main() -> int:
             continue
         arms = [Arm(lab, p) for lab, p in paths.items()]
         notes.append(f"**{modality}** — " + ", ".join(verify(arms, modality)))
+        diags.append(night_detection_diagnostic(modality, arms))
         print(f"[{modality}] scoring {len(arms)} arms x 3 subsets + {args.boot} bootstrap draws")
         res = analyse(modality, arms)
         print(f"[{modality}] verdict {res['verdict']}")
@@ -341,22 +384,36 @@ def main() -> int:
 
     vis = next((r for r in results if r["modality"] == "VIS"), None)
     ir = next((r for r in results if r["modality"] == "IR"), None)
+    # Stage A vs Stage B is decided by the VIS arm count, not by a flag, so the report
+    # cannot claim a stage the arms do not support. U1's staging rule caps a two-arm VIS
+    # run at CONTAMINATED; CLEAN needs all three.
+    stage_b = bool(vis) and len(vis["arms"]) >= 3
     head = [
         "Scored by `scripts/slice_uq_day_night.py` against the bands fixed in "
         "`docs/prereg-uq-day-night-slice.md` (commit `a4f9364`), written before any "
         "cache in `runs/cache_uqslice/` existed. No weight was trained and no label "
         "was touched.",
-        "**Stage A.** The VIS ensemble arm is absent: seeds 1–4 weights are on "
-        "`dgxanode01` and are not in the archive. Per the prereg, Stage A can return "
-        "CONTAMINATED but **cannot** return CLEAN — two arms agreeing says nothing "
-        "about the third.",
+        ("**Stage B.** All three VIS arms are present, so `sep` and `spread` are "
+         "three-arm quantities on VIS as they always were on IR, and a **CLEAN verdict "
+         "is reachable** — which U1's staging rule forbids at Stage A. Registered in "
+         "`docs/prereg-uq-day-night-slice-u2-stageb.md`."
+         if stage_b else
+         "**Stage A.** The VIS ensemble arm is absent: seeds 1–4 weights are on "
+         "`dgxanode01` and are not in the archive. Per the prereg, Stage A can return "
+         "CONTAMINATED but **cannot** return CLEAN — two arms agreeing says nothing "
+         "about the third."),
     ]
-    if args.vis_sigma_cache:
+    overrides = [(f, v) for f, v in (("--vis-sigma-cache", args.vis_sigma_cache),
+                                     ("--vis-mc-cache", args.vis_mc_cache),
+                                     ("--vis-ens-cache", args.vis_ens_cache)) if v]
+    if overrides:
+        which = ", ".join(f"`{f} {v}`" for f, v in overrides)
+        doc = ("docs/prereg-uq-day-night-slice-u2-stageb.md" if stage_b
+               else "docs/prereg-uq-day-night-slice-amendment-nightfull.md")
         head.insert(0, (
-            f"> **Amendment in effect** (`--vis-sigma-cache {args.vis_sigma_cache}`): the VIS "
-            "sigma-head arm is scored from a different checkpoint than the U1 registration — "
-            "see `docs/prereg-uq-day-night-slice-amendment-nightfull.md`. The VIS MC-Dropout "
-            "arm, the IR control, and every rule/band below are unchanged."))
+            f"> **Declared override in effect** ({which}): one or more VIS arms are scored "
+            f"from checkpoints other than the U1 registration's — see `{doc}`. The IR "
+            "control and every rule and band below are unchanged."))
     if vis and ir:
         # The prereg registered only two readings -- "IR clean, VIS dirty" and "both the
         # same band" -- and an earlier version of this function collapsed everything else
@@ -391,7 +448,10 @@ def main() -> int:
             "verdicts are reported and the registered one is never dropped. The unfloored "
             "rule is the same sign-test-on-noise this project has already been burned by "
             "twice, which is why the amendment was made rather than the result accepted."))
-    secs = head + ["## Cache verification\n\n" + "\n\n".join(notes)] + [section(r) for r in results]
+    secs = (head
+            + ["## Cache verification\n\n" + "\n\n".join(notes)]
+            + ["## Detector sanity, before any band is read\n\n" + "\n\n".join(diags)]
+            + [section(r) for r in results])
     secs.append("---\n\n_Rules: bands CLEAN < 0.25 ≤ SUSPECT < 1.0 ≤ CONTAMINATED on "
                 "`r = spread/sep`; a metric enters the verdict only if "
                 "`sep ≥ max(2·se_sep, 0.02·scale)`; an ordering flip forces CONTAMINATED "

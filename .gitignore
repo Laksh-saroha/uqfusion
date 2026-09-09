@@ -32,3 +32,13 @@ Thumbs.db
 .DS_Store
 .vscode/
 .idea/
+
+# one-off scratch training probe (177 MB: weights, curves, its own runs/ tree)
+Test_1/
+# safety copy of docs/ taken before the 2026-09-08 editorial pass. Both sides of
+# that pass are now in git (the pass itself, and docs/readable/ for the eight
+# preregs held back), so this directory is redundant -- kept on disk, not tracked.
+docs.backup-2026-09-08/
+# ad-hoc per-class validation probe
+scratch_val_perclass*.py
+scratch_val_perclass*.log
