@@ -49,6 +49,12 @@ from uqfusion.uq.reliability import ReliabilityConstants, fit_constants, per_box
 
 ROOT = Path(__file__).resolve().parents[3]
 
+#: Sentinel so `role="final"` can tell "caller did not choose" from "caller chose 'fit'".
+#: R-B2 asks for `capability_sel` to be required; making it required outright would break
+#: 56 of this repo's 63 `load_context` call sites and silently rewrite every recorded
+#: number, so it is required only where it can do harm -- in a final score.
+_UNSET = object()
+
 DEFAULT_CONDITIONS = ("clean", "fog", "lowlight", "glare")
 NIGHT_RUNS = ("pohang01",)
 #: Runs the gate was allowed to see. pohang01 is held out of every fit (§7).
@@ -71,6 +77,31 @@ FIT_RUNS = ("pohang00", "pohang02", "pohang03")
 #: fail here.
 TUNE_RUNS = ("pohang00",)
 TEST_RUNS = ("pohang02", "pohang03")
+
+#: R-B2 (finding F02). Runs whose day frames have been inspected repeatedly, across
+#: many tuning sweeps and reported tables, and which are therefore **development data**
+#: whatever a later document calls them.
+#:
+#: This is a label, not a computation, and labelling is the whole fix. `TEST_RUNS` was
+#: declared after those runs had already been looked at: the 2026-09-01 log discusses
+#: keeping support IoU 0.30 *because 0.55 scored poorly on TEST*, and a test set that
+#: rejects a candidate has participated in selection even when it does not pick the
+#: winner. Fresh corruption seeds over the same scenes test robustness to the transform
+#: draw; they do not supply new scene-level test data, and a pre-registration written
+#: afterwards improves auditability without undoing the exposure (Cawley & Talbot 2010).
+#:
+#: So: every paired day run below is development data. Nothing in this repository is an
+#: untouched test set. A genuinely frozen evaluation needs a release this project has
+#: not yet looked at.
+DEVELOPMENT_RUNS = ("pohang00", "pohang02", "pohang03")
+
+#: What `role="final"` refuses to fit a capability prior on, because these selectors
+#: include frames a final score would be reported over.
+_OVERLAPPING_SELECTORS = ("all", "day", "fit", "test", "dev")
+
+
+class ExposureError(RuntimeError):
+    """Raised when a context declared `role="final"` would fit on frames it scores."""
 
 
 def fit_scorer(cache_path: Path) -> MahalanobisScorer:
@@ -145,6 +176,8 @@ class FusionContext:
     sigma_score_alpha: float = 0.0        # (median_sigma/sigma)**alpha on the score
     order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
+    role: str = "develop"                 # R-B2: "develop" or "final"; see load_context
+    cap_fit_frames: np.ndarray | None = None   # frames the capability prior was fit on
     veil_requires_night: bool = False   # AND the veil axis with the night arm
     night_weak_fallback: bool = False   # a disarmed IR may still be CONFIRMED by a dark VIS
     ir_merge_veto: bool = True          # drop a novel IR from the merge (measured harmful)
@@ -187,7 +220,13 @@ class FusionContext:
 
     # ---- frame selectors -------------------------------------------------
     def sel(self, name: str) -> np.ndarray:
-        """Frame indices for 'all', 'day', 'night', 'fit', or a run id."""
+        """Frame indices for 'all', 'day', 'night', 'fit', 'tune', 'test', 'dev', or a run id.
+
+        `tune`/`test` were defined as module constants long before anything could ask
+        for them here, so a run-disjoint evaluation was expressible in comments and not
+        in code (R-B2). `dev` is the honest name for the union: every day run has been
+        inspected repeatedly, so `test` names a *split*, not an untouched holdout.
+        """
         if name in self._sel:
             return self._sel[name]
         if name == "all":
@@ -198,12 +237,44 @@ class FusionContext:
             v = np.flatnonzero(~np.isin(self.runs, NIGHT_RUNS))
         elif name == "fit":
             v = np.flatnonzero(np.isin(self.runs, FIT_RUNS))
+        elif name == "tune":
+            v = np.flatnonzero(np.isin(self.runs, TUNE_RUNS))
+        elif name == "test":
+            v = np.flatnonzero(np.isin(self.runs, TEST_RUNS))
+        elif name == "dev":
+            v = np.flatnonzero(np.isin(self.runs, DEVELOPMENT_RUNS))
         else:
             v = np.flatnonzero(self.runs == name)
             if not len(v):
                 raise KeyError(f"no frames for selector {name!r}")
         self._sel[name] = v
         return v
+
+    def assert_final_scorable(self, eval_sel: str | np.ndarray) -> None:
+        """R-B2 acceptance: a final score may not be reported on frames it was fit on.
+
+        Checks the one thing `load_context` actually fits from evaluation frames -- the
+        capability prior -- against the frames about to be scored, and refuses on any
+        intersection. Everything else `load_context` uses is either fit on TRAIN caches
+        (the Mahalanobis scorers) or read from a frozen constants file.
+
+        This is a real check, not a label: it compares frame index sets. Call it from
+        any script that reports a final number.
+        """
+        frames = self.sel(eval_sel) if isinstance(eval_sel, str) else np.asarray(eval_sel)
+        if self.role != "final":
+            raise ExposureError(
+                f"context role is {self.role!r}; a final score needs load_context(role='final'). "
+                "A 'develop' context may fit constants on the frames it reports.")
+        if self.cap_fit_frames is None:
+            return                      # no prior was fitted here; nothing to overlap
+        bad = np.intersect1d(self.cap_fit_frames, frames)
+        if bad.size:
+            raise ExposureError(
+                f"{bad.size} of the {frames.size} frames about to be scored were also used "
+                f"to fit the capability prior. A final score cannot be reported on frames "
+                f"that participated in fitting it (R-B2 / F02). Fit on a disjoint selector, "
+                f"or pass capability_sel=None and read a frozen prior.")
 
     @property
     def run_ids(self) -> list[str]:
@@ -248,7 +319,8 @@ def load_context(
     bright_dir="runs/derived/brightness",
     iou_thr: float = 0.85,
     veto: float | None = 0.5,
-    capability_sel: str | None = "fit",
+    capability_sel: str | None = _UNSET,
+    role: str = "develop",
     bright_soft: bool = False,
     veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
@@ -618,8 +690,27 @@ def load_context(
         night_weak_fallback=night_weak_fallback, ir_merge_veto=ir_merge_veto,
         support_iou=support_iou, support_gamma=support_gamma)
 
+    ctx.role = role
+    if capability_sel is _UNSET:
+        if role == "final":
+            raise ExposureError(
+                "load_context(role='final') requires an explicit capability_sel. The "
+                "development default is 'fit', which is every day frame — the same "
+                "frames a final score is reported over (R-B2 / F02). Choose a selector "
+                "disjoint from what you will score, or pass capability_sel=None to fit "
+                "no prior at all.")
+        capability_sel = "fit"          # unchanged development default; results identical
+    if role == "final" and capability_sel in _OVERLAPPING_SELECTORS:
+        raise ExposureError(
+            f"capability_sel={capability_sel!r} spans frames a final score would be "
+            f"reported over. Refused under role='final' (R-B2 / F02). Use a run "
+            f"selector disjoint from the scoring set, or capability_sel=None.")
+    if role not in ("develop", "final"):
+        raise ValueError(f"role must be 'develop' or 'final', not {role!r}")
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
+        ctx.cap_fit_frames = (np.arange(len(ctx.runs)) if sel is None
+                              else np.asarray(sel))
         ctx.cap_vis, ctx.cap_ir = capability_prior(
             vis_prior_records, ir_prior_records, gts, h_frames, sel)
         # The fitted prior is each stream's clean mAP, which answers "how good is
