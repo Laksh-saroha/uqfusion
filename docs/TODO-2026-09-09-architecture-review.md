@@ -60,7 +60,7 @@ the artifact the rest of the backlog waits on.
 
 **P1. Blocks: every table, every adoption decision, the UQ arms comparison, the 93-run grid readout.**
 
-### R-A1 — official-AP parity harness (F03) · P1 · M
+### R-A1 — official-AP parity harness (F03) · P1 · M · **HARNESS DONE 2026-09-09 (`a3182ba`); (a)/(b) call open**
 Stand up `pycocotools` as the authoritative evaluator behind an explicit task config (IoU sweep,
 area ranges, maxDets, ignore policy, stable score sort). Decide per table whether we (a) replace the
 local AP, or (b) keep it for historical continuity under an honest name (`custom_ap_linear_interp`)
@@ -70,6 +70,25 @@ and publish an official-AP companion column. Recommendation: (a) for everything 
 *Acceptance:* fixtures covering imperfect recall, duplicate recall values, tied scores, missing
 classes, no predictions, wrong classes, per-image detection caps, and image resampling. Ultralytics'
 own convention is a **third** convention — do not treat "matches Ultralytics" as "matches COCO".
+
+**Built and measured 2026-09-09.** `src/uqfusion/eval/cocoparity.py` runs COCOeval behind an
+explicit `TASK_CONFIG` (IoU sweep, one open area range, no crowd/ignore, stable score sort, and
+`maxDets` from the data rather than COCO's 100 — a 100-cap would truncate a `conf 0.001` cache and
+disguise a detection cap as an interpolation gap). All eight acceptance cases pass in
+`scripts/smoke_cocoparity.py`; the detection-cap case was vacuous on first write and was rebuilt so
+capping drops AP 0.1667 → 0.0. `matching.py`'s argsorts are pinned stable to match.
+
+**The measurement (`runs/eval/ap_convention_parity.md`, 6 arms × 3 subsets):** local AP reads
+systematically LOW by −0.00039 (VIS) to −6e-7 (IR) in absolute terms, but the offset largely cancels
+in a delta because both arms share the convention. **Worst delta disagreement 0.00028501 — 5× below
+the 0.0014–0.0031 paired 2σ noise floor.** So F03 cannot flip a decision whose margin clears the
+floor, and it does *not* rescue decisions made below it (soft-NMS rejected at −1.03e-5 is 20× smaller
+than this disagreement). Unexplained and reported as observed: the gap is much larger on day than
+night, consistently across arms.
+
+**Open:** the (a) replace / (b) rename-and-companion decision. Recommendation on the measurement
+above is **(b)** — deltas are safe at 5× margin, so re-scoring everything buys little, but every
+published *absolute* number must name its convention.
 
 ### R-A2 — bootstrap fast/reference equivalence (F04) · P1 · S · **DONE 2026-09-09 (`a4cf208`)**
 Declare a missing-class policy (drop the class from the macro mean, or score it 0 — the review's
