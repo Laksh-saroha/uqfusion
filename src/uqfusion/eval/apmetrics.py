@@ -36,6 +36,66 @@ from uqfusion.eval.matching import IOU_LEVELS, tp_matrix
 RECALL_GRID = np.linspace(0, 1, 101)
 NL = len(IOU_LEVELS)
 
+# ---------------------------------------------------------------- declared policies
+# R-A2 (docs/TODO-2026-09-09-architecture-review.md). Both of these were previously
+# implicit, and both were wrong in ways large enough to matter on this project's
+# margins. They are named here so a reader does not have to infer them from the code.
+
+MISSING_CLASS_POLICY = "drop"
+"""What a class with ZERO ground-truth instances contributes to the macro mean.
+
+``"drop"`` -- it is excluded, which is the COCO convention (pycocotools reports -1
+for such a category and leaves it out of the mean). An AP with no GT to recall is
+undefined, not zero.
+
+This was inconsistent between the two paths and the divergence was 0.5 mAP on a
+two-class fixture: ``ap_from_parts`` derives its class set from the resample, so a
+resample that drops every buoy frame is scored over {ship} alone and returns 1.0;
+``presort`` froze ``classes`` from the FULL selection and ``ap_weighted`` iterated
+that frozen set, scoring the vanished class 0 and returning 0.5. Same resample, same
+data. Buoy carries ~75% of this project's macro variance (`project-metric-noise-floor`)
+and is exactly the class a resample can drop, so the fast path was biased DOWN in
+precisely the draws that widen the interval.
+
+**Measured blast radius on real data: none.** On the 2,232-frame paired val list, buoy
+GT is present in 153 frames, so the chance a bootstrap draw deletes every one of them
+is ``((n-k)/n)^n`` = 1.5e-69. No published interval from that list moves. The bug is
+real but it bites only on SMALL subsets -- per-cell corruption tables, per-run slices,
+leave-one-run-out folds -- where a rare class can genuinely vanish from a draw. Fixed
+so that it cannot bite there silently, not because it corrupted the headline numbers.
+
+Classes excluded under this policy are still reported in ``per_class`` with
+``ap50_95 = nan`` and ``excluded = True``. They just do not enter the mean.
+"""
+
+SORT_KIND = "stable"
+"""Tie semantics for the descending-confidence sort.
+
+``np.argsort`` defaults to an unstable introsort, so detections sharing a confidence
+were ordered arbitrarily -- and AP depends on that order, because cumulative TP/FP is
+computed down the sorted list.
+
+How big is it? Two very different numbers, and the honest answer needs both. On a
+synthetic 400-detection fixture with only four distinct confidence values, quicksort
+and stable differ by **0.0067 mAP** -- above the measured 2-sigma noise floor of
+0.0014-0.0031 (`runs/eval/metric_noise_floor.md`). On a **real** cache
+(`sigma_vis_seed0_nightfull`, 31,110 detections) the same comparison differs by
+**2.7e-7**, four orders of magnitude below that floor, because real confidences are
+near-continuous: 99.9% of those 31,110 values are unique, so exact ties are rare.
+
+So the mechanism is real and unbounded in principle, and it has not been biting.
+Nothing published moves. This is fixed for reproducibility -- same cache, same answer,
+and the fast and reference paths provably agree -- not because it corrupted a result.
+
+Honest limit: a stable sort makes AP reproducible for a GIVEN input order -- same
+cache, same answer, and the fast and reference paths agree. It does NOT make AP
+invariant to the order detections were cached in, because "stable" means "preserve
+input order within a tie". Cache order is deterministic (frame order, then model
+output order), so this is sufficient for reproducibility; it is not a claim of
+order-invariance, and a genuinely canonical result would need an explicit secondary
+sort key.
+"""
+
 
 def frame_parts(records: list[dict], gts: list[dict]) -> list[dict]:
     """Per-frame (tp, conf, cls, gt class counts). Computed once, reused forever."""
@@ -103,7 +163,7 @@ def ap_from_parts(parts: list[dict], sel: np.ndarray | None = None,
             confs.append(p["conf"])
             clss.append(p["cls"])
     if not n_gt:
-        return {"map50_95": 0.0, "map50": 0.0, "per_class": {}}
+        return {"map50_95": 0.0, "map50": 0.0, "per_class": {}, "dropped_classes": []}
 
     tp = np.concatenate(tps) if tps else np.zeros((0, NL), dtype=bool)
     conf = np.concatenate(confs) if confs else np.zeros(0)
@@ -112,13 +172,17 @@ def ap_from_parts(parts: list[dict], sel: np.ndarray | None = None,
     per_class, rows = {}, []
     for c in sorted(n_gt):
         m = cls == c
-        order = np.argsort(-conf[m])
+        order = np.argsort(-conf[m], kind=SORT_KIND)
         curve = _ap_from_sorted(tp[m][order], n_gt[c])
         rows.append(curve)
         per_class[int(c)] = {"ap50_95": float(curve.mean()), "ap50": float(curve[0]),
-                             "n_gt": int(n_gt[c]), "n_pred": int(m.sum())}
+                             "n_gt": int(n_gt[c]), "n_pred": int(m.sum()), "excluded": False}
     ap = np.stack(rows)
-    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()), "per_class": per_class}
+    # `dropped_classes` is always empty here: this path derives its class set FROM the
+    # resample, so a class with no GT never enters it. The key exists so both paths
+    # return the same contract and a caller cannot tell them apart by shape.
+    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()),
+            "per_class": per_class, "dropped_classes": []}
 
 
 # --------------------------------------------------------------------------
@@ -156,7 +220,7 @@ def presort(parts: list[dict], sel: np.ndarray | None = None) -> dict:
             tp = np.concatenate(tps)
             conf = np.concatenate(confs)
             fi = np.concatenate(fidx)
-            order = np.argsort(-conf)
+            order = np.argsort(-conf, kind=SORT_KIND)
             out[c] = {"tp": np.ascontiguousarray(tp[order]), "fidx": fi[order]}
         else:
             out[c] = {"tp": np.zeros((0, NL), dtype=bool), "fidx": np.zeros(0, dtype=np.int64)}
@@ -173,7 +237,7 @@ def ap_weighted(pre: dict, w: np.ndarray | None = None) -> dict:
     """
     if w is None:
         w = np.ones(pre["n_frames"], dtype=np.int64)
-    per_class, rows = {}, []
+    per_class, rows, dropped = {}, [], []
     for c in sorted(pre["classes"]):
         d = pre["classes"][c]
         n_gt = int(pre["gt"][c] @ w)
@@ -182,22 +246,43 @@ def ap_weighted(pre: dict, w: np.ndarray | None = None) -> dict:
             tp = np.repeat(d["tp"], mult, axis=0)
         else:
             tp = d["tp"]
+        if n_gt == 0:
+            # MISSING_CLASS_POLICY: `presort` froze `classes` from the full selection,
+            # so a class can survive into here with every one of its GT frames weighted
+            # to zero. Its AP is undefined, not 0 -- scoring it 0 is what made this path
+            # return 0.5 where `ap_from_parts` returned 1.0 on the same resample. Report
+            # it, exclude it from the mean.
+            dropped.append(c)
+            per_class[c] = {"ap50_95": float("nan"), "ap50": float("nan"),
+                            "n_gt": 0, "n_pred": int(len(tp)), "excluded": True}
+            continue
         curve = _ap_from_sorted(tp, n_gt)
         rows.append(curve)
         per_class[c] = {"ap50_95": float(curve.mean()), "ap50": float(curve[0]),
-                        "n_gt": n_gt, "n_pred": int(len(tp))}
+                        "n_gt": n_gt, "n_pred": int(len(tp)), "excluded": False}
     if not rows:
-        return {"map50_95": 0.0, "map50": 0.0, "per_class": {}}
+        return {"map50_95": 0.0, "map50": 0.0, "per_class": per_class,
+                "dropped_classes": dropped}
     ap = np.stack(rows)
-    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()), "per_class": per_class}
+    return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()),
+            "per_class": per_class, "dropped_classes": dropped}
 
 
 def _score(pre: dict, w, cls: int | None) -> float:
+    """Score one resample. NaN when the requested quantity is undefined.
+
+    A per-class request whose class has no GT in this draw used to return 0.0, the
+    same MISSING_CLASS_POLICY error as `ap_weighted`: it drags the delta toward zero
+    on exactly the draws where the class vanished. NaN instead, and `bootstrap_delta`
+    excludes those draws and counts them.
+    """
     r = ap_weighted(pre, w)
     if cls is None:
         return r["map50_95"]
     pc = r["per_class"].get(cls)
-    return 0.0 if pc is None else pc["ap50_95"]
+    if pc is None or pc.get("excluded"):
+        return float("nan")
+    return pc["ap50_95"]
 
 
 def bootstrap_delta(parts_a: list[dict], parts_b: list[dict], sel: np.ndarray | None = None,
@@ -225,11 +310,29 @@ def bootstrap_delta(parts_a: list[dict], parts_b: list[dict], sel: np.ndarray | 
         w = rng.multinomial(f, p)
         deltas[t] = _score(pa, w, cls) - _score(pb, w, cls)
 
-    lo, hi = np.percentile(deltas, [2.5, 97.5])
-    flip = float(np.mean(np.sign(deltas) != np.sign(obs_d))) if obs_d != 0 else 1.0
+    # A per-class request can be undefined on a draw that resampled away every frame
+    # holding that class's GT (MISSING_CLASS_POLICY). Those draws are excluded and
+    # counted rather than silently scored 0, which would pull the interval toward zero
+    # on exactly the draws that ought to widen it. `n_undefined` is reported so a
+    # caller can see when the interval is describing fewer draws than it asked for.
+    good = np.isfinite(deltas)
+    n_undef = int((~good).sum())
+    kept = deltas[good]
+    if kept.size < 2:
+        return {
+            "a": obs_a, "b": obs_b, "delta": obs_d,
+            "ci_lo": float("nan"), "ci_hi": float("nan"), "se": float("nan"),
+            "p_sign_flip": float("nan"), "spans_zero": None,
+            "n_frames": int(f), "n_boot": int(n_boot),
+            "n_undefined": n_undef, "n_effective": int(kept.size),
+        }
+    lo, hi = np.percentile(kept, [2.5, 97.5])
+    flip = (float(np.mean(np.sign(kept) != np.sign(obs_d)))
+            if np.isfinite(obs_d) and obs_d != 0 else 1.0)
     return {
         "a": obs_a, "b": obs_b, "delta": obs_d,
-        "ci_lo": float(lo), "ci_hi": float(hi), "se": float(deltas.std(ddof=1)),
+        "ci_lo": float(lo), "ci_hi": float(hi), "se": float(kept.std(ddof=1)),
         "p_sign_flip": flip, "spans_zero": bool(lo <= 0.0 <= hi),
         "n_frames": int(f), "n_boot": int(n_boot),
+        "n_undefined": n_undef, "n_effective": int(kept.size),
     }
