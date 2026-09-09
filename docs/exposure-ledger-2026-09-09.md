@@ -108,29 +108,75 @@ from the detector" are different claims and only the first is true.
   is no drift and nothing fails to regenerate.** Every number is deterministic and
   bit-reproducible. What is broken is the *manifest*.
 
-  Three artifacts all record `"preset": "crossmodal"` and disagree on `cap_ir`:
+  **Corrected again, wider than first written.** The first pass named three artifacts.
+  Enumerating all fourteen `runs/eval/final_system*.json` shows **five** recording
+  `"preset": "crossmodal"`, across **three** different `cap_ir` values:
 
-  | file | written | `cap_ir` | what it actually is |
-  |---|---|---:|---|
-  | `final_system_crossmodal.json` | 2026-09-01 12:36 | 0.009246512091269591 | no IR NMS, no cap scale |
-  | `final_system_crossmodal_irnms.json` | 17:09 | 0.009415770445243315 | IR NMS 0.70, no cap scale |
-  | `final_system_crossmodal_v2.json` | 19:03 | 0.0023539426113108287 | IR NMS 0.70, ÷ `cap_ir_scale` 4.0 |
+  | file | written | `cap_ir` | regime | 8 cells vs 12:36 |
+  |---|---|---:|---|---|
+  | `final_system_crossmodal.json` | 09-01 12:36 | 0.009246512091269591 | no IR NMS, no cap scale | — |
+  | `final_system_crossmodal_hardened.json` | 13:28 | 0.009246512091269591 | no IR NMS, no cap scale | **identical 8/8** |
+  | `final_system_crossmodal_rsys.json` | 15:59 | 0.009246512091269591 | no IR NMS, no cap scale | **identical 8/8** |
+  | `final_system_crossmodal_irnms.json` | 17:09 | 0.009415770445243315 | IR NMS 0.70, no cap scale | 0/8 |
+  | `final_system_crossmodal_v2.json` | 19:03 | 0.0023539426113108287 | IR NMS 0.70, / `cap_ir_scale` 4.0 | 0/8 |
 
-  All three reproduce exactly. `preset="crossmodal"` acquired two defaults during that
-  single day — `ir_nms = 0.70` and `cap_ir_scale = 4.0`, both in `b3d8371` — and the
-  config block records **neither**, so the artifact cannot say which system produced it.
-  The 12:36 run log gives it away only by omission: it prints `IR 0.0092 (ratio 36.2x)`
-  with no "IR scaled 1/…" clause, because that clause did not exist yet.
+  So the name `crossmodal` meant three different systems within one day, and the artifact
+  cannot distinguish them. `hardened` and `rsys` are the two the first version of this
+  section missed; they are bit-identical to 12:36 on all eight cells, which is exactly why
+  the ambiguity was invisible — the `crossmodal-gate` document's two "re-runs
+  bit-identical on all eight" claims are *sound*, because all three compared artifacts sit
+  in the same pre-NMS regime. It is the boundary at 17:09 that the name does not record.
 
-  Verified rather than argued: recomputing the prior from
-  `gauss_ir_paired_clean.pkl` gives `0.009246512091269591` bit-for-bit (the 12:36 value),
-  and applying NMS 0.70 then dividing by 4 gives `0.0023539426113108287` bit-for-bit (the
-  current value). `cap_vis` is identical throughout, and the result is independent of
-  `SORT_KIND`, so neither R-A1's stable sort nor the R-B2 changes are involved.
+  **What the config block records:** `bright_soft`, `cap_ir`, `cap_vis`, `iou_thr`,
+  `n_boot`, `preset`, `single_passthrough`, `veto`, `veto_filter`, `veto_rule`. Neither
+  `ir_nms` nor `cap_ir_scale` appears in **any** of the fourteen files. `cap_ir` is the
+  only witness to either, and only by its numeric value.
+
+  All five reproduce exactly; there is no drift. `preset="crossmodal"` acquired two
+  defaults during that single day — `ir_nms = 0.70` and `cap_ir_scale = 4.0`, both in
+  `b3d8371` — so **re-running `preset="crossmodal"` today does not reproduce the numbers
+  the first three artifacts recorded under that name.** The 12:36 run log gives the
+  regime away only by omission: it prints `IR 0.0092 (ratio 36.2x)` with no
+  "IR scaled 1/..." clause, because that clause did not exist yet.
+
+  Verified rather than argued: recomputing the prior from `gauss_ir_paired_clean.pkl`
+  gives `0.009246512091269591` bit-for-bit (the 12:36 value); applying NMS 0.70 gives
+  `0.009415770445243315` (the 17:09 value); dividing that by 4 gives
+  `0.0023539426113108287` bit-for-bit (the current value). `cap_vis` is identical
+  throughout, and the result is independent of `SORT_KIND`, so neither R-A1's stable sort
+  nor the R-B2 changes are involved.
+
+  **Size of the regime shift, for calibration:** the largest per-cell move across the
+  17:09 boundary is lowlight/day, +0.0017 (0.019429 -> 0.021137); the night cells move
+  +0.0019 (0.081007 -> 0.082886). Both sit inside the 0.0014-0.0031 paired noise floor.
+  No verdict in the record turns on this. What it costs is **reproducibility by name**,
+  not correctness of a conclusion.
+
+  **`crossmodal26m` and `crossmodal26m_snms` are NOT ambiguous.** Both rewrite
+  `preset = "crossmodal"` at `ctx.py:391`, *before* the `ir_nms` default at line 412 and
+  the `cap_ir_scale` default at line 734, so they inherit both repairs; and both were
+  introduced after `b3d8371`, so neither ever meant anything else. The ambiguity is
+  confined to the bare name `crossmodal` on 2026-09-01.
+
+  **Sweep for other consumers (2026-09-10).** Requested after the finding above.
+  * **Code:** `scripts/change_impact_table.py` is the only Python file that reads
+    `final_system_crossmodal.json` by name, and it was corrected in `6e6bbac`. Nothing
+    else in `src/` or `scripts/` keys off any `final_system*.json` filename.
+  * **`docs/crossmodal-gate-2026-09-01.md`:** clean. Its headline table already carries
+    the post-17:09 values (0.0829 on the night cells), and §3c states the transition
+    outright: *"goes 0.0810 -> 0.0829 for the system and for the bar, so the gap the
+    fusion is judged on does not"* move. The pre-NMS 0.0810 values survive only in a
+    diagnostic table that the same document reconciles.
+  * **`docs/eval/final_system_2026-09-01.md`:** unaffected. It records the 2026-08-20
+    system, written with `preset=None`, and never claims the crossmodal name.
+  * **`final_system_adopted_regress{,2}.json`** carry `preset="adopted"` with
+    `cap_ir = 0.009246512091269591` at 12:37 and 17:14. `adopted` takes neither default
+    (both are gated on `preset == "crossmodal"`), so that value is correct at both times
+    and the name is stable. The seven `preset=None` artifacts predate the preset system.
 
   **Consequence, already acted on:** R-A5's change-impact table was built against the
-  12:36 file and labelled it the shipped preset. It is two revisions behind. Rebuilt
-  against `final_system_crossmodal_v2.json` — see `runs/eval/change_impact_v4.md`.
+  12:36 file and labelled it the shipped preset. Rebuilt against
+  `final_system_crossmodal_v2.json` — see `docs/eval/change_impact_2026-09-09_v4.md`.
 
   **The fix this points at:** a config block must record every value that changes the
   system, not the preset *name*, since a preset name is a moving target. That is R-E1.
