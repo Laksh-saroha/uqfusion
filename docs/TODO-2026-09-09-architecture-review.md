@@ -363,12 +363,30 @@ jointly.
 renamed duplicate images, cross-modal pairs split inconsistently. Emit an audit artifact bound to the
 exact data release and training recipe.
 
-### R-B5 — strict GT loading (F14) · P1 · S
+### R-B5 — strict GT loading (F14) · P1 · S · **DONE 2026-09-10 (`d10f07a`)**
 `matching.py:29` silently treats a missing label file as an empty (background-only) frame and skips
 malformed short lines. A wholly missing label path can therefore evaluate as a valid dataset.
 Explicit empty labels are legitimate; missing files are not the same thing.
 
 *Fix:* strict parsing plus a declared allow-empty manifest.
+
+**Closed 2026-09-10.** Three declared policies in `eval/matching.py`, same style as R-A2's
+`MISSING_CLASS_POLICY` and R-A4's contracts: `MISSING_LABEL_POLICY = "refuse"`,
+`EMPTY_LABEL_POLICY = "allow"`, `MALFORMED_LINE_POLICY = "refuse"`. A missing file now raises;
+`allow_missing=True` is the declared escape, a parameter rather than a silent default.
+
+**An allow-empty MANIFEST was rejected in favour of a policy constant, on measurement.** The corpus
+was scanned before anything changed: **0 missing label files** in 133,140 train+val images across
+both modalities, **3,880 legitimately EMPTY** ones (1,550 VIS train, 2,330 IR train, 0 in either val
+split), and **0 malformed lines** in 1,008,459 non-blank lines. A manifest naming 3,880 files would
+be a list of ordinary data, not an exception register; the empty file is the normal case and the
+missing file is the error, which is exactly the distinction the item asks for. Refusing therefore
+costs nothing today and exists to catch a path or annotation-release mistake tomorrow.
+
+Malformed lines also refuse: the old `if len(vals) < 5: continue` silently deleted ground-truth
+boxes. Reproduced on a fixture -- one good line, one truncated line and one garbage token returned
+**one** box and raised nothing. `smoke_apmetrics` section G is the always-on gate; `smoke_phase3`
+passes end to end.
 
 ---
 
@@ -588,9 +606,28 @@ slice 2 deferred, both closed, plus a third found on the way.
   CSVs become read-only (intended; `_append_row` already refused an older schema). `run_queue.py`,
   which drives the server work, does not use `run_grid`.
 
-**Open after slice 3:** nothing validated on **resume**; no comparison of a cache's `labels_sha256`
-against the hash recorded at TRAINING time (R-E1's actual acceptance criterion — the pieces now exist
-on both sides but nothing joins them); `verify_dataset_state.py` has its own `split_fingerprint` with
+**Slice 4 (2026-09-10) — the training side, and the join.** `train_gaussian` now writes
+`uqfusion_labels.json` into every run directory at training **start AND end**, recording
+`labels_train` and `labels_trainval` (the ledger's algorithm, scope in the key name) plus the git
+revision including the dirty hash. Start *and* end because a tree that is correct before and after
+is a different claim from one that was correct once: on 2026-09-03 at 21:19, 7,591 `pohang01`
+train label files were rewritten while no script of this project was running, and it was caught
+only because a later hash gate happened to run. Bracketing a run turns an unbounded window into a
+bounded one. Failures are logged and swallowed -- a provenance record that aborts a multi-hour
+training run is worse than one that is missing, and the absence is itself visible to the joiner.
+
+`scripts/verify_label_provenance.py` is the join, and it **reports rather than refuses**: a run
+trained under an older label state is not invalid, it is a run whose label state has to be named
+when its numbers are quoted. Refusing there would delete history rather than describe it;
+`load_cache` already refuses the case that IS an error.
+
+**Its first verdict is that nothing is joinable yet, and that is the honest answer.** Measured:
+**20 checkpoints carry no label manifest** (every `gauss_*`, `mc_*` and ensemble run on disk) and
+**258 of 258 caches carry no `labels_sha256`**. Both sides of R-E1's criterion now exist in code
+and neither exists in any artifact. The first Gaussian run and the first cache built from here on
+are the first pair that can be compared.
+
+**Open after slice 4:** nothing validated on **resume**; `verify_dataset_state.py` has its own `split_fingerprint` with
 a different signature and computation (the F14 pattern again, noticed and not fixed); and
 `train_overrides` fingerprints by `repr` for non-JSON values, which no current caller passes.
 

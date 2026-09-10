@@ -174,6 +174,79 @@ def reseed_at_train_start(seed: int, deterministic: bool):
     return cb
 
 
+LABEL_MANIFEST = "uqfusion_labels.json"
+"""Filename of the per-run label-state record written into every run directory.
+
+**R-E1.** A checkpoint has always known its hyperparameters (Ultralytics writes
+`args.yaml`) and never known which ANNOTATIONS it saw. That is the missing half of
+R-E1's acceptance criterion -- *label hashes at training start/end and at
+caching/evaluation agree* -- because until now only the caching side existed
+(`eval.cache` stamps `labels_sha256`) and there was nothing to agree WITH.
+"""
+
+
+def _label_manifest(data_yaml, run_dir: Path, phase: str, started: dict | None = None) -> dict:
+    """Append this run's label state to `run_dir/uqfusion_labels.json`. Never fatal.
+
+    Called at training start and again at the end. Two entries, not one, because a
+    tree that is correct before and after is a different claim from one that was
+    correct once: on 2026-09-03 at 21:19, 7,591 `pohang01` train label files were
+    rewritten while no script of this project was running, and it was caught only
+    because a later hash gate happened to run. Bracketing a run turns an unbounded
+    window into a bounded one.
+
+    Uses `data.labels.label_content_hash`, the same algorithm as
+    `runs/label_hash_ledger.csv` and `verify_dataset_state.py --expect-label-hash`, so
+    the numbers are comparable to both **at the same scope**. Scope is recorded in the
+    key names for exactly the reason the ledger doc gives.
+
+    Failures here are logged and swallowed: a provenance record that aborts a
+    multi-hour training run is worse than one that is missing, and the absence is
+    itself visible to `scripts/verify_label_provenance.py`.
+    """
+    import json
+    from datetime import datetime, timezone
+
+    rec: dict = {"phase": phase,
+                 "utc": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    try:
+        from uqfusion.data.labels import label_content_hash
+        from uqfusion.data.lists import load_data_yaml, split_image_list
+
+        data = load_data_yaml(data_yaml)
+        train = split_image_list(data, "train")
+        val = split_image_list(data, "val")
+        rec["labels_train"] = label_content_hash(train)
+        rec["labels_trainval"] = label_content_hash(list(train) + list(val))
+        rec["n_train"], rec["n_val"] = len(train), len(val)
+        rec["data_yaml"] = str(data_yaml)
+        from uqfusion.eval.identity import git_revision
+
+        rec.update(git_revision())
+    except Exception as exc:  # noqa: BLE001 - provenance must never kill a run
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+        print(f"[train] WARNING: could not record label state ({rec['error']})")
+
+    if started is not None and "labels_train" in rec and "labels_train" in started:
+        rec["unchanged_during_run"] = (rec["labels_train"] == started["labels_train"]
+                                       and rec["labels_trainval"] == started["labels_trainval"])
+        if not rec["unchanged_during_run"]:
+            print(f"[train] *** LABELS CHANGED DURING THIS RUN *** "
+                  f"train {started.get('labels_train')} -> {rec.get('labels_train')}")
+
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+        path = run_dir / LABEL_MANIFEST
+        entries = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else []
+        entries.append(rec)
+        path.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+        print(f"[train] label state ({phase}): train={rec.get('labels_train')} "
+              f"trainval={rec.get('labels_trainval')}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[train] WARNING: could not write {LABEL_MANIFEST} ({exc})")
+    return rec
+
+
 def train_gaussian(
     cfg: dict,
     data_yaml: str | Path,
@@ -277,6 +350,16 @@ def train_gaussian(
     model.add_callback("on_train_start", restore_early_stopping)
 
     # sigma=False -> stock DetectionTrainer; every other argument is identical.
+    # R-E1: record the LABEL STATE this run trains on, at start and again at end.
+    # R-E1's acceptance is that label hashes at training start/end and at
+    # caching/evaluation agree, and until now nothing recorded the training side at
+    # all -- a checkpoint knew its hyperparameters and not which annotations it saw.
+    # Start AND end because a byte-identical tree is not the only failure: on
+    # 2026-09-03 at 21:19, 7,591 pohang01 train label files were rewritten while no
+    # script of ours was running (scripts/label_hash_ledger.py). A run bracketed by
+    # two hashes turns that from an unbounded guess into a bounded window.
+    _man = _label_manifest(data_yaml, run_dir, phase='start')
+
     trainer_kw = {"trainer": make_gaussian_trainer(g)} if sigma else {}
     if resuming:
         model.train(resume=True, **trainer_kw, **shared)
@@ -301,5 +384,6 @@ def train_gaussian(
         kwargs.update(shared)
         kwargs.update(extra)  # per-run overrides win over everything above
         model.train(**trainer_kw, **kwargs)
+    _label_manifest(data_yaml, run_dir, phase='end', started=_man)
     best = run_dir / "weights" / "best.pt"
     return (best if best.is_file() else run_dir / "weights" / "last.pt"), run_dir
