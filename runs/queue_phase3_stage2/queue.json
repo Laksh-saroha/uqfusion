@@ -1,0 +1,95 @@
+{
+  "created": "2026-09-10T18:00:00+05:30",
+  "note": "Phase 3 Stage 2 retrain, per docs/prereg-phase3-retrain-2026-09-10.md §5 as amended. Architecture frozen (§5.1): no ladder, detector scale is a measured null. IR trains FIRST because it is the cheaper failure (~8h/seed vs ~27h) and the arm that has never been trained as the thing deployed (nc=1 ship-only, §2c) -- a surprise is likeliest there and costs least there. Ten runs, 5 seeds each arm (§5.2, confirmed against G4 in Amendment 4: the seeds average the training trajectory, they are NOT powering a two-arm test, and the 'retrained vs deployed' comparison is CUT and may not be reported). kind=gaussian with sigma=true throughout: §6's mechanism arms consume the sigma_ltrb the Gaussian head produces, so a plain detector would leave Stage 3 with nothing to test. That also means §5.3's label bracketing applies -- train_gaussian writes uqfusion_labels.json at start AND end of every run (train_gaussian.py:361,387). batch 12 / workers 8 measured, not inherited: docs/batch-ceiling-2026-09-10.md. config.yaml's 32 is H100-sized and does not apply; the MIG figures do not either, since Amendment 3 pins Phase 3 to this laptop. VIS data is the _p04out yaml -- pohang04 is held out (G5) and the ORIGINAL data_vis_stride2.yaml would fail the gate this queue now runs before every invocation. IR needs no _p04out equivalent: pohang04 has no thermal labels at all (Amendment 2), so its lists were already clean. No mosaic-off ft continuation stage for either arm: every VIS base-to-ft pair on record finishes at or below the base checkpoint, and IR is not being given one asymmetrically.",
+  "out_subdir": "phase3_stage2",
+  "assert_holdout": true,
+  "defaults": {
+    "imgsz": 640,
+    "epochs": 100,
+    "patience": 20,
+    "batch": 12,
+    "workers": 8
+  },
+  "runs": [
+    {
+      "id": "p3_ir_seed0",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m-p2feat",
+      "data": "runs/derived/data_ir_shiponly_stride2.yaml",
+      "seed": 0
+    },
+    {
+      "id": "p3_ir_seed1",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m-p2feat",
+      "data": "runs/derived/data_ir_shiponly_stride2.yaml",
+      "seed": 1
+    },
+    {
+      "id": "p3_ir_seed2",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m-p2feat",
+      "data": "runs/derived/data_ir_shiponly_stride2.yaml",
+      "seed": 2
+    },
+    {
+      "id": "p3_ir_seed3",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m-p2feat",
+      "data": "runs/derived/data_ir_shiponly_stride2.yaml",
+      "seed": 3
+    },
+    {
+      "id": "p3_ir_seed4",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m-p2feat",
+      "data": "runs/derived/data_ir_shiponly_stride2.yaml",
+      "seed": 4
+    },
+    {
+      "id": "p3_vis_seed0",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m",
+      "data": "runs/derived/data_vis_stride2_p04out.yaml",
+      "seed": 0
+    },
+    {
+      "id": "p3_vis_seed1",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m",
+      "data": "runs/derived/data_vis_stride2_p04out.yaml",
+      "seed": 1
+    },
+    {
+      "id": "p3_vis_seed2",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m",
+      "data": "runs/derived/data_vis_stride2_p04out.yaml",
+      "seed": 2
+    },
+    {
+      "id": "p3_vis_seed3",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m",
+      "data": "runs/derived/data_vis_stride2_p04out.yaml",
+      "seed": 3
+    },
+    {
+      "id": "p3_vis_seed4",
+      "kind": "gaussian",
+      "sigma": true,
+      "variant": "yolo26m",
+      "data": "runs/derived/data_vis_stride2_p04out.yaml",
+      "seed": 4
+    }
+  ]
+}
