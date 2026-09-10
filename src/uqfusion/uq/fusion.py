@@ -101,6 +101,42 @@ def sigma_weighted_fusion(
     capped at the number of streams. **beta = 1.0 is stock WBF exactly** (k=1 -> 1,
     k=2 -> 2), so the default remains an ablation of nothing.
 
+    **The fused score is not a probability, and R-A4 requires saying so.**
+    Measured on the paired val set, fused scores reach **1.753204** under
+    `preset="crossmodal"` and **1.713590** under `adopted`, on 271/422,598 and
+    226/495,497 fused detections respectively (~0.05-0.06%), concentrated in the
+    clean and glare cells.
+
+    **The mechanism is self-agreement, and it is neither of the two things it gets
+    attributed to.** It is not the cross-stream support bonus -- `support_gamma` is
+    0.0 in both shipped presets, verified from the resolved context, so the term the
+    architecture review blamed for its own 1.47015 example is switched off. And it
+    is not cross-modal agreement, which cannot overflow: with `w` summing to 1 a
+    two-STREAM cluster scores ``w_v*s_v + w_i*s_i <= max(s) <= 1``.
+
+    What overflows is `k` counting cluster MEMBERS. Two overlapping boxes from the
+    SAME stream are priced as a confirmation, so the score becomes
+    ``w_stream * (s1 + s2)``, which passes 1 as soon as a confident duplicate pair
+    lands on a stream holding nearly all the weight -- and on the clean cell
+    `w_vis` is 0.9930. Ablation confirms it rather than argues it: setting
+    `consensus_distinct=True`, which counts distinct source streams, takes the clean
+    cell from max 1.753204 with 149 overflows to max 0.970650 with **zero**;
+    `consensus_beta=0.0` does the same. So this is the very defect the
+    `consensus_distinct` paragraph below describes, showing up in the score range,
+    and it is live because that flag is OFF by default.
+
+    Harmless for AP, which is rank-based and reads only the ordering -- which is why
+    it has never shown up in a result. NOT harmless for anything that reads a score
+    as P(object): `eval.metrics.d_ece` bins into [0, 1], so scores above 1 pile into
+    the top bin and are compared against a precision that cannot exceed 1. **No such
+    reading happens today** -- d_ece runs only on single-stream UQ caches, all of
+    which top out at 0.979101 with zero values above 1 -- so this is a latent trap,
+    not a live corruption. `summarize_cache` now reports `conf_out_of_unit_range`
+    and `scripts/smoke_metric_contracts.py` case 8 pins the mechanism, so it cannot
+    become one silently. Presenting fused scores as probabilities needs either
+    `consensus_distinct=True` (a system change, hence a re-score) or a recalibration
+    step, and neither exists in the adopted configuration.
+
     `consensus_distinct` fixes a second thing WBF does not distinguish: k counts
     cluster MEMBERS, so two overlapping boxes from the SAME sensor earn the same
     bonus as one confirmation from the other. That is self-agreement priced as

@@ -12,15 +12,32 @@ Fixed-GT metric (`apmetrics.ap_from_parts(..., gt_sel=...)`, added for this
 script): the GT denominator is always the FULL frame set for the condition,
 regardless of coverage. Predictions from abstained frames simply stop
 contributing true positives -- their GT boxes become permanently missed
-detections instead of vanishing from the count. That is the standard
-selective-risk definition and it is monotonicity-honest: risk can only move
-because of what `R_sys` chose to drop, not because the yardstick itself moved.
+detections instead of vanishing from the count. It is monotonicity-honest: risk
+can only move because of what `R_sys` chose to drop, not because the yardstick
+itself moved.
+
+**Corrected 2026-09-10 (R-A4/F12): this is NOT "the standard selective-risk
+definition", as this docstring claimed until now.** Standard selective risk
+conditions on the ACCEPTED set -- it is the loss averaged over what the system
+chose to answer, so the denominator shrinks with coverage by construction. The
+fixed-GT quantity here holds the FULL-condition GT count in the denominator
+regardless of coverage, which makes rejected frames count as permanent misses.
+That is a different estimand: "how much of all the work did the system get
+done", not "how good is the system on what it accepted". Both are legitimate and
+both are already reported below, side by side, with a random-rejection control
+-- only the LABEL was wrong, and a reader who took the claim at face value would
+have compared these numbers against published selective-risk figures that
+condition differently. Same defect family as F14: a name that does not pin a
+computation.
 
 For each condition, both risk curves (shifting-denominator vs fixed-GT) are
 reported against a coverage grid, together with a random-order control (mean
 over 20 shuffles) so "AURC(R_sys) < AURC(random)" has something to be measured
-against. AURC is the trapezoidal integral of risk over coverage from 1.0 down
-to 0.1.
+against. AURC here is the trapezoidal integral of risk over coverage from 1.0
+down to 0.1 -- note this is a DIFFERENT computation from
+`uqfusion.eval.metrics.sparsification`'s `aurc`, which is a 20-point grid MEAN
+over per-detection 1-IoU risk. Two functions, one name, different quantities;
+they must never be quoted against each other. See `metrics.AURC_INTEGRATION`.
 
 CPU-only, cached predictions (~1-2 h with the bootstrap; the core sweep alone
 is a couple of minutes). Usage:
