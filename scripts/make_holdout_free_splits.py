@@ -47,6 +47,25 @@ LISTS = (
      ROOT / f"runs/derived/vis_test{SUFFIX}.txt"),
 )
 
+#: Not a train/val/test split, so it gets no yaml -- but it is the one contaminated list
+#: that feeds a SHIPPED component. `gauss_vis_train_clean.pkl` is built from it, and
+#: `ctx.fit_scorer` (ctx.py:496) fits the Mahalanobis reference distribution on that cache.
+#: 819 of its 4,000 frames are pohang04, so as it stands the OOD scorer would treat the
+#: holdout as in-distribution because it literally fitted on it.
+#:
+#: Filtering leaves 3,181 rather than resampling back to 4,000: resampling would change
+#: which pohang00-03 frames are in the reference set, and the reference set is the thing
+#: whose composition we are trying not to disturb. The covariance is estimated from ~20%
+#: fewer frames as a result, which is recorded rather than corrected.
+#:
+#: **The list is only half the fix.** The cache must be REBUILT from it before §7's single
+#: look, or the shipped scorer keeps its contaminated reference. That is a GPU job over
+#: 3,181 frames, not a file edit.
+EXTRA_LISTS = (
+    (ROOT / "runs/derived/maha_fit_vis.txt",
+     ROOT / f"runs/derived/maha_fit_vis{SUFFIX}.txt"),
+)
+
 YAML_OUT = ROOT / f"runs/derived/data_vis_stride2{SUFFIX}.yaml"
 
 #: Night reference. Every night frame in val comes from pohang01; the day/night call is
@@ -113,7 +132,7 @@ def main() -> int:
     night = {frame_key(ln) for ln in NIGHT_REF.read_text(encoding="utf-8").splitlines()
              if ln.strip()} if NIGHT_REF.is_file() else set()
 
-    results = [filter_list(s, d, HELD_OUT, args.dry_run) for s, d in LISTS]
+    results = [filter_list(s, d, HELD_OUT, args.dry_run) for s, d in LISTS + EXTRA_LISTS]
 
     print(f"{'list':<44}{'in':>9}{'dropped':>10}{'kept':>9}")
     for r in results:

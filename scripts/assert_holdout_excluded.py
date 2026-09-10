@@ -171,6 +171,45 @@ def assert_clean_yaml(yaml_path: Path, held_out=HELD_OUT) -> None:
         )
 
 
+def scan_caches(cache_globs=("runs/cache*/**/*.pkl",), held_out=HELD_OUT) -> list[tuple]:
+    """(cache, images_list, run) for every cache built from a held-out-bearing list.
+
+    A clean split list is not enough. A prediction cache stamps the list it was built
+    from (`meta.images_list`) and then outlives it, so a constant fitted on that cache
+    inherits whatever the list contained on the day it was built. That is not
+    hypothetical: `gauss_vis_train_clean.pkl` is built from `maha_fit_vis.txt`, 819 of
+    whose 4,000 frames are pohang04, and `ctx.fit_scorer` (ctx.py:496) fits the shipped
+    Mahalanobis reference distribution on exactly that cache.
+
+    So the holdout can be absent from every training list and still be inside a shipped
+    component. This walks the caches and says which.
+    """
+    import pickle
+
+    hits = []
+    for pattern in cache_globs:
+        for p in sorted(ROOT.glob(pattern)):
+            try:
+                with p.open("rb") as fh:
+                    meta = (pickle.load(fh).get("meta") or {})
+            except Exception:  # noqa: BLE001 - an unreadable cache is not this gate's call
+                continue
+            il = str(meta.get("images_list", ""))
+            if not il:
+                continue
+            lp = Path(il)
+            if not lp.is_absolute():
+                lp = ROOT / lp
+            if not lp.is_file():
+                continue
+            for run in held_out:
+                n = sum(1 for ln in lp.read_text(encoding="utf-8", errors="replace")
+                        .splitlines() if run in ln)
+                if n:
+                    hits.append((p.relative_to(ROOT), lp.name, run, n))
+    return hits
+
+
 def assert_training_host(expect: str = TRAINING_HOST) -> None:
     """G1' -- refuse to train anywhere but the host Phase 3 is pinned to.
 
@@ -205,9 +244,22 @@ def main() -> int:
     ap.add_argument("--yaml", default=None, metavar="PATH",
                     help="gate on the lists this data yaml trains on (the training "
                          "precondition); without it, survey every list on disk")
+    ap.add_argument("--caches", action="store_true",
+                    help="audit prediction caches for a held-out source list (a clean "
+                         "split list does not make a cache clean)")
     ap.add_argument("--quiet", action="store_true",
                     help="print only the verdict line")
     args = ap.parse_args()
+
+    if args.caches:
+        hits = scan_caches(held_out=tuple(args.run) if args.run else HELD_OUT)
+        if not hits:
+            print("[caches] PASS: no cache built from a held-out-bearing list.")
+            return 0
+        print(f"[caches] FAIL: {len(hits)} cache(s) built from a contaminated list.")
+        for c, il, run, n in hits:
+            print(f"     {n:>6,} {run} rows in {il:<28} -> {c}")
+        return 1
 
     if args.check_host or args.host:
         try:
