@@ -456,7 +456,7 @@ are not calibration.
 
 ## 5. Workstream D — fusion, geometry, mechanism
 
-### R-D1 — the shipped preset does not test the UQ mechanism (F09) · P1 · M
+### R-D1 — the shipped preset does not test the UQ mechanism (F09) · P1 · M · **DONE 2026-09-10 (`76c80bc`) — NULL**
 `ctx.py:557-558` makes the learned Mahalanobis soft weight and the box-sigma soft weight inert;
 `sigma_weighted` and sigma-in-score are off by default. `crossmodal26m` is therefore image-statistic
 sensor rejection + capability-weighted aggregation + cross-stream score support. Gaussian training
@@ -474,6 +474,44 @@ presented as evidence for learned uncertainty weighting.
 Consistent with what `project-crossmodal-gate` and
 [`rebaseline-proposal-2026-09-04.md`](rebaseline-proposal-2026-09-04.md) §58 already say — the review
 raises it from a footnote to a claim-validity problem.
+
+**Answered 2026-09-10 — [`uq-mechanism-2026-09-10.md`](uq-mechanism-2026-09-10.md).**
+Pre-registered in [`prereg-uq-mechanism-ablation.md`](prereg-uq-mechanism-ablation.md) (`a8f087c`,
+amendment 1 `f713961`) **before the ablation existed**; run twice, every delta identical.
+
+**The premise is confirmed, not merely alleged.** Under `crossmodal`, `mu_d` is `1e9` and `lam` is
+`0.0` on both modalities, so `r_frame_vis`/`r_frame_ir` are exactly 1.0000 on every frame and
+**`w_vis` is a single constant 0.9930** across all 2,232 frames x 4 conditions.
+
+**Verdict NULL on both paths, at every floor.** Coordinate path (real vs the same sigmas on the
+wrong boxes): clean **-0.000566** [-0.000893, -0.000041], fog +0.000000, lowlight -0.000001, glare
++0.000406 — **0 of 4** conditions at 0.0014, 0.0031, 0.0060 *and* 0.0100. The most direct number is
+**S1-S0 = -0.000089** on clean and ~0 elsewhere: switching on real inverse-variance weighting against
+the shipped system changes nothing.
+
+**The score path's two positives are not fusion results.** Measured: `pohang01` (all 1,032 night
+frames) is **100% vetoed** and the three day runs 0%, so 46.2% is exactly the night run; and on
+**fog VIS is vetoed on every frame**, so no two-stream fusion happens there at all.
+`sigma_score_alpha` is applied inside `fuse_detections`' `single_passthrough` branch, so the score
+path re-ranks a SINGLE stream's own detections on those frames. Fog +0.003960 and lowlight +0.001995
+sit exactly where nothing is fused. **Where uncertainty could influence the fusion it does nothing;
+where it shows any signal it is not fusing anything.**
+
+**Two results pointing the wrong way, reported not suppressed:** shuffled beats real on clean with a
+CI excluding zero, and real-sigma score re-ranking is **worse than constant** on clean by -0.013157
+[-0.022630, -0.000678] — the largest magnitude in the table, costing 0.0167 against the shipped
+system.
+
+**A defect in the decision rule, recorded:** requiring 3 of 4 conditions when fog is structurally
+incapable of showing a coordinate-path effect meant POSITIVE would have needed all three informative
+conditions. It biases against POSITIVE so it cannot have manufactured the NULL, but any follow-up
+prereg must count only conditions where fusion occurs.
+
+**Consequence for the claim, per the prereg's own rule (there is no fourth run):** the thesis claim
+narrows to **image-statistic sensor selection** — measured, working, and the actual mechanism — with
+the Gaussian head evaluated on its own terms as a learned conditional localization-error scale
+(R-C3), not as a fusion input. A separate, narrower follow-up worth its own registration: the score
+path's within-stream re-ranking showed positive signs on both single-stream conditions.
 
 ### R-D2 — covariance is not transformed with the boxes (F10) · P2 · S
 `fusion.py:278` maps IR corners into the VIS plane but then reads the original IR `sigma_ltrb` and
