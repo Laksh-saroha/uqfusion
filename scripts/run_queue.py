@@ -43,6 +43,9 @@ if str(ROOT / "scripts") not in sys.path:
     sys.path.insert(0, str(ROOT / "scripts"))  # for watch_divergence, a sibling script
 
 from uqfusion.config import load_config, resolve_data_yaml  # noqa: E402
+from assert_holdout_excluded import (  # noqa: E402
+    assert_clean_yaml, assert_training_host,
+)
 
 # The divergence rule lives in the standalone watcher and is imported, not copied.
 # Two definitions of "diverged" would eventually disagree, and the disagreement
@@ -842,6 +845,22 @@ def cmd_run(args) -> int:
             log(f"=== {run_id}: FAILED unknown kind {kind!r}")
             i += 1
             continue
+
+        # G5 and G1' -- preconditions, per prereg-phase3-retrain-2026-09-10.md §3, which
+        # requires the holdout check to run "as a precondition on each training
+        # invocation, not once by hand". Placed here rather than at queue load so a yaml
+        # edited or regenerated mid-queue cannot slip a held-out frame into a later run,
+        # and so the refusal names the run that would have consumed it.
+        if queue.get("assert_holdout", False):
+            try:
+                assert_training_host()
+                assert_clean_yaml(Path(resolve_data_yaml(cfg, spec["data"])))
+            except RuntimeError as exc:
+                rs.update(status="failed", finished=now(), error=str(exc).splitlines()[0])
+                save_state(state)
+                log(f"=== {run_id}: REFUSED by gate\n{exc}")
+                i += 1
+                continue
 
         rs.update(status="running", started=rs.get("started") or now(), error=None)
         save_state(state)
