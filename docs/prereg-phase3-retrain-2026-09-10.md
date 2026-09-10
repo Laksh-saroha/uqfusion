@@ -417,3 +417,80 @@ as dated amendments, as in the document it extends.
    relabelled development data in `ctx.py`, and the loss is recorded in the exposure ledger.
 
 Stop rule 5 has no remedy, which is why it is last and why §7.2 exists.
+
+---
+
+## Amendment 1 — 2026-09-10, Stage 0 corrections
+
+Appended per §11. **No decision rule, threshold, arm, floor or policy changes.** Three
+corrections of fact, all found while running Stage 0, all measured rather than argued.
+Nothing below relaxes a gate; two of the three make a gate wider.
+
+### A1.1 — G1 compares two hashes that are not comparable
+
+§3's G1 sets local `b92739202127` against server `287b11c50b5a`. **That is a `tree`-scope
+hash against a `train`-scope hash** — different algorithms over different file sets, which
+`label_hash_ledger.py`'s docstring and `handoff-2026-09-04.md` §6 trap 1 both warn about.
+The error originates at [`experiment-log-2026-09-02.md:711`](experiment-log-2026-09-02.md),
+which labels the tree hash "VIS train label hash"; `prereg-night-label-restore.md:98` and
+then G1 inherited it.
+
+**The correct comparison is train-vs-train: local `8ed69b5974ed` vs server
+`287b11c50b5a`.** G1's *verdict* is unchanged — the machines do differ, and no training
+starts — but the difference is now measured rather than assumed:
+
+`scripts/reconstruct_prerestore_hash.py` rebuilds the server's tree from
+`runs/visfilter/visfilter_manifest.json` (`cut_dark` emptied 17,502 files wholesale) and
+reproduces **`287b11c50b5a` with 616,891 boxes, bit-exact**. Since that hash folds in every
+byte of all 96,275 train labels, **the two machines differ by exactly the +94,553-box night
+restore and by nothing else.** G1 is therefore a transfer, not an investigation, and it
+passes when the server reads `8ed69b5974ed` (train) and `b92739202127` (tree).
+
+Full record: [`g1-label-reconciliation-2026-09-10.md`](g1-label-reconciliation-2026-09-10.md).
+
+**Carried forward as unfinished:** the IR label tree has never been hashed across the two
+machines in any scope. Stage 2 trains IR for the first time as the deployed `nc=1`, so G1
+is extended to require an IR scope in the ledger before Stage 2 — not before Stage 1, which
+is CPU-only on existing caches.
+
+### A1.2 — G5's list of five is a list of fifteen
+
+§3's G5 names `data_vis_train_stride2.txt`, `fullres_vis_val.txt`, `fullres_vis_test.txt`,
+`phase1val_all/day.txt` and `maha_fit_vis.txt`. Measured 2026-09-10: **pohang04 appears in
+15 lists, totalling 58,144 rows**, and the largest is the one not named —
+`Pohang_dataset/visible/train.txt` at **19,687** rows, the master list every derived stride
+list is cut from. Also unnamed: `data_vis_train_stride5/10/19.txt`,
+`fullres_vis_train_stride5.txt`, `visible/val.txt`, `visible/test.txt`,
+`derived_day/day_val_vis_stride1.txt`, and `runs/bench_bundle/uqfusion_bench/train.txt`.
+
+Enumerating by hand is what produced a list of five. **`scripts/assert_holdout_excluded.py`
+therefore takes no list of files**: it walks the split roots and checks every list it finds,
+so a list added later is covered without anyone remembering. It exposes `assert_clean()` for
+use as a training precondition, per G5's requirement that it not be a manual step. It
+currently returns 1 across 15 of 42 lists.
+
+All IR lists carry zero pohang04 rows, and will until Stage 4 extracts thermal frames — the
+gate covers them anyway, for that reason.
+
+### A1.3 — the pohang04 label archive is VIS, and is already on disk
+
+An archive offered as "the 04 labels" (`all.zip`, 26,191 entries) was checked against the
+tree before any use. It is **`pohang04` visible-stereo labels, 2-class, 156,652 boxes**:
+12,571 `left` + 13,617 `right`, matching `Pohang_dataset/visible/labels/pohang04`'s `_L_`/`_R_`
+counts exactly. Across 3,000 sampled frames every on-disk label reproduces from it by one
+fixed transform — letterbox to 640×640 at aspect 0.528125 (`y' = 0.528125y + 0.2359375`,
+`h' = 0.528125h`), then clip to `[0,1]`; the 148 non-matches are all boxes the archive
+records outside the frame (`x = 1.0217`, `x = −0.0237`) that the tree has clipped.
+
+**It is the raw-coordinate source of labels the project already holds.** §2(a)'s finding is
+unaffected: `labeled_frames.json` still reads `tir: 0` for pohang04, no thermal label exists
+anywhere, and **§7.1's annotation pass is still required in full.**
+
+**Opened, not decided:** the archive supplies pohang04 VIS boxes in *unletterboxed* image
+coordinates, which makes geometric projection into the thermal frame via
+`meta/pohang04/calibration` technically possible. That is not model-assisted labelling and
+so is not barred by §7.1's integrity clause — but it is not annotation either, and it would
+inherit the 3–6 px registration residual measured in `runs/eval/x_registration_drift.md`
+into the labels of the one held-out set this project will ever have. **It is not adopted
+here.** Adopting it requires its own pre-registration stating the residual's effect on label
+quality; until then §7.1's default — unassisted annotation to the release protocol — stands.
