@@ -64,9 +64,23 @@ def run_of(line: str) -> str:
     return k.split("_")[0] if "_" in k else "?"
 
 
+def absolutise(line: str, src: Path) -> str:
+    """Resolve a list line against the list it came from, and emit an absolute path.
+
+    This is not cosmetic. `Pohang_dataset/visible/val.txt` stores relative paths
+    (`./images/pohang00/...`) which a loader resolves against the *list file's* directory.
+    Writing those lines unchanged into `runs/derived/` repoints every one of them at
+    `runs/derived/images/...`, which does not exist -- the filtered list then looks
+    perfectly well-formed and loads zero images. Measured: it got through G5 and failed
+    only when a training run tried to read it.
+    """
+    p = Path(line.strip())
+    return str(p if p.is_absolute() else (src.parent / p).resolve())
+
+
 def filter_list(src: Path, dst: Path, held_out: str, dry: bool) -> dict:
     raw = src.read_text(encoding="utf-8").splitlines()
-    kept = [ln for ln in raw if ln.strip() and held_out not in ln]
+    kept = [absolutise(ln, src) for ln in raw if ln.strip() and held_out not in ln]
     dropped = len([ln for ln in raw if ln.strip()]) - len(kept)
     if not dry:
         dst.parent.mkdir(parents=True, exist_ok=True)

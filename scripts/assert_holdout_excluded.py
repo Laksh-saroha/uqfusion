@@ -140,6 +140,24 @@ def assert_clean_yaml(yaml_path: Path, held_out=HELD_OUT) -> None:
     for split, p in sorted(lists.items()):
         if not p.is_file():
             raise RuntimeError(f"G5 FAILED -- {yaml_path.name} {split} list missing: {p}")
+        # A list can be free of held-out frames and still be useless. Relative paths
+        # resolve against the list file's own directory, so a list copied into another
+        # directory keeps its shape and silently points at nothing. That happened here:
+        # the first _p04out val/test lists passed this gate and then loaded zero images.
+        # Absence of the holdout is necessary, not sufficient -- so check the frames
+        # actually exist before calling the split clean.
+        rows = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        probe = rows[:: max(len(rows) // 50, 1)][:50]
+        missing = [ln for ln in probe
+                   if not (Path(ln) if Path(ln).is_absolute()
+                           else p.parent / ln).exists()]
+        if missing:
+            raise RuntimeError(
+                f"G5 FAILED -- {yaml_path.name} {split} list resolves to missing files "
+                f"({len(missing)} of {len(probe)} sampled), e.g.\n    {missing[0]}\n"
+                "  Relative paths resolve against the list's own directory; a list moved "
+                "between directories must be rewritten absolute, not copied."
+            )
         hits = scan([p], held_out)
         if hits:
             bad += [(split, p, n, tot) for _, _, n, tot in hits]
