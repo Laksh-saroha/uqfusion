@@ -569,3 +569,79 @@ same conclusion in August.
 **Net effect on Stage 4:** the run is one annotation pass — not one extraction and one
 annotation pass — away from being a run-disjoint evaluation set. §7.2's single-look policy
 is untouched and remains the binding constraint.
+
+---
+
+## Amendment 3 — 2026-09-10, Stage 2 trains on one machine
+
+Appended per §11, **before any Phase 3 checkpoint is trained.** This one **changes a gate**
+and says so plainly. Decided by the operator; the reasoning and the new obligation it
+creates are recorded here rather than in a commit message.
+
+### A3.1 — the decision
+
+**Every Phase 3 checkpoint is trained on the laptop (RTX 4080 Laptop, 12,282 MiB).
+`dgxanode01` trains nothing in Phase 3.**
+
+The cost is small and measured. At steady state on the real job the server does 1013 s/epoch
+against the laptop's 1058–1065 — **about 4.5%**
+([`handoff-2026-08-21-full-scale.md:687`](handoff-2026-08-21-full-scale.md)). That section
+also retracts the two earlier speed claims: the 1.23× came from a stripped probe with no
+sigma head and no mosaic, and the "server 7% slower" figure was read off epoch 1. Neither
+should be quoted again, here or anywhere.
+
+### A3.2 — what this does to G1, stated as a change and not as a pass
+
+G1 requires the two machines to agree on labels before training starts. **They still do not
+agree, and this amendment does not reconcile them.**
+
+What it does is remove the exposure G1 exists to prevent. §3 gives the reason for the gate
+exactly: *"every artifact produced under a disagreement inherits an asterisk that is
+discovered later and cannot be removed."* An asterisk is inherited when artifacts are
+produced across two disagreeing label states. If one machine produces all of them, no
+artifact spans the disagreement, and every Phase 3 checkpoint carries a single label
+provenance — the restored tree, `train` `8ed69b5974ed` / `tree` `b92739202127`, whose
+divergence from the server is now measured exactly and attributed entirely to the night
+restore (Amendment 1).
+
+**G1 is therefore restated for Phase 3, not waived:**
+
+> **G1′ — one machine trains, and the gate proves which one.** Phase 3 training runs only on
+> the host whose label hashes are recorded in `runs/label_hash_ledger.csv` for the commit
+> being trained. The training precondition asserts the hostname **and** re-reads the label
+> hashes, and refuses on either mismatch.
+
+The hostname assertion is not ceremony. Without it, this amendment converts a hard stop into
+a convention, and a convention is exactly what the 2026-09-03 21:19 label rewrite proved this
+project cannot rely on. The mechanical check is what makes the relaxation safe, so it ships
+with the amendment rather than after it.
+
+**`dgxanode01` is recorded as holding a stale VIS label tree** (`287b11c50b5a`, pre-restore).
+It is out of scope for Phase 3. Any future run there must reconcile first; that obligation
+does not expire with this amendment, and the IR-scope gap noted in A1.1 stays open against
+the day the server is used again.
+
+### A3.3 — what follows mechanically
+
+* **Blockers that dissolve:** the server-side label transfer, the cross-machine IR hash, and
+  the MIG `3g.40gb` batch measurement. None are on the Phase 3 path any more.
+* **§5.1's batch clause is unchanged in substance and re-anchored in fact.** "The largest
+  common fit, measured once, identical across every arm" now means the 4080's ceiling at
+  12,282 MiB, not the MIG's at 40 GB, and `config.yaml`'s 32 remains inapplicable — it was
+  sized for an H100. The measured value is recorded in the manifest exactly as §5.1 requires,
+  and heterogeneous batch across arms is still the confound it always was.
+* **§5.2's seed count is unchanged, and G4 still governs it.** What changes is the budget G4
+  is priced against. Measured laptop throughput
+  ([`TODO-improvements.md:19`](TODO-improvements.md)) is VIS 282 s/epoch at stride-5 over
+  19,256 frames and IR 125 s/epoch at stride-2 over 11,640, with Phase 2 runs early-stopping
+  at 54–68 epochs. Stage 2's VIS arm is roughly twice that frame count once pohang04 is
+  removed, and `yolo26m-p2feat` is heavier than the IR figure was measured on, so **neither
+  number is quoted as a Stage 2 estimate here.** The budget is measured on the first arm and
+  recorded before the seed count is fixed — G4 cuts arms on measured cost, never on an
+  extrapolated one.
+
+### A3.4 — what this does not change
+
+Nothing about the estimand, the floor, the interval method, the arms, the mechanism gate, or
+§7. **§7.2's single-look policy is untouched.** Training on one machine changes who produces
+the checkpoints; it changes nothing about what may be looked at, when, or how often.

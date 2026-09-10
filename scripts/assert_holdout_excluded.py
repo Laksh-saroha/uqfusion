@@ -29,10 +29,15 @@ Exit codes: 0 clean, 1 contaminated, 2 could not check (which is not a pass).
 from __future__ import annotations
 
 import argparse
+import socket
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+#: The host Phase 3 is pinned to by Amendment 3. `dgxanode01` holds a stale
+#: pre-restore VIS label tree and trains nothing in Phase 3.
+TRAINING_HOST = "LSLP1"
 
 #: Directories walked for split/selection lists. A `.txt` under an `images/` or
 #: `labels/` directory is annotation data, not a list, and is skipped.
@@ -100,16 +105,119 @@ def assert_clean(roots=SPLIT_ROOTS, held_out=HELD_OUT) -> None:
         )
 
 
+def yaml_lists(yaml_path: Path) -> dict[str, Path]:
+    """The train/val/test lists a data yaml points at.
+
+    Parsed with a three-key reader rather than a yaml library: this runs as a training
+    precondition and must not fail because an optional dependency is missing from the
+    GPU interpreter, which is the system Python and not the project venv.
+    """
+    out: dict[str, Path] = {}
+    for ln in yaml_path.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if ln.startswith("#") or ":" not in ln:
+            continue
+        key, _, val = ln.partition(":")
+        if key.strip() in ("train", "val", "test") and val.strip():
+            p = Path(val.strip())
+            out[key.strip()] = p if p.is_absolute() else (yaml_path.parent / p)
+    return out
+
+
+def assert_clean_yaml(yaml_path: Path, held_out=HELD_OUT) -> None:
+    """Raise unless the lists `yaml_path` trains on are free of the held-out run.
+
+    This -- not the tree-wide survey -- is the training precondition. The survey covers
+    every list on disk, and the originals are deliberately kept so pre-Phase-3 results
+    stay reproducible, so the survey is *expected* to report hits forever. Gating on it
+    would mean a gate that can never pass, which is a gate everyone learns to skip.
+    What actually matters is narrower and checkable: the frames this run will consume.
+    """
+    lists = yaml_lists(yaml_path)
+    if not lists:
+        raise RuntimeError(f"G5 FAILED -- no train/val/test keys found in {yaml_path}")
+    bad = []
+    for split, p in sorted(lists.items()):
+        if not p.is_file():
+            raise RuntimeError(f"G5 FAILED -- {yaml_path.name} {split} list missing: {p}")
+        hits = scan([p], held_out)
+        if hits:
+            bad += [(split, p, n, tot) for _, _, n, tot in hits]
+    if bad:
+        detail = "\n".join(f"    {s}: {n:,} held-out rows of {tot:,} in {p.name}"
+                           for s, p, n, tot in bad)
+        raise RuntimeError(
+            f"G5 FAILED -- {yaml_path.name} trains on held-out frames:\n{detail}\n"
+            "  Run scripts/make_holdout_free_splits.py and point the run at the "
+            "_p04out yaml."
+        )
+
+
+def assert_training_host(expect: str = TRAINING_HOST) -> None:
+    """G1' -- refuse to train anywhere but the host Phase 3 is pinned to.
+
+    Amendment 3 lets Stage 2 proceed while the two machines still disagree on labels,
+    on the grounds that a disagreement can only contaminate artifacts if artifacts are
+    produced on both sides of it. That argument holds exactly as long as one machine
+    produces all of them, so the pin is load-bearing and is checked rather than trusted.
+
+    `dgxanode01` holds a stale pre-restore VIS tree (`287b11c50b5a`). A Phase 3 run
+    started there would train on different labels than every other arm and nothing
+    downstream would notice -- which is the failure mode G1 was written to prevent.
+    """
+    host = socket.gethostname()
+    if host.lower() != expect.lower():
+        raise RuntimeError(
+            f"G1' FAILED -- Phase 3 is pinned to {expect!r}, this host is {host!r}.\n"
+            "  Amendment 3 of docs/prereg-phase3-retrain-2026-09-10.md pins training to\n"
+            "  one machine because the label trees still differ. If this host is meant to\n"
+            "  train, reconcile its labels and amend the pre-registration first."
+        )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", action="append", default=None,
                     help=f"run to hold out (repeatable); default {HELD_OUT}")
+    ap.add_argument("--host", default=None, metavar="NAME",
+                    help=f"also assert the training host (G1'); default {TRAINING_HOST}")
+    ap.add_argument("--check-host", action="store_true",
+                    help=f"assert the training host is {TRAINING_HOST} (G1')")
+    ap.add_argument("--yaml", default=None, metavar="PATH",
+                    help="gate on the lists this data yaml trains on (the training "
+                         "precondition); without it, survey every list on disk")
     ap.add_argument("--quiet", action="store_true",
                     help="print only the verdict line")
     args = ap.parse_args()
 
+    if args.check_host or args.host:
+        try:
+            assert_training_host(args.host or TRAINING_HOST)
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        if not args.quiet:
+            print(f"[G1'] host {socket.gethostname()} -- pinned training host, ok")
+
     held_out = tuple(args.run) if args.run else HELD_OUT
+
+    if args.yaml:
+        yp = Path(args.yaml)
+        try:
+            assert_clean_yaml(yp, held_out)
+        except RuntimeError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        lists = yaml_lists(yp)
+        if not args.quiet:
+            for split, p in sorted(lists.items()):
+                n = sum(1 for ln in p.read_text(encoding="utf-8").splitlines()
+                        if ln.strip())
+                print(f"[G5] {split:<6} {n:>8,} frames  {p.name}")
+        print(f"[G5] PASS: {yp.name} trains on no {', '.join(held_out)} frame.")
+        return 0
+
     paths = split_lists()
     if not paths:
         print("G5 INDETERMINATE: no split lists found -- checked nothing, "
