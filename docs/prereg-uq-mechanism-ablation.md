@@ -161,3 +161,35 @@ Caches: `runs/cache_m/gauss_{vis,ir}_paired_*.pkl`, unchanged. Context:
 `preset="crossmodal"`, `cache_dir="runs/cache_m"`. Every arm records the full
 `eval.identity.system_identity()` block including the permutation seed, and the
 report is written to a NEW filename per project rule.
+
+---
+
+## Amendment 1 — block length, and a floor that was understated
+
+**Written 2026-09-10, still before any arm is run.** Declared as an amendment rather
+than edited into §5 above, per the project rule that a pre-registration is never
+changed in place.
+
+**Two things §5 left wrong or open.**
+
+**(a) The block length was unspecified.** Pinned now at **L = 20**. R-A3 measured the
+sensitivity curve (`runs/eval/interval_block_sensitivity_v3.md`): `se/se(L=1)` is
+1.95× at L = 20, and the valid maximum is shortest-run/5 = 23, because `pohang03`
+holds 117 frames and longer blocks collapse the variance. L = 20 is therefore the
+largest defensible block and the one R-A3's headline uses. The curve is still rising
+there, so 1.95× is a lower bound on the inflation, not an estimate of it.
+
+**(b) The absolute floor in §5 was itself understated, and using it unchanged would
+have made this test too easy to pass.** The 0.0014–0.0031 paired floor
+(`runs/eval/metric_noise_floor.md`) was computed with the **IID** bootstrap. R-A3's
+finding is that IID intervals on this data are ~1.95× too narrow, and that applies to
+the floor as much as to any margin defended against it.
+
+The adopted absolute criterion therefore becomes **≥ 0.0060** (0.0031 × 1.95, rounded
+up), not 0.0031. Counts are reported at **four** floors — 0.0014, 0.0031, 0.0060,
+0.0100 — with 0.0060 the one the verdict is taken on. Criterion 2 (the block-bootstrap
+CI excluding zero) is unchanged; it already carries the dependence correction, which
+is precisely why the absolute half had to be corrected to match.
+
+This makes the test **harder**, and it is being written down before any number exists
+for exactly that reason.
