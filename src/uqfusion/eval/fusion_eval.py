@@ -17,6 +17,7 @@ from dataclasses import replace
 
 import numpy as np
 
+from uqfusion.eval.identity import assert_paired
 from uqfusion.eval.matching import load_gt, map50_95
 from uqfusion.uq.fusion import apply_homography, fuse_detections
 from uqfusion.uq.reliability import ReliabilityConstants, compute_reliability, fusion_weights, smooth_reliability
@@ -182,7 +183,14 @@ def evaluate_systems(
     is the fixed-weight control and must stay untouched, or it stops being a
     control.
     """
-    assert len(vis_records) == len(ir_records), "paired caches must be index-aligned"
+    # R-E1 slice 2. This was `assert len(vis) == len(ir)` -- equal LENGTHS, which is
+    # not the same claim as equal FRAMES. Reproduced on the real caches before the fix:
+    # a fully reversed IR cache passed that assert and moved gated fusion by -0.025630;
+    # a one-frame shift moved it by -0.000968, BELOW the 0.0014-0.0031 paired noise
+    # floor, so no statistical check could ever have caught it. `assert_paired` compares
+    # ordered `run/ordinal` pair ids, which are the same on both modalities even though
+    # the filenames are not (`pohang00_L_006767` vs `pohang00_006767`).
+    pairing = assert_paired(vis_records, ir_records, where="evaluate_systems")
     scorer_ir = scorer if scorer_ir is None else scorer_ir
     constants_ir = constants if constants_ir is None else constants_ir
     # `gts` overrides the default VIS-frame labels — used by the union-label
@@ -296,6 +304,10 @@ def evaluate_systems(
         "fused_gated": fused_gated,
         "ir_in_vis": ir_in_vis,   # IR boxes mapped to the VIS canvas, for per-run breakdowns
         "gts": gts,
+        # What the pairing check actually saw. Carried so a caller can tell a real pass
+        # from a vacuous one: `n_unidentifiable` counts frames whose ordinals could not
+        # be parsed, and a run where that number is large was never checked at all.
+        "pairing": pairing,
     }
     if gate is not None:
         out["learned_gate_fusion"] = map50_95(fused_learned, gts)
