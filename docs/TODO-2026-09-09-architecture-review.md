@@ -756,13 +756,23 @@ interpretable sensor-selection baseline **including its failure cases**.
 
 **Deliberately not done:** the comparison table's cells for R24/R25 calibration protocol, registration assumptions and compute are left blank and labelled “not established here”. The external review verified that those works exist and what their headline mechanism is; it did not audit those axes, and neither did I. Filling them from memory is the exact failure this backlog exists to correct — they must be read from the papers before a manuscript uses the table. R-F2's bibliography corrections remain open and separate.
 
-### R-F2 — bibliography corrections · P2 · S
+### R-F2 — bibliography corrections · P2 · S · **CLOSED 2026-09-10**
 D-FINE is ICLR 2025, not arXiv-only. RT-DETR is CVPR 2024. Pohang (2023 sensor dataset) and PoLaRIS
 (2024 preprint, ICRA 2025) are **distinct releases** — update the undated tracker. MassMIND's seven
 segmentation categories are not our ship/buoy taxonomy and need a documented instance/class mapping.
 MIT Marine Perception is visible 12 fps / IR 30 fps, CC BY-NC-SA 4.0 — different rates require
 explicit pairing, and the source does not verify our claimed manual annotation subset. SMD has
 separate visible/IR material, not synchronized calibrated pairs.
+
+**Closed 2026-09-10.** Report: [`bibliography-2026-09-10.md`](bibliography-2026-09-10.md). Local counts made reproducible by `scripts/verify_dataset_claims.py` → `docs/eval/dataset_claims_2026-09-10.json`.
+
+Of the six items: **RT-DETR was already correct** (R17 read CVPR 2024 — recorded as already-right rather than silently “fixed”); **D-FINE** R18 arXiv → **ICLR 2025**; **R20 PoLaRIS** dated (2024 preprint, ICRA 2025, sparolab code) and split from R19 as a distinct release — R20 deliberately names **no authors**, because I do not have them from a source I read; **MassMIND** and **SMD** roles now state the prerequisites (7 *segmentation* categories need a documented instance/class mapping; SMD ships separate EO/IR material, not synchronized pairs).
+
+**The review under-scoped item 5.** It could only say the source does not verify our claimed MIT annotation subset. Measured here: **no `data/` directory exists**, `datasets.mit_marine.vis_yaml`/`.ir_yaml` are both `null`, and no `.py`/`.yaml`/`.json` references the dataset. So §5.1's “We have manually annotated a subset of images from this dataset ourselves” was **false**, and R21's “Primary” was false with it. Both retired; the claim is quoted inline as superseded. This is a bigger defect than any venue year and was filed as a citation footnote.
+
+**Two defects the review did not raise**, found while checking: (a) §5.1 called both datasets “co-registered” eight lines above its own “No spatial registration” bullet — measurement backs the second (3–6 px median, `runs/eval/x_registration_drift.md`); (b) two local counts do not reproduce — “~1.22M boxes” is really **1,183,736**, and pohang03's “~13k VIS” is really **27,085**. Both predate the 2026-09-02 night-box restore. Replaced with dated measurements naming the script.
+
+**Not done:** I did not re-open the primary sources for the venue/fps/licence facts — they are attributed to the external review's checks, which link them. MassMIND's instance/class mapping is named as a prerequisite, not written.
 
 ### R-F3 — historical ranking hygiene (F15) · P2 · M
 66 pilot rows merged with 27 main rows despite an unrecoverable different pilot split; mixed batch

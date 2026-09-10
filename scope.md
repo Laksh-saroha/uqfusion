@@ -58,29 +58,30 @@ This project sits in that gap: a controlled maritime study of whether single-pas
 
 ## 5. Datasets
 
-### 5.1 Primary Datasets (Paired VIS + IR)
+### 5.1 Datasets (Paired VIS + IR) — one in use, one planned
 
-These are the two primary datasets used for training and evaluating the uncertainty-gated fusion system. Both provide co-registered visible and infrared imagery with detection-level annotations.
+**Pohang Canal + PoLaRIS is the only dataset this project has used.** Everything trained, benchmarked or evaluated to date is Pohang-only; MIT Marine Perception is listed here as the planned Phase 2+ addition (decision D10, 2026-07-07) and is **not onboarded** — see the status note under its row. Neither dataset is spatially co-registered: Pohang VIS–IR pairing is by nearest timestamp, and the residual is measured, not assumed — **3–6 px median** (`runs/eval/x_registration_drift.md`), with within-run horizontal swings approaching 10 px.
 
 | Role | Dataset | Description | Key Stats |
 | --- | --- | --- | --- |
-| **Paired VIS+LWIR fusion testbed** | **Pohang Canal Dataset + PoLaRIS annotations** | Multimodal maritime dataset on a 7.5 km route in the Pohang canal / inner-outer port / near-coastal region (Chung et al., IJRR 2023, KAIST MORIN lab). Stereo visible (2048×1080, 10 Hz) and thermal infrared (640×512, 16-bit, 10 Hz). PoLaRIS provides YOLO-format bounding-box annotations (2 classes: ship, buoy). 5 runs (pohang00–04), with pohang01 being a night run. License: CC BY-NC 4.0. | ~158k images, ~1.22M boxes; ~28k paired VIS↔IR frames with labels in both modalities; VIS: 127k images / IR: 31k images |
-| **Multi-sensor maritime perception** | **MIT Sea Grant AUV Lab Marine Perception Dataset** | Multi-sensor marine perception dataset collected on R/V Philos on the Charles River, Cambridge, MA (MIT Sea Grant). Contains visible video (left/center/right cameras, 12 fps), infrared (left/right, 30 fps), lidar, and radar. Multiple scenarios including close approaches, sailboat crossings, and in-place turns. License: CC BY-NC-SA 4.0. We have manually annotated a subset of images from this dataset ourselves. | Multiple runs across different dates and conditions (2020–2021+); paired VIS+IR with varying weather/lighting; scenarios include busy traffic, crossing vessels, and maneuvering |
+| **Paired VIS+LWIR fusion testbed** | **Pohang Canal Dataset + PoLaRIS annotations** | Multimodal maritime dataset on a 7.5 km route in the Pohang canal / inner-outer port / near-coastal region (Chung et al., IJRR 2023, KAIST MORIN lab). Stereo visible (2048×1080, 10 Hz) and thermal infrared (640×512, 16-bit, 10 Hz). PoLaRIS provides YOLO-format bounding-box annotations (2 classes: ship, buoy). 5 runs (pohang00–04), with pohang01 being a night run. License: CC BY-NC 4.0. | **Measured 2026-09-10** (`scripts/verify_dataset_claims.py`): **158,319 images** (VIS 127,309 / IR 31,010), **1,183,736 boxes** (VIS 962,960 / IR 220,776), **28,388 paired VIS↔IR rows** (pohang00 10,786 / 01 11,990 / 02 3,739 / 03 1,873 / 04 0). These are **local filtered counts for this tree**, not the upstream PoLaRIS release; VIS cross-checks against ledger hash `b92739202127`. Supersedes the earlier “~1.22M boxes”, which predates the 2026-09-02 night-box restore |
+| **Multi-sensor maritime perception** | **MIT Sea Grant AUV Lab Marine Perception Dataset** | Multi-sensor marine perception dataset collected on R/V Philos on the Charles River, Cambridge, MA (MIT Sea Grant). Contains visible video (left/center/right cameras, 12 fps), infrared (left/right, 30 fps), lidar, and radar. Multiple scenarios including close approaches, sailboat crossings, and in-place turns. License: CC BY-NC-SA 4.0. The 12 fps / 30 fps rates mean VIS and IR are **not on a common clock** — any use requires an explicit pairing step, as Pohang does. | **NOT ONBOARDED as of 2026-09-10.** Measured: no `data/` directory exists, `datasets.mit_marine.vis_yaml` / `.ir_yaml` are both `null` in `config.yaml`, and no `.py`/`.yaml`/`.json` in the repo references this dataset. Deferred by **decision D10 (2026-07-07)** to Phase 2+. The fps and licence above are from the source; the scenario counts are **not independently verified here**. *Superseded claim, kept for audit:* “We have manually annotated a subset of images from this dataset ourselves” — retired 2026-09-10, no such annotation exists in this repo ([`docs/bibliography-2026-09-10.md`](docs/bibliography-2026-09-10.md) §3) |
 
 **Pohang Canal dataset details:**
 
 - Runs: pohang00 (day, dense both modalities), pohang01 (night), pohang02–04 (varying IR coverage)
 - pohang04 has **zero IR labels** — VIS-only contribution
-- pohang03 IR is sparse (~1,922 vs ~13k VIS)
+- pohang03 IR is sparse: **1,922 IR images vs 27,085 VIS** (measured 2026-09-10; the earlier “~13k VIS” does not reproduce from the current tree)
 - VIS↔IR pairing by nearest-neighbor timestamp within 50 ms (sensors not on same hardware trigger)
 - No spatial registration between VIS and IR — decision-level fusion (WBF on boxes) tolerates this
 - Data tree organized as per-modality YOLO format with separate `data_vis.yaml` and `data_ir.yaml`
 
 **MIT Marine Perception dataset details:**
 
-- Provides paired visible + infrared data suitable for fusion experiments
-- Contains multiple encounter scenarios with varying vessel types and densities
-- Raw sensor data requires annotation processing for YOLO-format detection labels
+- **Not onboarded** (see the table above). The bullets below are the plan, not a description of anything in this repo.
+- Visible and infrared run at different rates (12 fps / 30 fps), so pairing must be built explicitly — there is no common trigger and no `pairs.csv` for this dataset
+- Contains multiple encounter scenarios with varying vessel types and densities *per the source*; not independently verified here
+- Raw sensor data requires annotation processing for YOLO-format detection labels — **this work has not been done**; `scripts/make_pairs.py` and the homography estimator named in `dataset_requirement.md` §7 are still unwritten
 
 ### 5.2 Adverse-Condition Generation
 
@@ -95,8 +96,8 @@ These are publicly available maritime datasets that could supplement the primary
 
 | Dataset | Description | Potential Role |
 | --- | --- | --- |
-| **Singapore Maritime Dataset (SMD)** | Both EO and IR videos, ~240k object labels, 10 classes, bounding boxes. Separate annotations for EO and IR streams (Prasad et al., IEEE T-ITS, 2017). | Multi-modal detection benchmark; supplementary fusion evaluation on a geographically different dataset |
-| **MassMIND** (Massachusetts Maritime INfrared Dataset) | ~2,900 LWIR images; segmentation labels convertible to bounding boxes via OpenCV; 7 classes (Nirgudkar et al., IJRR, 2023). | Dedicated IR-only test bed; includes thermal-crossover regime; independent evaluation of IR branch calibration |
+| **Singapore Maritime Dataset (SMD)** | Both EO and IR videos, ~240k object labels, 10 classes, bounding boxes. Separate annotations for EO and IR streams (Prasad et al., IEEE T-ITS, 2017). | Supplementary **single-modality** evaluation on a geographically different dataset. **Not a fusion testbed as-is:** the source provides separate visible and IR material, not synchronized calibrated pairs — presence of both modalities is not evidence of pairing, and a pairing step would have to be built and justified first |
+| **MassMIND** (Massachusetts Maritime INfrared Dataset) | ~2,900 LWIR images; segmentation labels convertible to bounding boxes via OpenCV; 7 classes (Nirgudkar et al., IJRR, 2023). | Dedicated IR-only test bed; includes thermal-crossover regime; independent evaluation of IR branch calibration. **Prerequisite:** the seven categories are *segmentation* classes and are **not** this project's ship/buoy taxonomy — a documented instance-to-class mapping must be written and justified before any box is derived. No such mapping exists in the repo |
 
 ---
 
@@ -466,15 +467,15 @@ R24 and R25 were surfaced by the external architecture review (F17) and marked *
 | # | Reference | Venue / Year | Role | Status |
 | --- | --- | --- | --- | --- |
 | R17 | Zhao et al. — *DETRs Beat YOLOs on Real-time Object Detection* (RT-DETR) | CVPR 2024 | NMS-free real-time alternative | Optional benchmark row |
-| R18 | Peng et al. — *D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement* | arXiv 2024/2025 | Distribution-native DETR | Optional benchmark row |
+| R18 | Peng et al. — *D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement* (<https://proceedings.iclr.cc/paper_files/paper/2025/hash/6cf58a87e3097e7d1f9be3e8693a93de-Abstract-Conference.html>) | **ICLR 2025** | Distribution-native DETR | Optional benchmark row |
 
 ### 19.7 Datasets
 
 | # | Reference | Venue / Year | Dataset | Role |
 | --- | --- | --- | --- | --- |
-| R19 | Chung et al. — *Pohang Canal Dataset* | IJRR 2023 | Pohang Canal | **Primary** — paired VIS+LWIR fusion testbed |
-| R20 | PoLaRIS annotation release | — | PoLaRIS (annotations for Pohang Canal) | **Primary** — YOLO-format annotations |
-| R21 | MIT Sea Grant AUV Lab — *Marine Perception Dataset* | MIT Sea Grant | MIT Marine Perception | **Primary** — paired VIS+IR multi-sensor |
-| R22 | Prasad et al. — *Video Processing From EO Sensors for Object Detection and Tracking in a Maritime Environment: A Survey* | IEEE T-ITS 2017 | Singapore Maritime Dataset (SMD) | Additional — multi-modal benchmark |
-| R23 | Nirgudkar et al. — *MassMIND: Massachusetts Maritime INfrared Dataset* | IJRR 2023 | MassMIND | Additional — IR test bed |
+| R19 | Chung et al. — *Pohang Canal Dataset* (<https://arxiv.org/abs/2303.05555>) | IJRR 2023 | Pohang Canal — **imagery** | **Primary, and the only dataset used** |
+| R20 | *PoLaRIS* annotation release (authors not recorded here — read the preprint before citing) (<https://arxiv.org/abs/2412.06192>, code <https://github.com/sparolab/PoLaRIS>) | **2024 preprint; ICRA 2025** | PoLaRIS — **labels** for Pohang Canal | **Primary** — YOLO-format annotations. **A separate, later release from R19**, not the same publication |
+| R21 | MIT Sea Grant AUV Lab — *Marine Perception Dataset* (<https://seagrant.mit.edu/auvlab-datasets-marine-perception-2-3/>) | MIT Sea Grant | MIT Marine Perception | **Deferred — NOT onboarded** (D10, 2026-07-07; measured absent 2026-09-10). Was labelled “Primary” in error |
+| R22 | Prasad et al. — *Video Processing From EO Sensors for Object Detection and Tracking in a Maritime Environment: A Survey* | IEEE T-ITS 2017 | Singapore Maritime Dataset (SMD) | Optional — **separate** EO and IR material, **not** synchronized pairs; unused |
+| R23 | Nirgudkar et al. — *MassMIND: Massachusetts Maritime INfrared Dataset* (<https://journals.sagepub.com/doi/10.1177/02783649231153020>) | IJRR 2023 | MassMIND | Optional — IR test bed; 7 **segmentation** categories require a documented instance/class mapping first; unused |
 

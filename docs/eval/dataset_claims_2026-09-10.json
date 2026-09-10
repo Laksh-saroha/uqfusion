@@ -1,0 +1,71 @@
+{
+  "data_root": "A:\\Uncertain\\Pohang_dataset",
+  "per_run": {
+    "pohang00": {
+      "vis_images": 21768,
+      "vis_boxes": 164689,
+      "vis_empty": 35,
+      "ir_images": 10918,
+      "ir_boxes": 82541,
+      "ir_empty": 0
+    },
+    "pohang01": {
+      "vis_images": 24473,
+      "vis_boxes": 134579,
+      "vis_empty": 1230,
+      "ir_images": 11995,
+      "ir_boxes": 85340,
+      "ir_empty": 0
+    },
+    "pohang02": {
+      "vis_images": 27795,
+      "vis_boxes": 275259,
+      "vis_empty": 0,
+      "ir_images": 6175,
+      "ir_boxes": 38460,
+      "ir_empty": 2431
+    },
+    "pohang03": {
+      "vis_images": 27085,
+      "vis_boxes": 231781,
+      "vis_empty": 0,
+      "ir_images": 1922,
+      "ir_boxes": 14435,
+      "ir_empty": 4
+    },
+    "pohang04": {
+      "vis_images": 26188,
+      "vis_boxes": 156652,
+      "vis_empty": 286,
+      "ir_images": 0,
+      "ir_boxes": 0,
+      "ir_empty": 0
+    }
+  },
+  "pairs": {
+    "pohang00": 10786,
+    "pohang01": 11990,
+    "pohang02": 3739,
+    "pohang03": 1873,
+    "pohang04": 0
+  },
+  "totals": {
+    "images": 158319,
+    "boxes": 1183736,
+    "vis_images": 127309,
+    "ir_images": 31010,
+    "vis_boxes": 962960,
+    "ir_boxes": 220776,
+    "pairs": 28388
+  },
+  "claimed": {
+    "images_total": "~158k",
+    "boxes_total": "~1.22M",
+    "pairs_total": "~28k",
+    "vis_images": "127k",
+    "ir_images": "31k",
+    "pohang03_ir_images": "~1,922",
+    "pohang03_vis_images": "~13k",
+    "pohang04_ir_labels": "zero"
+  }
+}
