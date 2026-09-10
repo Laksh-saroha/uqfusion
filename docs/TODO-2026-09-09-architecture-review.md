@@ -505,7 +505,7 @@ boundary. Consistent with `project-ir-night-switch-safety` ("abstain is a flag, 
 
 ## 6. Workstream E — system identity, caches, ops
 
-### R-E1 — experiment manifest and cache identity (F14) · P1 · M
+### R-E1 — experiment manifest and cache identity (F14) · P1 · M · **SLICE 1 DONE 2026-09-10 (`f3364c9`) · SLICE 2 DONE 2026-09-10**
 `cache.py` stores records + caller metadata + frame count + git HEAD; `load_cache:55` validates
 nothing; `fusion_eval.py:185` checks equal **lengths**, not pair identities, so reordered or
 cross-substrate caches are accepted. `grid.py:40`'s `split_fingerprint` hashes frame **names**, so a
@@ -524,6 +524,40 @@ metrics run; label hashes at training start/end and at caching/evaluation agree.
 
 Extends the ledger already built (`scripts/label_hash_ledger.py`, `runs/label_hash_ledger.csv`) from
 labels to the whole recipe.
+
+**Slice 1 (`f3364c9`) — describe.** `eval/identity.py`, `FusionContext.inputs`, and a Provenance
+footer on all 29 `write_md` reports. Audit finding: `load_context` takes 26 parameters and **15
+reached no attribute at all**.
+
+**Slice 2 — refuse.** `docs/cache-identity-2026-09-10.md`. Four defects reproduced before any code
+moved; two closed.
+
+* **D1 closed.** `load_cache` validated nothing — a payload claiming `n_frames` 99999 while holding
+  10 records loaded fine, and so did records stripped of every prediction key. It now checks payload
+  shape, the `n_frames` claim, per-record `image_path`, per-detection array consistency, and any
+  stamped `frames_sha256` / `labels_sha256`. `build_cache` stamps all three.
+* **D2 closed.** `evaluate_systems` asserted equal LENGTHS. Measured: a reversed IR cache moves gated
+  fusion **-0.025630**, shift-100 **-0.027837**, and a ONE-FRAME shift **-0.000968** — *below* the
+  0.0014-0.0031 paired noise floor, so no statistical check could ever have found it. Now refused in
+  `evaluate_systems`, `iralign.aligned_homographies` and `LearnedGate.fit`.
+* **The pairing key is the dataset's timestamp table, not the frame number.** The first version of
+  the check paired on `run/ordinal` equality and refused the *legitimate* caches on 1,396 of 2,232
+  frames — it had reproduced the fact `build_pairs.py` documents (16,544 of 28,388 rows carry
+  different indices) and mistaken it for a defect. Measured IR-VIS offsets: `pohang00`/`pohang01`
+  {0,1}, `pohang02` {0..4}, `pohang03` **-155..+1**. Not a fixed offset anywhere.
+* **Disk-wide audit:** of 58 vis/ir cache pairs, **42 aligned, 0 mismatched**; the 16 that report
+  mismatches are the `gauss_*_train_clean.pkl` Mahalanobis fit caches, which `load_context` hands to
+  `fit_scorer` separately and nothing pairs.
+* **Nothing moves:** all 8 preset x condition cells reproduce (crossmodal clean 0.271103), all 258
+  caches on disk still load, and `scripts/smoke_cache_identity.py` (19 cases) is always on.
+
+**Open after slice 2:** D3 (`split_fingerprint` is label-blind — reproduced: deleting a box and
+changing a class id both leave `c3354ed2f2b1` unchanged) and D4 (the completed-run lookup omits
+`epochs`/`imgsz`/`weights`/`overrides`) both need a `RESULT_FIELDS` column, and `_append_row`
+deliberately refuses an older schema — so that change forces a fresh CSV and belongs in its own
+slice. Also still open: nothing validated on **resume**, no checkpoint content hash, and no
+comparison of a cache's `labels_sha256` against the hash recorded at TRAINING time, which is R-E1's
+actual acceptance criterion.
 
 ### R-E2 — queue ownership and durable state (F18) · P2 · M
 `cmd_run:783` writes its PID without acquiring exclusive ownership, so two runners can start on one
