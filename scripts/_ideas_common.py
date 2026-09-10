@@ -217,6 +217,9 @@ def write_md(path, title: str, sections: list[str], identity=None,
     carries source and metric identity. `provenance=False` opts out -- there is no
     current caller that should.
     """
+    if isinstance(sections, str):
+        raise TypeError(
+            "write_md(sections=...) takes a LIST of section strings, not one string. Passing a string iterates its CHARACTERS and joins them with blank lines, which produces a file that looks like a catastrophic failure but is really a silent type error -- it happened once (R-D1, 2026-09-10) and cost an 18-minute re-run. Wrap it: [text].")
     p = ROOT / path if not Path(path).is_absolute() else Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     if p.exists():
