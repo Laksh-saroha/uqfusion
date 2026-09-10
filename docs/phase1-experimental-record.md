@@ -443,6 +443,8 @@ Per-seed detail for the leader:
 
 ### Pooled across both campaigns — the leading group, and how it changed
 
+> **EXPLORATORY (labelled 2026-09-10, R-F3/F15).** This block mixes an unrecoverable split (§15), a wiped machine, heterogeneous batch sizes (§5) and 83 of 93 rows without a recorded commit. It generates hypotheses about architecture; it does not test them. Measured by `scripts/audit_phase1_manifests.py`: identity **passes** (no variant appears in both campaigns, no `(variant, seed)` repeats), one metric scale **passes**, but manifest resolution **fails** — `data_yaml` reads `runs/derived/data_vis_stride2.yaml` **identically on all 93 rows** even though the 2026-07-14 resplit regenerated that file, so the string matches while the split does not. Also note `main` covers **9 of 31 variants**; the ladder is complete only by pooling. See [`ranking-hygiene-2026-09-10.md`](ranking-hygiene-2026-09-10.md).
+
 ```
 yolo26x   main   n=3   0.3049 ± 0.0020
 yolov9e   pilot  n=3   0.3033 ± 0.0066
@@ -490,6 +492,21 @@ metric source and say which.
 `26m` seed 0 is excluded from that comparison: it *trained* under 8.4.7, so its curve is on the old
 scale while its Table 1 metric was re-scored under 8.4.90. Its delta of −0.0387 is independent
 confirmation of §3.
+
+### Why `yolo26m` and not the leader (accuracy/latency, added 2026-09-10)
+
+D25 selected `yolo26m` on an FPS tie-break (recorded in [`handoff-2026-08-17.md`](handoff-2026-08-17.md)); the numbers belong here too, where the ranking lives. Means across three seeds, `phase1_benchmark/fps.csv`, batch-1, pinned clocks:
+
+| variant | mAP50-95 | fp32 FPS | fp32 ms/img | two-stream FPS |
+|---|---:|---:|---:|---:|
+| `yolo26x` | 0.3049 | 30.7 | 32.6 | 15.3 |
+| **`yolo26m`** | **0.3016** | **57.0** | **17.5** | **28.5** |
+| `yolo12x` | 0.3007 | 23.8 | 42.1 | 11.9 |
+| `yolo26l` | 0.2998 | 44.9 | 22.3 | 22.4 |
+| `yolo26s` | 0.2813 | 59.9 | 16.7 | 30.0 |
+| `yolo26n` | 0.2540 | 58.6 | 17.1 | 29.3 |
+
+`26m` costs **−0.0033 mAP** against `26x` and buys **1.86× the throughput** (15.1 ms/img saved). The **two-stream** column is the one this project actually runs — fusion executes a detector per modality — and it was absent from the original rationale: `26x` lands at ~15 FPS on paired input, `26m` at ~28. Since the top eight variants are inseparable, spending 1.86× the compute to move within the noise is not defensible. `26s` is marginally faster but gives up 0.020, outside the group.
 
 ### How to read the ranking
 

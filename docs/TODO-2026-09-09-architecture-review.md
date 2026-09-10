@@ -774,7 +774,7 @@ Of the six items: **RT-DETR was already correct** (R17 read CVPR 2024 — record
 
 **Not done:** I did not re-open the primary sources for the venue/fps/licence facts — they are attributed to the external review's checks, which link them. MassMIND's instance/class mapping is named as a prerequisite, not written.
 
-### R-F3 — historical ranking hygiene (F15) · P2 · M
+### R-F3 — historical ranking hygiene (F15) · P2 · M · **DOCS CLOSED 2026-09-10; confirmatory run OPEN**
 66 pilot rows merged with 27 main rows despite an unrecoverable different pilot split; mixed batch
 sizes; the 8.4.7-vs-8.4.90 AP offset; interrupted runs; a resolved directory collision. Pooling
 cannot make those conditions identical.
@@ -788,6 +788,16 @@ delta and estimate an interval.
 
 *Acceptance:* each table row resolves to one manifest and a compatible metric; do not describe the
 latest 93-cell campaign as complete based on an older campaign's count.
+
+**Closed 2026-09-10 on the documentation half; the confirmatory run is split out.** Report: [`ranking-hygiene-2026-09-10.md`](ranking-hygiene-2026-09-10.md). Two re-runnable audits: `scripts/audit_phase1_manifests.py` and `scripts/ir_equivalence_interval.py`.
+
+**Acceptance check, measured over all 93 rows:** identity **PASS** (no repeated `(variant, seed)`, **no variant in both campaigns** — retiring the pilot's `yolo12s` rows worked); one metric **scale** **PASS**; manifest **FAIL**; reproducible-without-pilot-data **FAIL**. The sharp finding is **F14 again**: `data_yaml` reads `runs/derived/data_vis_stride2.yaml` **identically on all 93 rows** although the 2026-07-14 resplit regenerated that file — the CSV asserts a shared manifest for two campaigns that provably had different splits, in the one column a reader would trust. Also `git_commit` unrecoverable on **83/93**, `trained_on=server_wiped` on all 66 pilot rows, no fingerprint column, and `main` covers only **9 of 31 variants** — the ladder is complete only by pooling. §12 of the record now carries an **EXPLORATORY** label.
+
+**The substantive result is the statistical correction.** The IR closure's reason 2 inferred from F(12, 26) = 1.037, p = 0.45 that thirteen architectures are “statistically indistinguishable”. Re-analysed: the design's **minimum detectable spread at 80% power is 0.02067**, and the observed spread is **0.58×** that — it could only have found an effect ~1.7× larger than anything present. Tukey HSD 95% simultaneous CI on the largest gap is **[−0.00314, +0.02700]**, whose upper bound **exceeds the entire observed range of variant means**; equivalence is supported at **no** delta tested (0.0014 … 0.0200). Uncorrected, that pair's interval **excludes zero** — the data is an underpowered design that saw a suggestive gap, not a featureless null. **The stop decision stands** on reasons 1 and 3 (architecture frozen six days before the queue existed; wrong class set and the deployed `yolo26m-p2feat` is not in the ladder). Amendment appended to that document rather than edited in.
+
+**Already existed:** the accuracy/latency tradeoff for `yolo26m` is in `handoff-2026-08-17.md` (D25, FPS tie-break). Surfaced into the record with a **two-stream** column that was missing everywhere: fusion runs a detector per modality, so `26x` is ~15 FPS on paired input vs `26m`'s ~28, for −0.0033 mAP.
+
+**Deliberately NOT done — remains open:** the confirmatory comparison on the deployment recipe. It is GPU work and it needs its **own pre-registration with the tolerable delta fixed in advance**; writing one after seeing the intervals above would be the exact practice this backlog exists to correct. No historical row is repaired — the pilot machine was wiped and the yaml was overwritten; the audit records the gap, it cannot close it.
 
 ### R-F4 — stop promoting local nulls to universal limits (F16) · P2 · S
 Rename these rows to what they tested:
