@@ -505,7 +505,7 @@ boundary. Consistent with `project-ir-night-switch-safety` ("abstain is a flag, 
 
 ## 6. Workstream E — system identity, caches, ops
 
-### R-E1 — experiment manifest and cache identity (F14) · P1 · M · **SLICE 1 DONE 2026-09-10 (`f3364c9`) · SLICE 2 DONE 2026-09-10**
+### R-E1 — experiment manifest and cache identity (F14) · P1 · M · **SLICES 1-3 DONE 2026-09-10 (`f3364c9`, `353a521`, `6cce035`)**
 `cache.py` stores records + caller metadata + frame count + git HEAD; `load_cache:55` validates
 nothing; `fusion_eval.py:185` checks equal **lengths**, not pair identities, so reordered or
 cross-substrate caches are accepted. `grid.py:40`'s `split_fingerprint` hashes frame **names**, so a
@@ -558,6 +558,41 @@ deliberately refuses an older schema — so that change forces a fresh CSV and b
 slice. Also still open: nothing validated on **resume**, no checkpoint content hash, and no
 comparison of a cache's `labels_sha256` against the hash recorded at TRAINING time, which is R-E1's
 actual acceptance criterion.
+
+**Slice 3 (`6cce035`) — labels and recipe.** `docs/recipe-identity-2026-09-10.md`. The two defects
+slice 2 deferred, both closed, plus a third found on the way.
+
+* **D3 closed.** `split_fingerprint` hashes frame NAMES. Reproduced: deleting a box, changing a class
+  id and removing a label file all leave it at `0358ccc7de88` while the content hash moves each time.
+  New column `label_fingerprint_trainval` — the ledger's algorithm, scope in the NAME because the
+  same algorithm over train alone (`8ed69b5974ed`) means nothing against it. Measured now: vis
+  `ae7fa57efb2b`, ir `5fd58f37c799`.
+* **D4 closed.** Reproduced at the lookup: one row for (yolo26m, 0) at `epochs_cfg` 25 satisfies a
+  re-request at 25, **50 and 100**. `recipe_identity` now hashes epochs/imgsz/batch/mosaic/
+  close_mosaic/optimizer/patience/amp/deterministic/train_overrides plus the CONTENT hash of the
+  starting checkpoint (`best.pt` is overwritten by every run that produces it, so a path is not an
+  identity). `workers`/`device` excluded on purpose — host properties; including them would break
+  cross-machine resume, the one thing this lookup exists for.
+* **`plan_grid()`** keeps two outcomes distinct in kind: a different split/label/classes refuses the
+  whole CSV; a different RECIPE on a (variant, seed) this grid will run is a **conflict, refused
+  rather than re-run**, because run dir and CSV row are both keyed by `name`.
+* **Third defect, found while fixing those two:** THREE implementations of the `images -> labels`
+  swap (every component / rightmost SUBSTRING / last separator group) and TWO byte-identical copies
+  of the content hash. The substring one rewrites the wrong component when a directory name ends in
+  "images". Measured before touching anything: **0 disagreements over all 133,140 real train+val
+  paths** — latent, collapsed while still latent into `src/uqfusion/data/labels.py`. The shared hash
+  reproduces the ledger's `8ed69b5974ed` bit-for-bit.
+* **`recover_row.py` reads the recipe from the run's own `args.yaml`** and refuses if absent —
+  reconstructing it from today's config would stamp a recipe that never ran.
+* Cost: ~15-24 s warm / **383 s cold** for the 107,627 VIS label files, once per grid launch. Old
+  CSVs become read-only (intended; `_append_row` already refused an older schema). `run_queue.py`,
+  which drives the server work, does not use `run_grid`.
+
+**Open after slice 3:** nothing validated on **resume**; no comparison of a cache's `labels_sha256`
+against the hash recorded at TRAINING time (R-E1's actual acceptance criterion — the pieces now exist
+on both sides but nothing joins them); `verify_dataset_state.py` has its own `split_fingerprint` with
+a different signature and computation (the F14 pattern again, noticed and not fixed); and
+`train_overrides` fingerprints by `repr` for non-JSON values, which no current caller passes.
 
 ### R-E2 — queue ownership and durable state (F18) · P2 · M
 `cmd_run:783` writes its PID without acquiring exclusive ownership, so two runners can start on one
