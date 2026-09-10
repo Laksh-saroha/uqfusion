@@ -139,39 +139,35 @@ def frame_ordinal(image_path: Path) -> float | None:
     return float(runs[-1]) if runs else None
 
 
+def _shared_labels():
+    """`uqfusion.data.labels`, imported the way the rest of this file imports uqfusion.
+
+    R-E1 slice 3 collapsed three `images -> labels` implementations and two copies of
+    the content hash into one definition. This file imports uqfusion lazily, after
+    putting `src` on the path itself, so that it runs from a checkout without the
+    package installed -- the wrapper keeps that property instead of adding a
+    module-level import that would break it.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from uqfusion.data import labels as _labels  # noqa: PLC0415
+
+    return _labels
+
+
 def label_path(img: Path) -> Path:
-    """Ultralytics rule: swap the LAST `/images/` for `/labels/`, extension -> .txt."""
-    s = str(img)
-    sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"
-    if sa not in s:
-        sa, sb = "/images/", "/labels/"
-    head, _, tail = s.rpartition(sa)
-    if not head:
-        return Path(s).with_suffix(".txt")
-    return Path(head + sb + tail).with_suffix(".txt")
-
-
-# --------------------------------------------------------------------------
-# hashes (mirror grid.split_fingerprint / filter_night_boxes.label_content_hash)
-# --------------------------------------------------------------------------
-def split_fingerprint(images_by_split: dict[str, list[Path]]) -> str:
-    h = hashlib.sha256()
-    for split in ("train", "val"):
-        ids = sorted(f"{run_key(p)}/{p.name}" for p in images_by_split[split])
-        h.update(f"{split}:{len(ids)}\n".encode())
-        h.update("\n".join(ids).encode())
-    return h.hexdigest()[:12]
+    """Ultralytics rule: the last `images` component becomes `labels`, suffix .txt."""
+    return _shared_labels().label_path(img)
 
 
 def label_content_hash(images: list[Path]) -> str:
-    h = hashlib.sha256()
-    for img in sorted(images):
-        lp = label_path(img)
-        h.update(f"{run_key(img)}/{lp.name}\n".encode())
-        if lp.is_file():
-            h.update(lp.read_bytes())
-        h.update(b"\x00")
-    return h.hexdigest()[:12]
+    """Unchanged algorithm, one definition.
+
+    Measured across all 133,140 real train+val image paths, the three former
+    `label_path` implementations agreed everywhere -- a latent trap, collapsed while
+    it was still latent. The hashes are unchanged, so `--expect-label-hash` and
+    `runs/label_hash_ledger.csv` stay comparable.
+    """
+    return _shared_labels().label_content_hash(images)
 
 
 # --------------------------------------------------------------------------

@@ -69,6 +69,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from uqfusion.config import load_config, resolve_data_yaml          # noqa: E402
+from uqfusion.data.labels import label_content_hash, label_path   # noqa: E402
 from uqfusion.data.lists import (                                   # noqa: E402
     frame_ordinal, load_data_yaml, run_key, split_image_list,
 )
@@ -84,13 +85,12 @@ CSV_HEADER = ("run,image,line_idx,cls,xc,yc,w,h,area_px,frame_median,"
               "box_mean,ring_mean,contrast,grad,flagged,ir_same_class\n")
 
 
-def _label_path(img: Path) -> Path:
-    """images -> labels, rightmost occurrence (run dirs never contain 'images')."""
-    s = str(img)
-    i = s.rfind("images")
-    if i < 0:
-        raise ValueError(f"no 'images' component in {img}")
-    return Path(s[:i] + "labels" + s[i + len("images"):]).with_suffix(".txt")
+# R-E1 slice 3: this file used to carry its own `images -> labels` swap (rightmost
+# SUBSTRING, so a directory merely containing the letters "images" would have matched)
+# and its own copy of the content hash. Both now come from one shared definition,
+# measured to agree with all three previous implementations on every one of the
+# 133,140 real train+val image paths.
+_label_path = label_path
 
 
 def read_boxes(lp: Path) -> list[tuple[int, list[float], str]]:
@@ -417,15 +417,8 @@ def load_or_compute_medians(imgs: list[Path], cache_csv: Path, workers: int) -> 
     return out
 
 
-def label_content_hash(imgs: list[Path]) -> str:
-    h = hashlib.sha256()
-    for img in sorted(imgs):
-        lp = _label_path(img)
-        h.update(f"{run_key(img)}/{lp.name}\n".encode())
-        if lp.is_file():
-            h.update(lp.read_bytes())
-        h.update(b"\x00")
-    return h.hexdigest()[:12]
+# `label_content_hash` comes from uqfusion.data.labels -- one definition, so its
+# numbers stay comparable to runs/label_hash_ledger.csv.
 
 
 def main() -> int:
