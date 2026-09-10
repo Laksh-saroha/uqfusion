@@ -10,7 +10,13 @@
 
 ## 1. One-Paragraph Summary
 
-This project develops a maritime object detector that not only localizes vessels but also estimates, in a single forward pass, *how much its own prediction can be trusted at that moment*. This self-assessed reliability decides, frame by frame, how much to rely on the visible (RGB) camera versus the thermal (infrared) camera — automatically down-weighting whichever sensor is degraded by fog, glare, darkness, or thermal crossover. The core contribution is a **calibrated, single-pass uncertainty signal** driving **adaptive visible–infrared sensor fusion**, with a rigorous demonstration that the uncertainty is genuinely predictive of error. Unlike most prior maritime fusion work, which blends sensors on a fixed schedule, this system blends them based on live, per-frame uncertainty.
+This project develops a maritime object detector that not only localizes vessels but also estimates, in a single forward pass, *how much its own prediction can be trusted at that moment*. This self-assessed reliability is *intended* to decide, frame by frame, how much to rely on the visible (RGB) camera versus the thermal (infrared) camera — automatically down-weighting whichever sensor is degraded by fog, glare, darkness, or thermal crossover. The core contribution is a **controlled maritime uncertainty study**: a calibrated, single-pass uncertainty signal, evaluated on its own terms, together with a pre-registered test of whether it improves visible–infrared sensor fusion — reported whether the answer is yes or no.
+
+Prior work has already applied uncertainty to visible–infrared fusion (R24 UA-CMDet 2022; R25 DICTA 2024) and to single-pass localization variance (R1 Gaussian YOLOv3 2019). The contribution here is not the idea but the measurement: declared metric contracts, a measured noise floor, dependence-aware intervals, and negative results published rather than retried.
+
+**Status as measured, 2026-09-10 (R-D1, [`docs/uq-mechanism-2026-09-10.md`](docs/uq-mechanism-2026-09-10.md)):** under the shipped `crossmodal` preset the fusion weight is a **single constant 0.9930** across all 2,232 paired frames × 4 conditions, and supplying real predicted uncertainty does not beat the same uncertainties attached to the wrong boxes at any floor tested. The gain that is real comes from **image-statistic sensor selection**, not from uncertainty-weighted blending. The paragraph above states the aim; this note states what has been measured, and the two are not yet the same thing. Positioning and the full comparison: [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md).
+
+> *Superseded wording (kept for audit):* “Unlike most prior maritime fusion work, which blends sensors on a fixed schedule, this system blends them based on live, per-frame uncertainty.”
 
 ---
 
@@ -20,10 +26,12 @@ Electro-Optical (EO) sensors (visible + infrared) supplement marine radar but ea
 
 Two gaps from the literature:
 
-1. **Most maritime detectors output no uncertainty at all** (SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea, feature-fusion nets). The one exception, Gaussian-YOLOv3, shows the value of localization-variance modeling but is on a dated backbone and not applied to adaptive multi-modal sensing.
-2. **Existing visible–infrared fusion is static** — fixed rules or learned-but-static attention, never conditioned on a live per-frame reliability estimate.
+1. **Most maritime detectors output no uncertainty at all** (SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea, feature-fusion nets). Single-pass localization variance is established outside maritime work (R1 Gaussian YOLOv3, autonomous driving), and uncertainty-aware cross-modal detection is established outside maritime work too (R24, R25) — so neither the head nor the idea of conditioning fusion on uncertainty is claimed as new here. What is thin is the maritime evidence: whether these uncertainties are *calibrated* on paired VIS+LWIR maritime video, and whether they buy anything once measured against a stated noise floor.
+2. **Calibrated evaluation of uncertainty-conditioned fusion is scarce.** Uncertainty-conditioned visible–infrared fusion exists (R24 UA-CMDet 2022 pairs uncertainty-aware cross-modal learning with illumination-aware NMS *at inference*; R25 DICTA 2024), and learned attention is not “static” merely because its parameters are frozen — attention values depend on the input. The open question is not whether fusion can be conditioned on uncertainty but whether the uncertainty doing the conditioning is itself trustworthy, measured against a stated noise floor with dependence-aware intervals, and reported when the answer is no.
 
-This project sits in that gap: single-pass UQ used to drive *dynamic* visible–infrared fusion, with calibration treated as a first-class result.
+This project sits in that gap: a controlled maritime study of whether single-pass UQ is calibrated and whether it improves visible–infrared fusion, with calibration treated as a first-class result and null results treated as results.
+
+> *Superseded wording (kept for audit):* “Existing visible–infrared fusion is static — fixed rules or learned-but-static attention, never conditioned on a live per-frame reliability estimate.” Retired 2026-09-10 as factually wrong; see [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md).
 
 ---
 
@@ -35,7 +43,8 @@ This project sits in that gap: single-pass UQ used to drive *dynamic* visible–
 - **O2 — Aleatoric UQ (core contribution).** Single-pass probabilistic head predicting a predictive variance per box coordinate, trained with NLL → per-detection aleatoric uncertainty at real-time speed.
 - **O3 — Distributional/epistemic UQ.** Low-cost frame-level estimator (feature-space distance to the training distribution) catching total-sensor-degradation that per-detection uncertainty misses.
 - **O4 — Uncertainty-gated fusion.** Per-modality reliability score from O2 + O3, used to adaptively fuse the two streams so the more reliable modality dominates instant-by-instant.
-- **O5 — Validation.** Evaluate *calibration* (does predicted uncertainty track real error?) and show uncertainty-gated fusion beats single-modality and uncertainty-blind fusion under adverse conditions.
+- **O5 — Validation.** Evaluate *calibration* (does predicted uncertainty track real error?) and **test**, under a rule fixed in advance, whether uncertainty-gated fusion beats single-modality and uncertainty-blind fusion under adverse conditions — reporting the outcome either way.
+  - *Half met, half answered NO.* Gated fusion sits at or above max(VIS, IR) on all eight benchmark cells. But against **uncertainty-blind** fusion, R-D1 (2026-09-10) is a pre-registered NULL at every floor: 0 of 4 conditions. The original wording promised a result the project has since contradicted, so it now names the test, not the verdict.
 
 ---
 
@@ -447,6 +456,10 @@ Nothing coded yet. Agreed order:
 | R14 | Solovyev et al. — *Weighted Boxes Fusion* | Image and Vision Computing 2021 | Reliability-weighted decision-level fusion | Core dependency |
 | R15 | Guo et al. — *On Calibration of Modern Neural Networks* (ECE, temperature scaling) | ICML 2017 | Calibration metric + recalibration | Core reference |
 | R16 | Angelopoulos, Bates — *A Gentle Introduction to Conformal Prediction* | 2021 | Optional conformal extension | Optional |
+| R24 | Sun et al. — *UA-CMDet: Drone-based RGB-Infrared Cross-Modality Vehicle Detection via Uncertainty-Aware Learning* (<https://github.com/SunYM2020/UA-CMDet>) | 2022 | **Prior art for uncertainty-conditioned cross-modal fusion**, incl. illumination-aware NMS at inference | Must cite — retires the “fusion is static” claim |
+| R25 | *Uncertainty-Aware Cross-Modality Fusion for Visible-Infrared Object Detection* (<https://doi.org/10.1109/DICTA63115.2024.00029>) | DICTA 2024 | **Prior art for uncertainty-aware VIS–IR fusion** | Must cite — retires the “fusion is static” claim |
+
+R24 and R25 were surfaced by the external architecture review (F17) and marked **externally verified** there; see [`docs/architecture-review-2026-09-09.md`](docs/architecture-review-2026-09-09.md). Their venues and headline mechanisms are recorded from that verification. Their calibration protocols, registration assumptions and compute have **not** been read from the papers — the comparison table in [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md) leaves those cells explicitly blank, and they must be filled before any manuscript uses it.
 
 ### 19.6 Detector Alternatives (NMS-free, real-time)
 

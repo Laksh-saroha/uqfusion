@@ -735,7 +735,7 @@ version.
 
 ## 7. Workstream F — claims, wording, publication
 
-### R-F1 — the broad novelty claim is false (F17) · **P1 for publication** · S
+### R-F1 — the broad novelty claim is false (F17) · **P1 for publication** · S · **CLOSED 2026-09-10**
 The URF progress report says existing visible/IR fusion is static and never conditioned on live
 reliability. [UA-CMDet](https://github.com/SunYM2020/UA-CMDet) (2022) combines uncertainty-aware
 cross-modal learning with illumination-aware NMS **at inference**; see also *Uncertainty-Aware
@@ -749,6 +749,12 @@ compute. The defensible contribution is a controlled maritime uncertainty study 
 interpretable sensor-selection baseline **including its failure cases**.
 
 **This has the only external deadline in the backlog and does not depend on any repair above.**
+
+**Closed 2026-09-10.** Report: [`positioning-2026-09-10.md`](positioning-2026-09-10.md), with the seven-axis comparison table the fix asks for (domain, sensors, uncertainty target, inference-time adaptation, calibration evaluation, registration assumptions, compute). Applied to `scope.md`: §1's “Unlike most prior maritime fusion work…” and §2 gap 2's “Existing visible–infrared fusion is static” are retired, both quoted inline as superseded rather than deleted; §2 gap 1 no longer treats Gaussian YOLOv3 as the sole exception; O5 now names the test rather than promising the verdict; R24 (UA-CMDet) and R25 (DICTA 2024) added to §19.5.
+
+**The review understated this one.** It is scoped as a citation problem, but the *system* description was false too: R-D1 measured `w_vis` as a **single constant 0.9930** across all 2,232 frames × 4 conditions, so “blends them based on live, per-frame uncertainty” did not describe the shipped code. §1 now carries a dated status note separating the aim from the measurement, and the verb in the system sentence is marked as intent.
+
+**Deliberately not done:** the comparison table's cells for R24/R25 calibration protocol, registration assumptions and compute are left blank and labelled “not established here”. The external review verified that those works exist and what their headline mechanism is; it did not audit those axes, and neither did I. Filling them from memory is the exact failure this backlog exists to correct — they must be read from the papers before a manuscript uses the table. R-F2's bibliography corrections remain open and separate.
 
 ### R-F2 — bibliography corrections · P2 · S
 D-FINE is ICLR 2025, not arXiv-only. RT-DETR is CVPR 2024. Pohang (2023 sensor dataset) and PoLaRIS
