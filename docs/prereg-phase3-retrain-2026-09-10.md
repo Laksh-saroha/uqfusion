@@ -717,3 +717,61 @@ The caveats on sigma stand and cut both ways: the VIS estimate rests on 4 degree
 and both come from stride-4 runs on other architectures, so ~19 is an order of magnitude and
 not a target. It is enough to establish that five seeds could not have carried that
 comparison, which is all this decision needs.
+
+---
+
+## Amendment 5 — 2026-09-10, the pohang04 look covers the sigma-head system only
+
+Appended per §11, **while Stage 2's first IR seed is training and before any pohang04 frame
+is labelled.** A scope note, not a change to any rule: it records which arms §7's single
+look can legitimately cover, and why the other two are excluded by a fact rather than a
+choice.
+
+### A5.1 — the measurement
+
+Which training set each UQ arm's checkpoints actually saw, read from their own `args.yaml`:
+
+| arm | modality | `data:` | pohang04 in training? |
+|---|---|---|---|
+| sigma-head | VIS | retrained in Stage 2 on `data_vis_stride2_p04out.yaml` | **no** |
+| sigma-head | IR | retrained in Stage 2 on `data_ir_shiponly_stride2.yaml` | **no** |
+| ensemble n=5 (`ens_vis_nightfull_seed0-4`) | VIS | `runs/derived/data_vis_stride2.yaml` | **yes — 9,841 frames** |
+| MC-Dropout (`mc_vis_nightfull`) | VIS | `runs/derived/data_vis_stride2.yaml` | **yes — 9,841 frames** |
+| ensemble n=5 (`ens_ir_seed0-4`) | IR | `runs/derived/data_ir_shiponly.yaml` | no |
+| MC-Dropout (`mc_ir_seed0_ft_refit`) | IR | `runs/derived/data_ir_shiponly.yaml` | no |
+
+**The IR ensemble and MC arms are clean by construction**, and not by anyone's foresight:
+pohang04 has no thermal frames in any release (Amendment 2), so no IR training list could
+have contained them. **The VIS ensemble and MC arms are contaminated** — they trained on the
+unfiltered `data_vis_stride2.yaml`, which G5 measured as carrying 9,841 pohang04 frames.
+
+### A5.2 — declared scope
+
+**§7's single look covers the sigma-head system only.** No pohang04 number may be reported,
+plotted or quoted for the VIS ensemble or VIS MC-Dropout arms, and no three-arm UQ
+comparison may be presented on pohang04 — for those arms the run is training data, not a
+holdout, and scoring them there measures memorisation.
+
+This is consistent with G2 rather than a departure from it. G2 already declared the estimand
+to be **disagreement ranking**, "answerable from checkpoints already on disk" — the
+contaminated ones. **The UQ arm ranking is therefore a development-data result and is
+reported as one**, on the paired val slice where it already lives
+([`eval/uq_day_night_slice_u2_nanpolicy_2026-09-09.md`](eval/uq_day_night_slice_u2_nanpolicy_2026-09-09.md)).
+
+The headline generalization result is unaffected. `preset=crossmodal26m` runs the Gaussian
+checkpoints, so the system whose held-out score §7 exists to produce is exactly the system
+Stage 2 is retraining clean.
+
+### A5.3 — what was considered and rejected
+
+Retraining the VIS ensemble (5 seeds) and VIS MC-Dropout to make the three-arm comparison
+holdout-eligible costs **6 further VIS runs at ~27 h each, ~7 days**, roughly doubling
+Stage 2. Rejected, on the evidence rather than on cost alone: the three-arm result is
+already mixed and mostly a calibration story — the ensemble leads on AP and `d_ece`, the
+sigma head leads `interval_ece` by 2.3–2.8× and is the only arm with an NLL at all — and the
+development-set slice tells that story adequately. Moving a mixed result onto held-out data
+buys less than seven days of GPU.
+
+**If that comparison is later wanted on pohang04 it requires a new pre-registration**, the
+six runs above, and — because §7.2 permits one look — an explicit statement that the set is
+no longer held out.
