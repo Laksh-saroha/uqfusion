@@ -50,8 +50,22 @@ ARMS = {
 }
 
 #: Fraction of the training set per probe. Small enough to be quick, large enough that
-#: steady state dominates the warm-up epoch's first iterations.
+#: steady state dominates the warm-up epoch's first iterations. A small fraction also
+#: makes setup a large share of wall time, which flattens the ms/img curve and can hide
+#: a real throughput gradient -- the 15% IR ladder read 90-93 ms/img flat across batch
+#: 8-16, and the full epoch then showed 39.7 down to 35.9. Use 1.0 for anything that
+#: goes in the manifest.
+#:
+#: It was expected that a subset would also UNDER-read the peak, by missing the densest
+#: frames the +/-0.35 GiB sawtooth tracks. Measured, it did not: IR's 15% subset read
+#: 10.36 GiB at batch 16 against the full epoch's 10.12. The difference sits inside the
+#: sawtooth, so subset-vs-full is a throughput concern here, not a memory one.
 FRACTION = 0.03
+
+#: This card, and the constants section 16 of phase1-experimental-record.md measured on it.
+CARD_GIB = 11.99
+DRIVER_OVERHEAD_GIB = 1.0    # driver-level sits ~1.0 GiB above `memory_reserved`
+SAFE_HEADROOM_GIB = 1.5      # the record's stated safe operating margin
 
 
 def run_one(arm: str, batch: int, fraction: float, workers: int) -> dict:
@@ -155,15 +169,30 @@ def main() -> int:
     verdict = None
     if ok:
         best = min(r["s_per_img"] for r in ok)
-        # The ceiling is the largest batch still within 15% of the best ms/img seen.
-        # Paging is not a 15% effect -- it was 17x -- so this threshold separates
-        # "slightly past the sweet spot" from "spilling into host RAM" with room to
-        # spare, and does not need tuning.
-        good = [r for r in ok if r["s_per_img"] <= best * 1.15]
-        verdict = max(r["batch"] for r in good) if good else None
         for r in ok:
+            # Throughput criterion. Paging is not a 15% effect -- it was 17x -- so this
+            # separates "past the sweet spot" from "spilling into host RAM" with room to
+            # spare. On this card it often does not discriminate at all: the first IR
+            # ladder ran 90-93 ms/img flat from batch 8 to 16, because these sizes are
+            # not compute-bound here. A criterion that cannot fire must not be the only
+            # one, or it silently endorses the largest batch tried.
             r["degraded"] = r["s_per_img"] > best * 1.15
-    print(f"[probe] {args.arm} ceiling: batch {verdict}")
+            # Headroom criterion, which is what actually binds. `memory_reserved`
+            # excludes CUDA context, cuDNN workspaces and driver overhead;
+            # phase1-experimental-record.md section 16 measured a 9.70 GiB reserved band
+            # sitting at ~10.7 GiB driver-level, so overhead is ~1.0 GiB, and calls
+            # ~1.5 GiB of headroom the safe operating point.
+            r["driver_gib"] = r["peak_reserved_gib"] + DRIVER_OVERHEAD_GIB
+            r["headroom_gib"] = CARD_GIB - r["driver_gib"]
+            r["tight"] = r["headroom_gib"] < SAFE_HEADROOM_GIB
+        good = [r for r in ok if not r["degraded"] and not r["tight"]]
+        verdict = max((r["batch"] for r in good), default=None)
+    print(f"[probe] {args.arm} ceiling: batch {verdict}"
+          f"   (throughput+headroom; {SAFE_HEADROOM_GIB} GiB headroom required)")
+    for r in ok:
+        flag = "TIGHT" if r["tight"] else ("SLOW" if r["degraded"] else "ok")
+        print(f"        batch {r['batch']:>3}  driver ~{r['driver_gib']:5.2f} GiB  "
+              f"headroom {r['headroom_gib']:5.2f} GiB  {flag}")
 
     out = ROOT / "runs" / "eval" / f"batch_ceiling_{args.arm}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
