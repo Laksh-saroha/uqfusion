@@ -229,6 +229,51 @@ def main() -> int:
     b = ap_weighted(presort(tied_parts))["map50_95"]
     assert abs(a - b) <= TOL, f"F: tied-conf fast {b} vs reference {a} (d={abs(a - b):.3e})"
     print(f"[smoke] F heavy conf ties: both paths agree at {a:.8f}, repeatable OK")
+    # ---- G. strict GT loading (R-B5 / F14) ---------------------------------
+    # A MISSING label file is not an EMPTY one. Until 2026-09-10 both returned zero
+    # boxes, so a wholly absent labels/ tree evaluated as a valid all-background
+    # dataset and every detection in it scored as a false positive -- reproduced on a
+    # fixture before the fix. Measured across the corpus FIRST: 0 missing label files
+    # in 133,140 images, 3,880 legitimately EMPTY ones, and 0 malformed lines in
+    # 1,008,459 non-blank lines, so refusing costs nothing today and exists to catch
+    # a path or release mistake tomorrow.
+    import tempfile as _tempfile
+
+    from uqfusion.eval.matching import (EMPTY_LABEL_POLICY, MALFORMED_LINE_POLICY,
+                                        MISSING_LABEL_POLICY, load_gt)
+
+    assert (MISSING_LABEL_POLICY, EMPTY_LABEL_POLICY, MALFORMED_LINE_POLICY) == (
+        "refuse", "allow", "refuse"), "G: declared policies moved"
+    g_root = Path(_tempfile.mkdtemp()) / "images" / "pohang00"
+    g_root.mkdir(parents=True)
+    g_lab = g_root.parent.parent / "labels" / "pohang00"
+    g_lab.mkdir(parents=True)
+    (g_lab / "empty.txt").write_text("", encoding="utf-8")
+    (g_lab / "good.txt").write_text(
+        "0 0.5 0.5 0.1 0.1\n1 0.2 0.2 0.05 0.05\n\n", encoding="utf-8")
+    (g_lab / "short.txt").write_text("0 0.5 0.5\n", encoding="utf-8")
+    (g_lab / "garbage.txt").write_text("banana\n", encoding="utf-8")
+
+    try:
+        load_gt(g_root / "absent.png", (100, 100))
+        raise AssertionError("G: a missing label file must refuse")
+    except FileNotFoundError:
+        pass
+    assert len(load_gt(g_root / "absent.png", (100, 100),
+                       allow_missing=True)["cls"]) == 0, (
+        "G: allow_missing must still return an empty frame")
+    assert len(load_gt(g_root / "empty.png", (100, 100))["cls"]) == 0, (
+        "G: an EMPTY label file is legitimate -- 3,880 of them exist")
+    assert len(load_gt(g_root / "good.png", (100, 100))["cls"]) == 2, (
+        "G: a blank trailing line must not be an error")
+    for _bad in ("short", "garbage"):
+        try:
+            load_gt(g_root / f"{_bad}.png", (100, 100))
+            raise AssertionError(f"G: malformed line in {_bad}.txt must refuse")
+        except ValueError:
+            pass
+    print("[smoke] G strict GT: missing refuses, empty allowed, malformed refuses OK")
+
 
     print("\nAPMETRICS SMOKE OK")
     return 0

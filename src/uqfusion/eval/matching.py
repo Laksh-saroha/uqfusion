@@ -37,19 +37,77 @@ def label_path_for(image_path: str | Path) -> Path:
     return Path(*parts).with_suffix(".txt")
 
 
-def load_gt(image_path: str | Path, image_hw: tuple[int, int]) -> dict:
-    """GT boxes (xyxy px) + classes for one image; empty arrays when no label file."""
+MISSING_LABEL_POLICY = "refuse"
+"""What a MISSING label file means (R-B5, finding F14). It is not an empty one.
+
+Until 2026-09-10 this function returned zero boxes for a missing file, exactly as it
+does for an empty one, so a wholly absent `labels/` tree evaluated as a valid
+all-background dataset and every detection in it scored as a false positive. Nothing
+raised; AP simply came back near zero and looked like a model problem.
+
+**Measured across the whole corpus before this was changed: 0 missing label files**
+in 133,140 train+val images across both modalities. So refusing costs nothing today
+and exists to catch a path or release mistake tomorrow. `allow_missing=True` is the
+declared escape for the legitimate case (scoring a modality against another's labels,
+or a fixture that deliberately has none), and it is a parameter rather than a silent
+default so that permitting it is visible at the call site.
+"""
+
+EMPTY_LABEL_POLICY = "allow"
+"""An EMPTY label file is a legitimate statement: this frame contains no objects.
+
+Measured: **3,880 empty label files** (1,550 VIS train, 2,330 IR train), 0 in either
+val split. They are data, not damage, and must keep loading as zero boxes -- which is
+the whole reason a missing file has to be told apart from an empty one rather than
+folded into it.
+"""
+
+MALFORMED_LINE_POLICY = "refuse"
+"""A line that is neither blank nor a valid `cls cx cy w h` record is an error.
+
+The old code skipped any line with fewer than five fields, so a truncated write or a
+stray token silently deleted a ground-truth box. Reproduced on a fixture: a file with
+one good line, one truncated line and one garbage token returned **one** box and
+raised nothing -- two thirds of the file discarded in silence. Measured on the real
+corpus before the change: see `docs/` for the scan; nothing in it is malformed.
+"""
+
+
+def load_gt(image_path: str | Path, image_hw: tuple[int, int],
+            *, allow_missing: bool = False) -> dict:
+    """GT boxes (xyxy px) + classes for one image.
+
+    Refuses a missing label file and a malformed line; an EMPTY file is legitimate and
+    returns zero boxes. See the three policy constants above for what was measured.
+    """
     h, w = image_hw
     lp = label_path_for(image_path)
+    if not lp.is_file():
+        if not allow_missing:
+            raise FileNotFoundError(
+                f"no label file for {image_path} (looked for {lp}). A missing label "
+                "file is NOT an empty one: returning zero boxes here would score every "
+                "detection in the frame as a false positive and let a wrong path or a "
+                "wrong annotation release evaluate as a valid all-background dataset. "
+                "Pass allow_missing=True if this frame genuinely has no labels.")
+        return {"boxes_xyxy": np.zeros((0, 4), dtype=np.float64),
+                "cls": np.zeros(0, dtype=int)}
     boxes, clss = [], []
-    if lp.is_file():
-        for line in lp.read_text(encoding="utf-8").splitlines():
-            vals = line.split()
+    for n, line in enumerate(lp.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        vals = line.split()
+        try:
             if len(vals) < 5:
-                continue
+                raise ValueError(f"expected at least 5 fields, got {len(vals)}")
             c, cx, cy, bw, bh = int(vals[0]), *map(float, vals[1:5])
-            boxes.append([(cx - bw / 2) * w, (cy - bh / 2) * h, (cx + bw / 2) * w, (cy + bh / 2) * h])
-            clss.append(c)
+        except ValueError as exc:
+            raise ValueError(
+                f"{lp}:{n}: malformed label line {line.strip()!r} ({exc}). Skipping it "
+                "would silently delete a ground-truth box -- see MALFORMED_LINE_POLICY."
+            ) from exc
+        boxes.append([(cx - bw / 2) * w, (cy - bh / 2) * h, (cx + bw / 2) * w, (cy + bh / 2) * h])
+        clss.append(c)
     return {"boxes_xyxy": np.asarray(boxes, dtype=np.float64).reshape(-1, 4),
             "cls": np.asarray(clss, dtype=int)}
 
