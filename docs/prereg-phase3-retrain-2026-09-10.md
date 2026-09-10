@@ -494,3 +494,78 @@ inherit the 3–6 px registration residual measured in `runs/eval/x_registration
 into the labels of the one held-out set this project will ever have. **It is not adopted
 here.** Adopting it requires its own pre-registration stating the residual's effect on label
 quality; until then §7.1's default — unassisted annotation to the release protocol — stands.
+
+---
+
+## Amendment 2 — 2026-09-10, the pohang04 thermal imagery is already extracted
+
+Appended per §11. **No decision rule, threshold, arm, floor or policy changes.** One
+correction of fact about what is on disk, which removes a step from §7.1 and shortens
+Stage 4.
+
+### A2.1 — the claim that is wrong
+
+§2(a) states that pohang04's thermal stream "exists upstream and **was never extracted**",
+and §7.1 step 1 accordingly instructs: *"Extract pohang04 thermal imagery from the archive
+named in `annotation_map.json`."*
+
+**The imagery is already extracted.** Measured 2026-09-10:
+
+```
+D:\Datasets\Pohang\pohang04\infrared\images\   22,235 files, 640x512, 16-bit PNG
+Pohang_dataset\meta\pohang04\timestamps\ir.txt 22,235 lines
+```
+
+The counts agree exactly, and the run also carries its own `infrared/timestamp.txt`. This
+is not special to pohang04 — pohang03 holds 24,468 extracted thermal frames against 1,922
+labels. Imagery extraction and label availability were always independent, and only the
+latter falls away run by run. The false claim came from reading `tir: 0` as a statement
+about the whole thermal stream when it is a statement about labels alone.
+
+The frames are on `D:` and have never been brought into the project tree, which is why the
+`A:`-side surveys that produced §2(a) did not see them.
+
+### A2.2 — what §7.1 step 1 becomes
+
+Step 1 is no longer an extraction. It is a transfer, and it acquires the provenance
+obligations the extraction was going to carry:
+
+1. Record the content hash of the **extracted frame set** (not the archive, which is no
+   longer the immediate source), plus the count and the `timestamp.txt` digest.
+2. Convert 16-bit to the project's 8-bit representation using the same path the trained
+   runs use — `D:\Datasets\Pohang\_scripts\convert_ir_to_8bit.py`. **The conversion is now
+   part of the holdout's provenance**: a different mapping from the one pohang00–03 were
+   built under would make pohang04 a test of the conversion as much as of the model, and
+   the conversion parameters are therefore recorded in the manifest alongside the hash.
+3. Copy into the project tree under the run-disjoint layout, and confirm G5 still returns 0.
+
+Steps 2 and 3 of §7.1 — pair building under Stage 1's adopted rule, and the annotation
+pass — are **unchanged**. In particular **§7.1's annotation requirement stands in full**:
+no thermal label for pohang04 exists in the PoLaRIS release or anywhere on either disk,
+which A2.3 records as now checked at the source rather than inferred.
+
+### A2.3 — the absence of pohang04 thermal labels, verified at the source
+
+§2(a) inferred this from `labeled_frames.json`. It is now checked against the release
+bundles themselves. The archive offered as "the 04 labels" is **sha256-identical to the
+inner `all.zip` of the preserved `D:\Datasets\Pohang\04.zip`**, so it is the authoritative
+PoLaRIS bundle and not a partial copy.
+
+| bundle | left | right | tir |
+|---|---:|---:|---:|
+| 00 (old format, `all/tir.zip`) | 10,787 | 10,981 | 10,918 |
+| 01 (old format) | 11,995 | 12,478 | 11,995 |
+| 02 | 13,685 | 14,111 | 6,175 |
+| 03 | 13,145 | 13,940 | 1,922 |
+| **04** | 12,571 | 13,617 | **directory absent** |
+
+For pohang04 the `tir` directory is **absent, not empty** — there is no zero-length release
+to misread. Three further checks agree: `annotation_map.json` carries a `tir` key with 0
+entries, so the extractor looked and found nothing; `dynamic.zip` holds image, lidar and
+radar tracking only, with no thermal stream; and a sweep of both drives finds no pohang04
+file under any IR, `tir` or thermal label path. `ir-handoff-2026-08.md:38` recorded the
+same conclusion in August.
+
+**Net effect on Stage 4:** the run is one annotation pass — not one extraction and one
+annotation pass — away from being a run-disjoint evaluation set. §7.2's single-look policy
+is untouched and remains the binding constraint.
