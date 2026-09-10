@@ -645,3 +645,75 @@ the day the server is used again.
 Nothing about the estimand, the floor, the interval method, the arms, the mechanism gate, or
 §7. **§7.2's single-look policy is untouched.** Training on one machine changes who produces
 the checkpoints; it changes nothing about what may be looked at, when, or how often.
+
+---
+
+## Amendment 4 — 2026-09-10, G4 answered: no trained-arm comparison is registered
+
+Appended per §11, **before any Phase 3 checkpoint is trained.** Records a G4 measurement, a
+scope decision taken on it, and — per §9 — an arm cut and recorded as cut.
+
+### A4.1 — what G4 measured
+
+`scripts/g4_mde.py`, reported at [`eval/g4_mde_2026-09-10.md`](eval/g4_mde_2026-09-10.md).
+Between-seed sigma, pooled from the per-seed benchmark tables where the same variant was
+trained at several seeds:
+
+| arm | sigma | df | MDE @ 5 seeds | seeds to reach 0.0060 |
+|---|---:|---:|---:|---:|
+| VIS | 0.00638 | 4 | 0.01291 | ~19 |
+| IR | 0.00499 | 27 | 0.01010 | ~12 |
+
+At five seeds the MDE exceeds **all four** of §8's reporting floors. The variance is
+between-**seed** deliberately: `metric_noise_floor.md`'s 0.0014–0.0031 is *evaluation* noise
+over one fixed checkpoint, and using it here would understate the MDE and pass arms that
+resolve nothing — R-F3's error, run forwards.
+
+### A4.2 — the scope decision, and the correction that prompted it
+
+**That MDE governs comparisons between two independently trained models, and this design
+contains none.** Stated plainly because the first reading of this measurement treated it as
+a Stage 2 blocker, and it is not one:
+
+* **§5 trains two things and compares neither.** One VIS detector and one IR detector,
+  different modalities, never set against each other. §5.1 froze the architecture, so there
+  is no ladder and no model-versus-model contest.
+* **§6's arms S0–S7 are the same checkpoints re-scored.**
+  [`prereg-uq-mechanism-ablation.md`](prereg-uq-mechanism-ablation.md) §3: *"Predictions and
+  fusion options are held **fixed**. Only the `sigma_ltrb` array supplied to
+  `fuse_detections` varies ... the caches are the ones already on disk."* Real sigma against
+  shuffled sigma is one set of predictions scored two ways. Training noise is common to both
+  sides and cancels; resolution comes from §8's block bootstrap over frames, which is why §8
+  specifies an interval rather than a power calculation.
+* **G3's parity check is "across matched seeds"** — paired by construction, so the unpaired
+  MDE overstates the difficulty there too.
+
+### A4.3 — decided: 5 seeds stand
+
+**§5.2's minimum of 5 seeds is unchanged.** In this design seeds average the training
+trajectory so that the §6 and §7 numbers rest on a stable checkpoint rather than on one
+lucky run. They are not powering a two-arm test, so the MDE above does not gate them.
+
+What five seeds buy, stated so it is not overstated later: at sigma ≈ 0.005–0.006 the
+standard error on a five-seed mean is ≈ **0.0022–0.0029**, the same order as §8's 0.0060
+floor. That is a real stability gain and it is the whole of the claim.
+
+### A4.4 — cut and recorded as cut (§9 BUDGET-CUT)
+
+**No "retrained versus deployed" comparison is registered, and none may be reported.**
+
+It is the one genuinely unpaired trained-arm question available here, G4 prices it at ~19
+VIS seeds (~12 days) and ~12 IR seeds (~4 days), and that budget is not being spent. Per §9
+the arm is therefore cut and its absence recorded here rather than left as an omission
+someone fills in later.
+
+**This forecloses a specific sentence.** No artifact produced under this pre-registration
+may state, imply or quantify that the retrained detector is better, worse, or equivalent to
+the deployed one. The retrain exists to produce checkpoints that are clean of pohang04 and
+trained as the deployed configuration (§2 c) — **not** to demonstrate an improvement. A
+comparison of the two would need a new pre-registration and the seed budget above.
+
+The caveats on sigma stand and cut both ways: the VIS estimate rests on 4 degrees of freedom
+and both come from stride-4 runs on other architectures, so ~19 is an order of magnitude and
+not a target. It is enough to establish that five seeds could not have carried that
+comparison, which is all this decision needs.
