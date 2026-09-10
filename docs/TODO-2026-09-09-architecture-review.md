@@ -178,7 +178,7 @@ off cannot be measured on this dataset.
 component does not exist in this data. Every night interval is conditional on that one recording.
 Training-seed variance is a separate component this does not cover either.
 
-### R-A4 — metric contract audit (F12) · P1 · M
+### R-A4 — metric contract audit (F12) · P1 · M · **DONE 2026-09-10 (`9c0f921`)**
 Rename and re-scope the metric suite to what it actually measures:
 - confidence-only detection ECE ≠ multidimensional calibration conditional on location/scale;
 - error/uncertainty correlation is **ranking**, not magnitude (×100 on every sigma preserves it and
@@ -192,6 +192,29 @@ Rename and re-scope the metric suite to what it actually measures:
 
 Also: cross-stream support can exceed 1 (reviewer's local example: 1.47015), so support scores must
 not be presented as probabilities without recalibration.
+
+**Resolved — `docs/metric-contracts-2026-09-10.md`.** All six claims reproduced before any code
+moved; nothing published changes. The suite is now DECLARED rather than renamed: `DECE_CONDITIONING`,
+`UQ_SUBSET`, `AURC_GRID`, `AURC_INTEGRATION` and `RANKING_METRICS` in `eval/metrics.py` each carry the
+number measured for them, `sparsification` returns `aurc_trapz` and the realised coverage grid beside
+the historical grid-mean `aurc` (0.4397 vs 0.4182, gap 0.0215 on a 0.0014-0.0031 floor), and
+`summarize_cache` publishes `n_gt`, `n_tp_detections`, `tp_share` 0.4429 and `recall_tp_over_gt`
+0.7202. `scripts/smoke_metric_contracts.py` pins all of it, always on.
+
+**Claim 6 reproduces but the stated mechanism is wrong, and this matters for the repair.**
+`support_gamma` resolves to **0.0 in both shipped presets**, and cross-modal agreement cannot
+overflow at all — weights summing to 1 bound a two-stream cluster by `max(s)`. What overflows is
+WBF's `k` counting cluster MEMBERS, so two overlapping boxes from the SAME stream are priced as a
+confirmation: `w_stream * (s1 + s2)`, with `w_vis = 0.9930` on the clean cell. Ablation:
+`consensus_distinct=True` takes the clean cell from max 1.753204 / 149 overflows to 0.970650 / zero.
+Recalibrating "support scores" would therefore have fixed nothing. Measured extent: 271/422,598
+(0.0641%) under `crossmodal`, 226/495,497 (0.0456%) under `adopted`, clean and glare only.
+
+**Open (deliberately):** claim 6 is disclosed, not repaired — `consensus_distinct=True` changes fused
+scores on every frame and needs a prereg and a re-score. `d_ece` never sees the overflow today (all
+nine UQ caches top out at 0.979101, `conf_out_of_unit_range = 0`), so this is a latent trap rather
+than a live corruption. No table has been switched from `aurc` to `aurc_trapz`, since that moves
+recorded values by ~0.02 with no decision depending on it.
 
 ### R-A5 — **re-score existing caches; change-impact table** (F03/F04/F12) · P1 · M · **FIRST PASS DONE 2026-09-09 (`f8c6b7e`)**
 The deliverable everything else waits on. Re-score every cached prediction set under the corrected
