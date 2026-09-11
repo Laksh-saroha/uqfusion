@@ -33,7 +33,9 @@ STATE_JSON = QUEUE_DIR / "state.json"
 LIVE_JSON = QUEUE_DIR / "live.json"
 CONTROL_JSON = QUEUE_DIR / "control.json"
 
-TERMINAL = {"done", "failed", "skipped"}
+# Mirrors run_queue.py:72. "diverged" belongs here: the runner stops such a run and
+# moves on, so counting it as remaining overstates what is left to train.
+TERMINAL = {"done", "failed", "skipped", "diverged"}
 
 
 def set_queue_dir(path: str | Path) -> None:
