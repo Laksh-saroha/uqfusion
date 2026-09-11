@@ -94,3 +94,88 @@ identical 11,488 frames.
 * **Nothing here says batch 12 is optimal for accuracy**, only for throughput within a
   memory bound. §5.1 requires one batch across every arm precisely so that batch is not a
   free variable, and it is not re-opened per arm.
+
+---
+
+# Addendum — 2026-09-11: production contradicts the VIS verdict
+
+Measured on `p3_vis_seed0` (Stage 2, running) against `gauss_vis_seed0_nightfull`, the
+closest prior run on record. **The probe's VIS ordering is inverted in production.**
+
+## The two runs are comparable
+
+| | `gauss_vis_seed0_nightfull` | `p3_vis_seed0` |
+|---|---|---|
+| model | `yolo26m.pt` | `yolo26m.pt` |
+| head | gaussian + sigma (`nll_loss` columns present) | gaussian + sigma |
+| workers | 8 | 8 |
+| imgsz | 640 | 640 |
+| **batch** | **16** | **12** |
+| train / val frames | 48,136 / 11,352 | 38,295 / 9,009 |
+| steady epoch | **1,083.2 s** (median, ep4+, n=36) | 990.3 s (ep3; still settling) |
+
+Only the batch and the frame counts differ. The frame counts differ because G5 holds
+pohang04 out — 20.4% of the VIS stride-2 list — which is why the epoch is shorter in wall
+clock while being *slower per image*.
+
+## Per-image rates
+
+The live counter reads **3.39–3.42 it/s at batch 12 = ~41 img/s**, directly measured, train
+only. For the batch-16 run the rate has to be derived: the current run's epoch is 990.3 s
+against 933 s of training, leaving ~57 s for 9,009 val frames (~158 img/s); applying that
+val rate to 11,352 frames gives ~72 s, so its training was ~1,011 s for 48,136 frames =
+**~47.6 img/s**.
+
+**Batch 16 is therefore ~16% faster per image than batch 12 in production. The probe
+measured batch 12 as 28% faster.** The sign is reversed, not the magnitude.
+
+## What the probe cannot be blamed for
+
+It is **not** setup dominance. The VIS probe ran `fraction=0.30` — 11,488 frames, not a
+token slice — and a constant per-run setup cost adds the same ms/img to every batch size,
+compressing ratios rather than inverting them. The 43.0 vs 55.3 ms/img gap is 141 s of real
+work at that frame count; no fixed overhead produces it.
+
+It is **not** thermal, and it is **not** `fraction` non-determinism. Both were tested at the
+time: the ordering reproduced under full reversal, and ultralytics takes a deterministic
+prefix.
+
+## Three ways the probe's conditions differ from production
+
+Recorded as candidates, none of them confirmed as the mechanism:
+
+1. **The 30% prefix is not a 30% sample.** The list is ordered by run, so `fraction=0.30`
+   trained on **pohang00 (8,193) + pohang01 (3,295) and no pohang02 or pohang03 at all**.
+   pohang01 is the all-night run and is box-sparse. Assigner and loss cost scales with boxes
+   per batch, and that cost scales with batch size, so a box-sparse prefix is a plausible
+   place for batch-size scaling to behave differently than it does on the full list.
+2. **`val=False` in the probe**, `val=True` in production.
+3. **One draw per batch size.** Two orders agreed with each other, which establishes
+   repeatability *within the probe's conditions* and says nothing about transfer out of them.
+
+The honest reading is that the probe measured a real property of the configuration it ran,
+and that configuration was not the training configuration.
+
+## The verdict stands anyway, and this is a cost decision not a correctness one
+
+**Batch stays 12 for all of Stage 2.** §5.1 requires one batch "identical across every arm",
+four IR seeds are already trained at 12, and switching VIS mid-stage would introduce a
+throughput-motivated confound into the one stage the pre-registration exists to protect.
+
+The price is ~129 s/epoch on this run, about **1.6 h per VIS seed at the observed ~45-epoch
+early-stop depth, so ~8 h across the five**. That is the cost of the wrong constant, paid
+knowingly, and it is cheaper than the confound.
+
+## What this changes for the next measurement
+
+* **A throughput probe must run the production data, or its ordering does not transfer.**
+  A prefix of a run-ordered list is a different distribution, not a smaller one. Either use
+  `fraction=1.0` (as the IR probe did — and IR's ordering has not been contradicted) or
+  shuffle before taking the prefix.
+* **Epoch 1 is not a rate.** Both runs show ~22% above steady on the first epoch
+  (1,351 → 1,083 and 1,205 → ~990) from dataset scan, AMP check and worker spin-up. Reading
+  a rate off epoch 1, in either direction, is reading setup.
+* The headroom criterion added on 2026-09-10 was the right addition and is untouched by
+  this: batch 16 peaked at 8.96 GiB reserved, ~2.03 GiB of headroom, and would have passed
+  it. It was the **throughput** criterion that chose 12, and the throughput criterion is the
+  one production contradicts.
