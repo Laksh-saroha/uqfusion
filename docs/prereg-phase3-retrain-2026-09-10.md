@@ -909,3 +909,100 @@ still 1 of 4, so the verdict does not turn on the reading.
 A6.4's open item still binds, now for §7 alone: **how five seeds become the checkpoint set
 scored on pohang04** must be registered without reference to any seed's score before the
 look. §7.2 is untouched.
+
+---
+
+## Amendment 8 — 2026-09-14, the single look reports the fused score only; no thermal annotation
+
+Appended per §11, **before any pohang04 thermal frame is transferred, any pohang04 pair is
+built, and any pohang04 number exists.** Decided by the operator. It **changes §7.1** and
+says so: one step is removed and the obligations attached to it go with it.
+
+### A8.1 — the decision
+
+**§7's single look reports one quantity: the fused system's ship AP on pohang04, scored
+against the upstream PoLaRIS visible labels.** No thermal label is drawn for pohang04.
+
+This is the ground truth every development cell has always used. `evaluate_systems` scores
+all systems against the VIS frame's labels unless a caller overrides `gts`, and
+`load_context` builds them from the VIS records (`ctx.py:547`), with IR boxes mapped into
+the VIS canvas first. The fused score on pohang04 therefore needs pairs, not new labels.
+
+**Only the fused row is reported.** The same call also computes `visible_only` and
+`ir_only` against the same labels; those rows are **not reported, plotted or quoted** for
+pohang04 under this amendment. Adding them — for example as the max(VIS, IR) bar — needs a
+further amendment committed before the freeze.
+
+### A8.2 — what is removed from §7.1
+
+* **Step 3, the thermal annotation pass**, and with it: the annotation-integrity clause, the
+  G4-derived frame target ("label the number of frames the MDE computation says is needed"),
+  and the hash-and-freeze of a thermal label release.
+* **A1.3's open question** — projecting pohang04 VIS boxes into the thermal frame — no
+  longer has a use and is closed without adoption.
+* **§10's provenance asymmetry** ("the thermal labels will be ours") no longer arises:
+  every label the look touches is upstream.
+
+Steps 1 and 2 stand: the A2.2 transfer (content hash, 16→8-bit conversion via
+`convert_ir_to_8bit.py` with its parameters recorded, copy into the tree, G5 still 0), and
+pair building.
+
+### A8.3 — the ground truth, frozen now
+
+Measured 2026-09-14 from `Pohang_dataset/visible/labels/pohang04/`, reading files only —
+no model output was produced or inspected:
+
+| | |
+|---|---|
+| label files | 26,188 (12,571 `_L_` + 13,617 `_R_`) |
+| boxes | 156,652 |
+| empty files | 286 |
+| content hash | `c06611a684f4` — sha256 over files in sorted name order, feeding each file's basename then its bytes, first 12 hex |
+| `visfilter_manifest.json` | 0 pohang04 entries — the 2026-07-15 night cut never touched this run |
+
+Pairs use the left stereo frame, so the `_L_` files are the ground truth the look reads.
+**If this hash differs at scoring time, the look does not run** until the difference is
+explained in writing.
+
+### A8.4 — pairing and the frame set
+
+The pohang00–03 pair tables were written by `D:\Datasets\Pohang\_scripts\04_stream_and_write.py`
+from `meta/pohangNN/pairs.csv`, keeping a row only if **(a)** `in_tolerance` (≤ 50 ms),
+**(b)** the IR frame is labelled, and **(c)** the left stereo frame is labelled.
+
+For pohang04, **(b) cannot hold** — there are no IR labels — and is replaced by **(b′) the
+IR frame is present in the transferred, converted set**. (a) and (c) are unchanged.
+`Pohang_dataset/paired/pohang04_pairs.csv` is header-only today and is written by that rule.
+
+**Every surviving row is scored — no stride, no subsample.** The stride and G4 target in
+§7.1 existed to bound annotation cost, which no longer exists, and any subsampling rule
+would be one more choice made near the data. The upper bound is 22,214 in-tolerance rows
+intersected with 12,571 labelled left frames; the actual count is recorded when the table is
+built. Fusion runs under the shipped correspondence (`iou_thr` 0.85; Amendment 7).
+
+### A8.5 — what this costs, stated before the number exists
+
+* **The IR detector's generalization to pohang04 is not measured and may not be claimed.**
+  No artifact may state or imply an IR-only pohang04 result.
+* **VIS ground truth is blind to targets only IR can see.** A true IR-only detection scores
+  as a false positive, so the fused number is biased against IR's contribution. pohang04 is
+  daylight (§7.1 composition note), which should keep this small, but it is **not
+  measured**. The same bias sits under every development number, so HOLDOUT-GAP compares
+  like with like.
+* **pohang04's VIS labels are not unseen.** They trained the contaminated VIS ensemble and
+  MC-Dropout arms (A5) and were pooled into earlier VIS validation metrics
+  (`phase1val_day.txt` holds 2,343 pohang04 frames). No per-run score of any fusion system
+  has ever been computed on pohang04 — IR was never in the tree — and the holdout's value
+  rests on the Stage 2 checkpoints and `runs/cache_p3` references never having seen it
+  (A5, A6.4).
+
+### A8.6 — still unregistered, and each must be committed before the freeze
+
+1. **Seed aggregation** (A6.4): how five seeds become the scored checkpoint set.
+2. **Which conditions are scored:** clean only, or corruption cells too, and if so which
+   kinds, severities and corruption seeds.
+3. **HOLDOUT-GAP's threshold.** §9 says "materially below the development runs" and does
+   not quantify it. A number, and which development runs and interval it is set against,
+   must be fixed in advance or the declared outcome is decided after the look.
+4. **Day/night composition** of the built pair table (§7.1 note), measured and recorded
+   before the freeze.
