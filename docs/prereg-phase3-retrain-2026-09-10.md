@@ -1006,3 +1006,110 @@ built. Fusion runs under the shipped correspondence (`iou_thr` 0.85; Amendment 7
    must be fixed in advance or the declared outcome is decided after the look.
 4. **Day/night composition** of the built pair table (§7.1 note), measured and recorded
    before the freeze.
+
+---
+
+## Amendment 9 — 2026-09-14, the four items A8.6 left open
+
+Appended per §11, **before any pohang04 thermal frame is transferred, any pohang04 pair or
+cache is built, and any pohang04 number exists.** Decided by the operator; every choice
+below is fixed without reference to any Phase 3 score on any run.
+
+### A9.1 — seeds: every seed is scored, the headline is the seed mean
+
+* **Pairing:** VIS seed *k* is fused with IR seed *k*, k = 0–4. Five systems, not 25.
+* **Per system:** preset `crossmodal26m`, the shipped configuration. Every
+  detector-dependent quantity is re-derived **per seed**, exactly as `load_context` derives
+  it: the Mahalanobis references from `runs/cache_p3/seed{k}/`, and the capability prior
+  on the development `fit` frames. **No constant is re-tuned**; `cap_ir_scale` 4,
+  `ir_nms` 0.70, `iou_thr` 0.85, the veto thresholds and the support term keep their
+  shipped values.
+* **Headline statistic:** the **mean over the five seeds** of per-seed fused ship AP. The
+  five per-seed values and their sd are reported alongside it. The sd describes training
+  variance and is **not** a decision input.
+* **Interval:** moving-block bootstrap, L = 20, n_boot = 1000, seed 0, over frames. **Each
+  resample scores all five systems on the same frames**, and the statistic on that resample
+  is their mean, so frame noise stays paired across seeds.
+
+### A9.2 — conditions: the full 11-cell grid, one verdict cell
+
+* **Cells:** the 11 benchmark cells as `gate_snms_draw_avg.py` defines them — `clean/clean`,
+  `clean/{glare_s2, blur_s2, noise_s2, fog_s2}`, `{blur_s3, noise_s2, rain_s2, fog}/clean`,
+  `lowlight/glare_s2`, `blur_s3/glare_s2` (VIS condition / IR condition). Corruption kind
+  and severity are fixed at those shipped values.
+* **Only `clean/clean` carries the HOLDOUT-GAP verdict (A9.3).** The other ten are
+  reported descriptively: value, interval, and difference from the development reference,
+  with no verdict and no outcome label. None of them may be promoted to a verdict after
+  the look.
+* **Fresh corruption draws.** Four draws per corrupted cell: VIS corruption seeds
+  **941, 942, 943, 944**, IR corruption seeds **951, 952, 953, 954** (IR = VIS + 10, the
+  existing convention). No cache directory or script on record uses any seed in 921–954;
+  the draw seeds in use are 1, 7, 901–905 and 911–915. A corrupted cell's value is the mean
+  over the four draws of the A9.1 seed-mean, with per-draw values reported.
+* **Budget, stated so it is not discovered mid-look:** 2 clean + 9 corrupted streams × 4
+  draws = 38 caches per seed, 190 in total. At ~12.5k pairs and ~40 img/s that is roughly
+  16 GPU hours. If a build fails the look **does not proceed on a partial grid**. The
+  missing cache is rebuilt, or the grid is amended before the look.
+
+### A9.3 — HOLDOUT-GAP: judged against the spread between development runs
+
+* **Reference side:** the same five Phase 3 systems (A9.1) scored on the development
+  **day** paired frames in `clean/clean`, split into two groups fixed now: **pohang00**
+  (836 frames) and **pohang02 + pohang03 pooled** (364 frames). pohang03 is not scored on
+  its own — its 117 frames give too wide an interval to serve as a reference, and this
+  pooling matches `TEST_RUNS`. pohang01 is excluded because it is entirely night and
+  pohang04 is day (§7.1).
+* **Reference value:** `AP_ref` is the **lower** of the two groups' seed-mean APs, chosen on
+  their observed values and then held fixed for the interval (not re-minimised per
+  resample).
+* **HOLDOUT-GAP is declared iff both:**
+  1. `AP_ref − AP_p04 ≥ 0.0060`, the §8 floor; **and**
+  2. the 95% interval of `AP_ref − AP_p04` lies entirely above zero. The two sides are
+     independent frame sets, so the interval is **unpaired**: independent block bootstraps
+     (L = 20, n_boot = 1000, bootstrap seeds 0 and 1) of each side, differenced replicate
+     by replicate, percentile CI.
+* **Otherwise the outcome is NO-GAP.** A pohang04 score above the higher development group
+  by more than the floor, with its CI clear of zero, is **reported as "above development"
+  and carries no declared outcome** — §9 names no such outcome, and one is not added
+  after the look.
+* **Counts at §8's four floors** (0.0014, 0.0031, 0.0060, 0.0100) are reported, with the
+  verdict taken at 0.0060.
+* **The development reference is computed and committed before the freeze commit.** It
+  reads no pohang04 frame, so computing it does not touch the holdout. Its value is fixed
+  when the look runs.
+* **Why this rule, recorded because it was debated:** on the pre-Phase-3 checkpoints the
+  two development groups already differ by 0.033 on clean. Under §8's paired rule against
+  a single development number, an ordinary run would likely have been declared a gap.
+  Anchoring to the weaker development run tests whether pohang04 is worse than **run-to-run
+  variation already observed**, which is the question a single held-out run can answer. It
+  still fires if pohang04 falls clearly below every development run.
+
+### A9.4 — day/night composition
+
+* **Rule:** each built pair is classified by **solar elevation** at the stereo frame's
+  capture time, computed from `meta/pohang04/timestamps/stereo.txt` and the nearest
+  `navigation/gps.txt` fix. **Day: elevation > 0°. Anything else joins a separate night
+  cell.**
+* **Clock basis, verified:** both files carry Unix-epoch seconds in UTC. The GPS
+  time-of-day column agrees (epoch 1626412359.147 = 05:12:39 UTC, GPS field `51239.00`).
+  The position is ≈ 36.02° N, 129.38° E. No timezone conversion is involved.
+* **Cross-check, recorded and not reconciled:** the shipped IR night flag
+  (`ir_p05 > 41.5`) is computed on the same pairs, and the number of frames where it
+  disagrees with the solar rule is reported. The solar rule decides; no frame is
+  re-labelled by hand.
+* **A night cell, if one exists,** is scored and reported descriptively under A9.1–A9.2.
+  It has no development reference (A9.3 is day-only) and carries no verdict.
+* The composition is measured and committed **before the freeze**, as §7.1 requires. It
+  uses metadata only.
+
+### A9.5 — the order of work from here
+
+1. Transfer and convert the pohang04 IR frames (A2.2); build `pohang04_pairs.csv` (A8.4);
+   record the pair count and composition (A9.4).
+2. Build the development-side clean caches for the five Phase 3 systems; compute and
+   commit `AP_ref` and the per-group values (A9.3).
+3. Build the 190 pohang04 caches (A9.2). **No cache is scored.** Building a prediction
+   cache runs inference, but reading AP from it is the look.
+4. **Freeze commit:** the scoring script, the label hash check (A8.3), the development
+   reference, every seed and draw, all committed.
+5. **The single look:** run once, report everything, and re-run nothing (§7.2).
