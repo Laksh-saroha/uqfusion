@@ -73,7 +73,8 @@ This project sits in that gap: a controlled maritime study of whether single-pas
 - pohang04 has **zero IR labels** — VIS-only contribution
 - pohang03 IR is sparse: **1,922 IR images vs 27,085 VIS** (measured 2026-09-10; the earlier “~13k VIS” does not reproduce from the current tree)
 - VIS↔IR pairing by nearest-neighbor timestamp within 50 ms (sensors not on same hardware trigger)
-- No spatial registration between VIS and IR — decision-level fusion (WBF on boxes) tolerates this
+- No spatial registration between VIS and IR. Decision-level fusion does **not** tolerate the residual: at the shipped `iou_thr` 0.85 only 0.05% of VIS boxes find an IR partner, so boxes are not merged across modalities at all; relaxing to 0.55 raises that to ~11% and costs AP (Stage 1 S1-NULL, [`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md))
+  - *Superseded wording (kept for audit):* “No spatial registration between VIS and IR — decision-level fusion (WBF on boxes) tolerates this”
 - Data tree organized as per-modality YOLO format with separate `data_vis.yaml` and `data_ir.yaml`
 
 **MIT Marine Perception dataset details:**
@@ -154,6 +155,15 @@ Per frame, per modality *m*:
 - **Fusion weights:** $w_m = \bar{R}_m / (\bar{R}_{\text{visible}} + \bar{R}_{\text{infrared}})$, fed into WBF.
 
 **Critical caveat:** every constant (λ, sigmoid μ_d/τ, α, the multiplicative form) is a **tunable design choice to be validated empirically** via ablation + calibration curves — not a settled formula. Both signals are only meaningful **after calibration on held-out data**; combining raw signals lets the larger numeric range dominate.
+
+**Status as measured, 2026-09-14 — the fusion is union aggregation, not consensus.** The formulas above describe the design; the shipped system (`crossmodal26m`) does something narrower, and three pre-registered or measured results pin down what:
+
+- **Weights:** capability prior alone — `w_vis` is one constant across all frames (R-D1, 2026-09-10). The Mahalanobis and box-uncertainty terms do not reach the weight.
+- **Selection:** a stream is dropped per frame by an image-statistic veto (IR says night AND VIS is dark or veiled); a frame with one surviving stream returns that stream.
+- **Merging:** at `iou_thr` 0.85, 0.05% of VIS boxes have an IR partner, so the surviving streams are **concatenated**, with a cross-modal score bonus at IoU 0.30 that never moves a coordinate. Sensor *agreement* is not what the fusion measures.
+- **Stage 1 (Phase 3 prereg §4) closed the obvious repair.** Relaxing correspondence to 0.55 while letting σ arbitrate the merges it creates is non-inferior to the shipped system on 1 of 4 conditions (3 required). σ changes the fused boxes on nearly every frame and moves AP by ≤0.0003. **Declared S1-NULL; the correspondence question is closed permanently** — no lower threshold, no re-opening without a new pre-registration. Record: [`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md).
+
+Describe the method as *image-statistic sensor selection with union aggregation of detections*. “WBF weighted by R” (the §6.1 diagram) is the design that was tested, not the one that ships.
 
 ---
 
@@ -351,7 +361,7 @@ $$\text{ECE} = \sum_m \frac{|B_m|}{n} \cdot |\text{accuracy}(B_m) - \text{confid
 | MIT dataset needs annotation processing | Raw sensor data may not have detection-ready labels | Extract and convert to YOLO format; QA with FiftyOne |
 | Pohang Canal IR coverage varies per run | pohang04 has zero IR labels; pohang03 IR is sparse | Disclose in manuscript; do not hide distribution skew |
 | Small datasets → unstable variances | UQ can overfit on little data | Augmentation; report variance across seeds |
-| Modality registration imperfect | VIS and IR not on same hardware trigger | Fuse at the decision level (WBF), which tolerates misalignment |
+| Modality registration imperfect | VIS and IR not on same hardware trigger; 3–6 px median residual | **Mitigation failed as stated** (was: “fuse at the decision level (WBF), which tolerates misalignment”). Decision-level fusion avoids the residual by almost never merging across modalities (0.05% partner rate at 0.85); relaxing the threshold costs AP, and σ-arbitrated merging does not recover it (S1-NULL, 2026-09-14). Disclose as union aggregation |
 | Correlated degradation of both sensors | Independence assumption breaks (7.4) | Add both-degraded test row; caveat the reliability combination |
 
 ---
@@ -389,7 +399,8 @@ $$\text{ECE} = \sum_m \frac{|B_m|}{n} \cdot |\text{accuracy}(B_m) - \text{confid
 
 ## 17. Assumptions and Limitations
 
-- **Data pairing:** visible and infrared streams are treated as observing the same scene; where datasets provide unregistered or separately captured modalities, the fusion is at the decision level, which tolerates imperfect spatial registration.
+- **Data pairing:** visible and infrared streams are treated as observing the same scene, paired by nearest timestamp. Decision-level fusion does **not** absorb the resulting registration residual; at this registration quality the fusion aggregates the two streams' detections rather than combining agreeing ones, and a σ-arbitrated relaxed-correspondence alternative was pre-registered and returned S1-NULL (2026-09-14). Any claim about cross-modal *agreement* is out of reach of this system.
+  - *Superseded wording (kept for audit):* “where datasets provide unregistered or separately captured modalities, the fusion is at the decision level, which tolerates imperfect spatial registration.”
 - **Pohang Canal IR gaps:** pohang04 has zero IR labels, pohang03 is sparse — disclosed and not hidden.
 - **MIT dataset annotation status:** may require annotation processing to convert raw sensor data into YOLO-format detection labels.
 - **Adverse conditions are simulated:** fog, glare, and rain are introduced synthetically; results establish the method's behavior under controlled degradation rather than field-collected extreme weather.

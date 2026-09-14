@@ -858,3 +858,54 @@ the **Stage 2** checkpoints in any case — the clean list alone would not have 
 checkpoint set a §6 arm or the §7 look is scored on — per-seed scoring then aggregation,
 or a single designated seed. It must be registered **without** reference to any
 seed's benchmark score, or it becomes checkpoint selection on development data.
+
+---
+
+## Amendment 7 — 2026-09-14, Stage 1 returned S1-NULL; §6 is not run
+
+Appended per §11, **after Stage 1 ran and before any pohang04 frame is scored.** Records an
+outcome declared in §9, and the consequences §4.4 fixed in advance. No rule, threshold or
+floor changes.
+
+### A7.1 — the result
+
+`scripts/stage1_crossing.py` at `6863508` (clean tree), report
+`runs/eval/stage1_crossing_2026-09-14.md`, record
+[`stage1-s1-null-2026-09-14.md`](stage1-s1-null-2026-09-14.md). D is non-inferior to A on
+**1 of 4** conditions on `TUNE_RUNS` (0/4 at 0.0014 and 0.0031, 1/4 at 0.0060 and 0.0100);
+§4.3 required 3. The interaction (D − C) − (B − A) is within [−0.0002, +0.0004] everywhere,
+every CI spanning zero. **Declared outcome: S1-NULL.**
+
+### A7.2 — how §4.3 was read, fixed before the run
+
+Committed in the script's docstring at `6863508`, ahead of any number, and restated here so
+the reading sits with the rule:
+
+* "non-inferior with the §8 block-bootstrap CI" = the **upper** 95% CI bound of
+  AP(A) − AP(D) below 0.0060;
+* the four conditions = `DEFAULT_CONDITIONS` (clean, fog, lowlight, glare);
+* ship AP (`cls` 0), preset `crossmodal26m`, `runs/cache_m`;
+* the §6 `w_vis` gate is reported, not applied, because `sigma_weighted` moves fused
+  coordinates rather than `w_vis`; the frames whose fused output differs are counted
+  instead.
+
+Under the looser point-estimate reading (AP(A) − AP(D) < 0.0060, no CI) the count is
+still 1 of 4, so the verdict does not turn on the reading.
+
+### A7.3 — consequences, as §4.4 and §9 declared them
+
+1. **§6 does not run as designed.** No arm S0–S8 is scored under a repaired correspondence
+   rule; none was adopted.
+2. **The correspondence question is closed permanently** (§2 b′). No threshold below 0.55
+   and no re-opening at a looser one without a new pre-registration.
+3. **The fusion is documented as union aggregation, not consensus** — `scope.md` carries
+   the change as status notes with the superseded wording kept.
+4. **Phase 3 narrows to §5 and §7.** §5 is complete (Amendment 6). What remains is §7.1's
+   pohang04 thermal annotation — or an amendment scoping it, which must be written before
+   any pohang04 number exists — and then §7.2's single look.
+
+### A7.4 — what carries over unchanged
+
+A6.4's open item still binds, now for §7 alone: **how five seeds become the checkpoint set
+scored on pohang04** must be registered without reference to any seed's score before the
+look. §7.2 is untouched.
