@@ -18,6 +18,15 @@ directly, with the same `cv2.imread` -> `make_corruption(kind, sev, seed)(im, in
 gray -> content-rows crop as those scripts and `build_cache` use. One image read and one
 corruption replay serve both statistics.
 
+**Run it with the repo `.venv` interpreter** (numpy 2.4.6, opencv 5.0.0), not the GPU
+interpreter. The development files were written under `.venv`, and under the GPU
+interpreter (numpy 2.1.3, opencv 4.10) the float32 accumulations — `mean`, `std`,
+`lap_var`, `lap_over_var`, `grad_mean`, `tile_std_p50`, `spec_slope` — come out different
+by up to 4.4e-7 relative, while the histogram statistics (`p05`/`p50`/`p95`, `frac_dark`)
+match exactly. Measured 2026-09-14 when the equivalence check below refused the GPU
+interpreter. Under `.venv` the same check passes bit-exactly, so pohang04 and the
+development runs are measured by the same arithmetic.
+
 Output: `runs/holdout_p04/derived/{brightness,structure}/{clean|draw{v}_{v+10}}/<stem>.json`,
 in the exact payload format of the development files. Written to `.tmp`, then renamed; an
 existing file is skipped only when its corruption, severity, seed and frame count match.
@@ -135,6 +144,7 @@ def main() -> int:
             payload = {"cache": f"runs/holdout_p04/caches/seed*/{s['sub']}/{s['stem']}.pkl",
                        "modality": s["mod"], "content_rows": list(rows), "corrupt": s["kind"],
                        "severity": s["sev"], "corrupt_seed": s["seed"], "n_frames": len(frames),
+                       "numpy": np.__version__, "opencv": cv2.__version__,
                        "frames": frames}
             tmp = p.with_suffix(".json.tmp")
             tmp.write_text(json.dumps(payload), encoding="utf-8")
