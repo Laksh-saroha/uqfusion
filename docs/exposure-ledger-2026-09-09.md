@@ -180,3 +180,12 @@ from the detector" are different claims and only the first is true.
 
   **The fix this points at:** a config block must record every value that changes the
   system, not the preset *name*, since a preset name is a moving target. That is R-E1.
+
+## 7. Exposure events, logged when they run
+
+* **2026-09-14 — Phase 3 Stage 1, the correspondence × mechanism crossing**
+  (`prereg-phase3-retrain-2026-09-10.md` §4, `scripts/stage1_crossing.py`). Preset
+  `crossmodal26m`, `runs/cache_m`, `iou_thr` ∈ {0.85, 0.55} × `sigma_weighted` ∈ {off, on}.
+  Decided on `TUNE_RUNS` (pohang00); reported on `TEST_RUNS` (pohang02+03) and on night
+  (pohang01). Adds one further inspection of all four runs. **No pohang04 frame is scored.**
+  Logged before the run, per §4.3.
