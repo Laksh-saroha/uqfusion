@@ -1,6 +1,8 @@
 # uqfusion — Uncertainty-Aware VIS–IR Fusion for Maritime Object Detection
 
-Maritime object detector that estimates, in a single forward pass, how much its own predictions can be trusted — and uses that per-frame reliability to adaptively fuse visible (RGB) and thermal-infrared imagery, down-weighting whichever sensor is degraded by fog, glare, darkness, or thermal crossover.
+Maritime object detection on paired visible (RGB) and thermal-infrared video (Pohang). Each detector carries a single-pass Gaussian σ² head, and a decision layer combines the two streams: a **sensor-selection gate driven by image statistics** (IR brightness, VIS darkness and gradient structure) drops a degraded stream, and the surviving detections are merged by **union aggregation**.
+
+> **What the shipped system is not.** The original pitch — fusion weights set by live per-frame uncertainty — is not what the code does, and the project has measured that rather than assumed it. Under the shipped preset (`crossmodal26m`) the VIS weight is a constant 0.9930 on every frame; real σ does not beat shuffled σ in the fusion at any floor ([`docs/uq-mechanism-2026-09-10.md`](docs/uq-mechanism-2026-09-10.md)); letting σ arbitrate merges does not recover what relaxed correspondence costs ([`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md)). "VIS–IR fusion is static" is also false as a literature claim ([`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md)). `scope.md` §1–§2 predate these findings.
 
 UG Research Fellowship project, Thapar Institute of Engineering and Technology (Laksh Saroha; mentor Dr. Sandeep Mandia).
 
@@ -9,6 +11,19 @@ UG Research Fellowship project, Thapar Institute of Engineering and Technology (
 - [`docs/plan-2026-07-07-kickoff.md`](docs/plan-2026-07-07-kickoff.md) — approved architecture review + backbone selection plan.
 - [`progress.md`](progress.md) — current phase, decision log, open questions, run log.
 - [`HOW_TO_RUN.md`](HOW_TO_RUN.md) — **per-phase runbook**: exact commands for every phase, dev machine and GPU server.
+
+## Where the project stands (2026-09-14)
+
+The project had never had a run-disjoint evaluation set. The Phase 3 retrain, pre-registered in [`docs/prereg-phase3-retrain-2026-09-10.md`](docs/prereg-phase3-retrain-2026-09-10.md) with Amendments 1–9, holds **pohang04** out of training and scores it **exactly once**.
+
+| Stage | State |
+|---|---|
+| 0 — gates (label reconciliation, holdout-free splits, contamination audit) | closed 2026-09-10 |
+| 1 — correspondence × σ-mechanism crossing | **S1-NULL**, 2026-09-14; Stage 3 does not run |
+| 2 — retrain, 5 VIS + 5 IR seeds without pohang04 | done 2026-09-14 (`runs/phase3_stage2/`) |
+| 4 — the pohang04 look | inputs building: 12,482 day pairs, 190 caches, 76 statistic files; **not frozen, not scored** |
+
+The look reports the fused score only, against the VIS labels (Amendment 8). The verdict is on clean/clean, seed mean over VIS k + IR k. The reference AP is the weaker development group, pohang02+03 at 0.2898 (Amendment 9). Before scoring, `scripts/holdout_p04_look.py` checks that HEAD is a `FREEZE` commit and that every input matches the hashes in [`docs/holdout-p04-freeze-2026-09-14.md`](docs/holdout-p04-freeze-2026-09-14.md). It also refuses a second run.
 
 ## Repository layout
 
@@ -63,9 +78,10 @@ data/
 │   ├── data_ir.yaml             # Ultralytics dataset yaml — infrared stream
 │   └── <per-modality YOLO-format images/ and labels/ trees, as referenced
 │        by the two yamls; runs pohang00–pohang04>
-└── mit_marine/                  # MIT Sea Grant Marine Perception (onboarded Phase 2+)
-    └── <YOLO-format tree after annotation conversion; yamls added then>
+└── mit_marine/                  # planned in scope.md; NOT present (see below)
 ```
+
+**The project is Pohang-only.** MIT Marine Perception, MassMIND and SMD have no code references and no data on disk; measured Pohang counts are in `scripts/verify_dataset_claims.py`'s output.
 
 The contract the code relies on: `data_vis.yaml` and `data_ir.yaml` exist, are valid Ultralytics dataset files, and point at their own modality's images/labels within `data/pohang/`. The exact inner tree follows the PoLaRIS release and is confirmed against the actual download (progress.md, open question A1-2). Labels are YOLO `.txt` (`class cx cy w h`, normalized); classes: `ship`, `buoy`.
 
@@ -160,7 +176,10 @@ resume logic refuses a mismatch instead of skipping it.
 
 ## Compute model
 
-This repo is developed and smoke-tested on CPU; **all real training runs on a GPU Jupyter server** (H100). Phase 1's first GPU action is a 1-epoch timing dry-run to calibrate the benchmark budget before committing the full grid (plan §C5).
+Two machines, and `config.yaml` is the only thing that differs between them:
+
+- **Laptop, RTX 4080 12 GB** — all of Phase 3 trains here (Amendment 3). Use the system Python 3.13 set as `gpu_python`; the repo `.venv` has CPU-only torch. The `.venv` is still what the frame-statistics scripts run under, because the development statistic files reproduce bit-exactly only with its numpy/opencv.
+- **dgxanode01, A100 MIG 3g.40gb** — Jupyter-only, ~1.23× the laptop. It ran the Phase 1 grid and is not used in Phase 3.
 
 ## Phase 1 — backbone benchmark
 
@@ -184,7 +203,9 @@ python scripts/smoke_gaussian.py      # §18-2 gate: trains, warm-up engages, σ
 python scripts/smoke_uq_pipeline.py   # OOD separation -> reliability gate -> WBF fusion, end-to-end
 ```
 
-## Phase 3 — baselines + evaluation harness
+## Phase 3 (original plan) — baselines + evaluation harness
+
+*The kickoff plan's Phase 3. The 2026-09 "Phase 3 retrain" above is a separate, pre-registered study that uses this harness.*
 
 `src/uqfusion/uq/`: `mc_dropout.py` (pre-fixed dropout insertion + T-pass predictor), `ensemble.py` (M seed replicates via the grid runner), `clustering.py` (the one shared cross-pass matching protocol). `src/uqfusion/eval/`: `cache.py` (prediction caches — every downstream number reads from these), `corruptions.py` (6 albumentations conditions, seed-stamped), `metrics.py` (pre-registered: D-ECE, interval-ECE/coverage, NLL, AUSE/AURC, OOD AUROC, local COCO mAP), `learned_gate.py` (§7.5 upper bound), `fusion_eval.py` (system comparison + §6.4 gate ablations). CLIs: `train_mc_dropout` / `train_ensemble` / `build_cache` / `evaluate_uq` / `ablate_gate`.
 

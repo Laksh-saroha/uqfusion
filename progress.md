@@ -2,12 +2,62 @@
 
 > Purpose: a cold read of this file (plus `scope.md` and `docs/plan-2026-07-07-kickoff.md`) must reconstruct where the project stands without re-deriving anything. Updated at every phase boundary and every non-trivial decision.
 
-**Last updated:** 2026-09-04 (**The night-veto axis is CLOSED after three pre-registered attempts, and the veto stands unchanged.** V1 (remove it), V2 (gate on VIS health), V3 (health as sole authority) all ran; none adopted. The durable account is [`docs/night-veto-axis-closed-2026-09-04.md`](docs/night-veto-axis-closed-2026-09-04.md) -- the `runs/eval/` reports are untracked. **The real finding is not the rule:** on a night-capable detector, removing the veto is worth **+0.1785** on a clean night cell (0.0850 -> 0.2635, 33x the floor), but the same change costs **-0.0737** when VIS is fogged. The veto gates on DARKNESS; what predicts whether VIS should be dropped is VIS HEALTH. **The open question is the detector, not the gate** -- priced in [`docs/rebaseline-proposal-2026-09-04.md`](docs/rebaseline-proposal-2026-09-04.md). Prior update 2026-09-03 (**The night labels were the bug.** VIS was never blind at night, it was untrained there: restoring the boxes `filter_night_boxes.py --cut-dark` deleted takes night VIS **0.0000 -> 0.2520** ([`docs/experiment-log-2026-09-02.md`](docs/experiment-log-2026-09-02.md) 7.2). `veto_vis` fires on 100% of night frames on a justification that no longer holds, so **every night fusion cell in this project is `ir_only` vs `ir_only`** and is uninformative about fusion. Two pre-registrations were written before touching anything: [`docs/prereg-uq-day-night-slice.md`](docs/prereg-uq-day-night-slice.md) (`a4f9364`) and [`docs/prereg-night-veto.md`](docs/prereg-night-veto.md) (`5761e9f`). Prior update 2026-08-20 (**Architecture finalized for full-scale training** — [`docs/architecture-final-2026-08-20.md`](docs/architecture-final-2026-08-20.md), decisions D27–D30. The 2026-08-19/20 fusion screening rounds are recorded in [`docs/fusion-gate-experiment-record.md`](docs/fusion-gate-experiment-record.md) + [`docs/followup-analysis-2026-08-20.md`](docs/followup-analysis-2026-08-20.md): the night-fusion claim is retired, the system reframes as **sensor selection** — capability-weighted WBF + hard photometric veto with dilate-15 hysteresis; IR full-scale recipe = `yolo26s-p2feat` @640. Prior update 2026-08-17: Phase 1 benchmark grid **COMPLETE, audited and consolidated** — 93 rows across two campaigns in `phase1_benchmark/results.csv`; repo cleanup: `main` fast-forwarded to the phase-1 record branch, 8.6 GB of verified-redundant archives removed, the two dated Phase 1 handoffs folded into `docs/phase1-experimental-record.md`)
-**Current phase:** Phase 1 — **GPU portion COMPLETE**; Table 1 selection memo is the remaining deliverable. Phase 3's CPU-verifiable portion is also COMPLETE with the smoke gate GREEN (`scripts/smoke_phase3.py`; see Run log) — MC-Dropout, Deep Ensembles, prediction caches, corruption generation, the pre-registered calibration suite, learned gate and the gate-ablation sweep are all implemented, and the three eval CLIs are verified. **`HOW_TO_RUN.md` is the canonical per-phase runbook.**
+**Last updated:** 2026-09-14 (**Phase 3 retrain: Stages 0–2 closed. The pohang04 single look is being prepared, not taken.** The prereg is [`docs/prereg-phase3-retrain-2026-09-10.md`](docs/prereg-phase3-retrain-2026-09-10.md), Amendments 1–9. Stage 2 trained 5 VIS + 5 IR seeds without pohang04. Stage 1 returned **S1-NULL**: σ-arbitrated merging is non-inferior on 1 of 4 conditions, so the correspondence question is closed and Stage 3 does not run ([`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md)). The look's rules were all fixed before any pohang04 score existed. Its inputs are building now, and the freeze procedure is [`docs/holdout-p04-freeze-2026-09-14.md`](docs/holdout-p04-freeze-2026-09-14.md). Prior update 2026-09-10: the UQ mechanism is NULL (constant `w_vis` 0.9930; real σ does not beat shuffled σ), the novelty claim is retired, and the project is Pohang-only. Prior update 2026-09-04 (**The night-veto axis is CLOSED after three pre-registered attempts, and the veto stands unchanged.** V1 (remove it), V2 (gate on VIS health), V3 (health as sole authority) all ran; none adopted. The durable account is [`docs/night-veto-axis-closed-2026-09-04.md`](docs/night-veto-axis-closed-2026-09-04.md) -- the `runs/eval/` reports are untracked. **The real finding is not the rule:** on a night-capable detector, removing the veto is worth **+0.1785** on a clean night cell (0.0850 -> 0.2635, 33x the floor), but the same change costs **-0.0737** when VIS is fogged. The veto gates on DARKNESS; what predicts whether VIS should be dropped is VIS HEALTH. **The open question is the detector, not the gate** -- priced in [`docs/rebaseline-proposal-2026-09-04.md`](docs/rebaseline-proposal-2026-09-04.md). Prior update 2026-09-03 (**The night labels were the bug.** VIS was never blind at night, it was untrained there: restoring the boxes `filter_night_boxes.py --cut-dark` deleted takes night VIS **0.0000 -> 0.2520** ([`docs/experiment-log-2026-09-02.md`](docs/experiment-log-2026-09-02.md) 7.2). `veto_vis` fires on 100% of night frames on a justification that no longer holds, so **every night fusion cell in this project is `ir_only` vs `ir_only`** and is uninformative about fusion. Two pre-registrations were written before touching anything: [`docs/prereg-uq-day-night-slice.md`](docs/prereg-uq-day-night-slice.md) (`a4f9364`) and [`docs/prereg-night-veto.md`](docs/prereg-night-veto.md) (`5761e9f`). Prior update 2026-08-20 (**Architecture finalized for full-scale training** — [`docs/architecture-final-2026-08-20.md`](docs/architecture-final-2026-08-20.md), decisions D27–D30. The 2026-08-19/20 fusion screening rounds are recorded in [`docs/fusion-gate-experiment-record.md`](docs/fusion-gate-experiment-record.md) + [`docs/followup-analysis-2026-08-20.md`](docs/followup-analysis-2026-08-20.md): the night-fusion claim is retired, the system reframes as **sensor selection** — capability-weighted WBF + hard photometric veto with dilate-15 hysteresis; IR full-scale recipe = `yolo26s-p2feat` @640. Prior update 2026-08-17: Phase 1 benchmark grid **COMPLETE, audited and consolidated** — 93 rows across two campaigns in `phase1_benchmark/results.csv`; repo cleanup: `main` fast-forwarded to the phase-1 record branch, 8.6 GB of verified-redundant archives removed, the two dated Phase 1 handoffs folded into `docs/phase1-experimental-record.md`)
+**Current phase:** **Phase 3 retrain, Stage 4: building the pohang04 look's inputs** (190 caches in 3 parallel shards, 76 frame-statistic files). Next are the freeze manifest and a `FREEZE` commit. After that comes the single look, **run only on Laksh's explicit instruction**. Everything runs on the laptop. *(Superseded line, kept for history: "Phase 1 — GPU portion COMPLETE; Table 1 selection memo is the remaining deliverable. Phase 3's CPU-verifiable portion is also COMPLETE with the smoke gate GREEN." That "Phase 3" is the kickoff plan's harness phase, not the retrain.)* **`HOW_TO_RUN.md` is the canonical per-phase runbook.**
 **Phase 2 — CPU portion COMPLETE** (commit `e75c110`): O2→O3→O4 chain green on both gates; server-side remainder = real-data run + §12.1 parity check + real homography (OQ-5).
 **Backbone selected 2026-08-17: `yolo26m`, trained on the full-resolution twin (D25).** Because YOLO26 is end2end with `reg_max=1`, the σ² head needed a port — **done and gated (D26)**; the σ path now supports both head families, so §7.2 (OQ-10) can still be answered either way. **The remaining blockers are decisions, not code:** OQ-10 (§7.2), OQ-11 (`imgsz`), OQ-12 (host + ensemble budget).
 **Phase 1 — COMPLETE** (grid finished 2026-08-17, `cc686ee`). 9 variants × 3 seeds on the `main` split plus 66 merged `pilot` rows = 31 variants. **The headline is negative and that is the result:** the top eight variants span 0.0055 mAP50-95 and `yolo26x`'s 0.0016 lead is below its own seed sd — not separable. The one robust finding is the capacity floor (every n/t-scale model 0.2486–0.2567). Two defects dominate the methods section: ultralytics 8.4.7 reports mAP ~0.034 higher than 8.4.90 for identical weights, and a shared run directory collided two `yolo12x` processes. **Full account: [`docs/phase1-experimental-record.md`](docs/phase1-experimental-record.md).** Still open before publication: `yolo12x` seed 1 is inadmissible and unreproducible (~17.5 h to retrain), and `yolo26m` seed 0 is the lone 8.4.7-trained row.
 **Phase 0 — COMPLETE** (commit `ffbe87f`): repo, pinned env, portable config, docs.
+**Sessions 2026-09-10 → 2026-09-14 — Phase 3 retrain, seven things a cold reader must know:**
+1. **The project's claims were narrowed before the retrain, by measurement.** R-D1
+   ([`docs/uq-mechanism-2026-09-10.md`](docs/uq-mechanism-2026-09-10.md)): under
+   `crossmodal26m` `w_vis` is a constant 0.9930, and real σ does not beat shuffled σ at any
+   floor. "VIS–IR fusion is static" is false against UA-CMDet 2022 and DICTA 2024
+   ([`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md)). MIT, MassMIND and
+   SMD are absent, so the project is Pohang-only. What remains is image-statistic sensor
+   selection.
+2. **Why retrain: there was no run-disjoint evaluation set.** `FIT_RUNS` only excluded
+   pohang01, which is all night. The retrain holds **pohang04** out of training entirely,
+   and §7.2 allows exactly one look at it. The Stage 0 audit found pohang04 frames inside the
+   shipped Mahalanobis reference caches (`6c0af91`). Clean replacements are
+   `runs/cache_p3/seed{k}/`.
+3. **Stage 2 is done: 5 VIS + 5 IR seeds** in `runs/phase3_stage2/`, trained on the laptop
+   (Amendment 3) at batch 12. `p3_ir_seed3` diverged and was **rerun**, per the rule that an
+   alarm-stopped run is rerun (Amendment 6). `run_queue.py --redo` no longer inherits the
+   dead run's alarm, and `runner.lock` stops two runners attaching after a reboot (`027afde`).
+4. **Stage 1 is S1-NULL** (`89da5d6`, Amendment 7). Non-inferiority held on 1 of 4
+   conditions, at every floor. `sigma_weighted` changes the fused output on 836 of 836 frames
+   and moves AP by −0.0002. Correspondence is closed for good, and the fusion is union
+   aggregation.
+5. **The look's rules were fixed before any pohang04 number existed.** Amendment 8: fused
+   score only, against VIS labels (hash `c06611a684f4`), no thermal annotation. Amendment 9:
+   - A9.1: VIS seed k + IR seed k, headline = seed mean;
+   - A9.2: all 11 cells are reported, the verdict is on clean/clean, draws VIS 941–944 and
+     IR 951–954;
+   - A9.3: HOLDOUT-GAP iff AP_ref − AP_p04 ≥ 0.0060 with the unpaired CI above zero, where
+     AP_ref is the *weaker* development group;
+   - A9.4: day = solar elevation > 0°.
+
+   On the threshold, Laksh first asked for whatever "looks good". The pushback was that a
+   threshold picked for that before the look can never fire. Option C was then adopted on its
+   merits.
+6. **What the prep measured:**
+   - pohang04 IR is in the tree: 22,235 frames, conversion re-verified bit-exact.
+   - **12,482 pairs, all day** (elevation 56–63°). An earlier count of 27 "night" frames came
+     from GPS no-fix rows at (0, 0).
+   - The IR night flag fires on 505 of those day pairs (4%). This is recorded, not tuned.
+   - Development reference (`ca83dde`): pohang00 0.3955, **pohang02+03 0.2898 = AP_ref**. The
+     gap between the two groups is 0.1057, and nothing is claimed from it (A4.4).
+7. **How the look is protected** (`65d3233`, `c3255bf`):
+   - `runs/` is git-ignored, so the freeze is a committed sha256 manifest of the 316 files the
+     look reads.
+   - `holdout_p04_look.py` refuses unless: HEAD is a `FREEZE` commit with a clean tree; every
+     hash matches; labels and inputs verify; the dev reference reproduces exactly; and no
+     `LOOK_TAKEN.json` exists.
+   - Its selftest reproduced Stage 1 clean/clean to the last digit (0.3894193201201913).
+   - Frame statistics must run under `.venv`. Under the GPU interpreter, float32 sums differ by
+     up to 4.4e-7.
+
 **Session 2026-09-04 — five things a cold reader must know:**
 1. **The night veto stands, and the axis is closed by a registered stop rule.** Three
    registrations ran in one day: [`docs/prereg-night-veto.md`](docs/prereg-night-veto.md)
@@ -134,6 +184,11 @@
 | `docs/architecture-final-2026-08-20.md` | **The frozen full-scale architecture** (D27–D30), pending gates, baseline policy, publication framing |
 | `docs/TODO-2026-08-20-full-scale.md` | **The current TODO list** — launch blockers, pre-publication checks, the training matrix, integrity items. Supersedes `TODO-improvements.md` |
 | `archive/phase1/README.md` | What survives of the two server pulls, and why each file is kept |
+| `docs/prereg-phase3-retrain-2026-09-10.md` | **The Phase 3 retrain pre-registration**, Amendments 1–9 (append-only). Read before touching pohang04 |
+| `docs/handoff-2026-09-11-stage2.md` | Stage 0 gates and the first half of Stage 2, written to be picked up cold |
+| `docs/stage1-s1-null-2026-09-14.md` | Stage 1 verdict and what it forecloses |
+| `docs/holdout-p04-freeze-2026-09-14.md` | What the freeze hashes, the readiness gate, the exact freeze and look commands |
+| `docs/exposure-ledger-2026-09-09.md` | Every time a held-out or test number was seen |
 
 ## Working agreement (from kickoff, 2026-07-07)
 
@@ -261,6 +316,14 @@ Also: one-phase-at-a-time with explicit per-phase go-ahead restated (D11 overlap
 ## Next actions
 
 **The canonical runbook is now [`HOW_TO_RUN.md`](HOW_TO_RUN.md)** — per-phase commands for the server, verified locally.
+
+**Immediate, 2026-09-14 — the pohang04 look, in order:**
+1. **Let the builds finish.** There are 3 cache shards: `runs/holdout_p04/caches/build.shard{0,1,2}of3.log`, each ending in done. Frame statistics are in `runs/holdout_p04/frame_stats.log`, ending in `[done]`. Fog and glare caches are CPU-bound and take much longer than the 10–12 min that blur and noise do. A silent log for 30+ min on those is normal, so check the CPU time of the `build_cache.py` process before calling it hung. Do not add shards; the CPU is already at 100%.
+2. **Write the manifest:** `python scripts/holdout_p04_freeze.py`, using the GPU interpreter with `PYTHONPATH=src`. It refuses until every input verifies. Use `--draft --out <scratch>` to see what is still missing.
+3. **Make the `FREEZE` commit** exactly as in [`docs/holdout-p04-freeze-2026-09-14.md`](docs/holdout-p04-freeze-2026-09-14.md).
+4. **The look, once, only when Laksh says so:** `python scripts/holdout_p04_look.py`. Then log the exposure in the ledger and write the verdict record.
+
+*The block below (H100 server runbook, 2026-09-09 items) is historical; the Phase 1 grid, the U2 slice and the VIS ensemble it describes are all finished.*
 
 **Laksh, on the H100 server, whenever server time happens:**
 1. Setup + full smoke suite (HOW_TO_RUN §0–§1; expect CUDA True and all five OK lines).
