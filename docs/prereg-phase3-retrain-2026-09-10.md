@@ -775,3 +775,86 @@ buys less than seven days of GPU.
 **If that comparison is later wanted on pohang04 it requires a new pre-registration**, the
 six runs above, and — because §7.2 permits one look — an explicit statement that the set is
 no longer held out.
+
+---
+
+## Amendment 6 — 2026-09-14, Stage 2 closes at 5 + 5 seeds; `p3_ir_seed3` was rerun
+
+Appended per §11, **after Stage 2 finished and before Stage 1 cell D, Stage 3 or any
+pohang04 frame.** It records a decision, a rerun's provenance, a bookkeeping bug that
+mislabelled that rerun, and the start of the Mahalanobis reference rebuild the
+contamination audit left open.
+
+### A6.1 — the decision, and when it was written down
+
+**`p3_ir_seed3` diverged, so it was rerun, and the rerun is the seed-3 checkpoint.** §5.2's
+five seeds per arm are met: IR 0–4 and VIS 0–4, all `done`.
+
+The operator's rule, stated as given: *a run the divergence alarm stops is rerun.* It
+applies on the alarm's verdict, not on a score, and the 2026-09-11 kill was checked
+against the documented 2026-08-26 false positive before it was accepted (handoff
+2026-09-11 §5).
+
+**Stated plainly because the handoff asked for it the other way round:** this amendment
+is written *after* the rerun finished, and the four surviving IR seeds' values were already
+tabulated in the 2026-09-11 handoff when the rerun was launched. The rerun was not
+selected on those values — rerunning was the only route back to the registered count, and
+the alternative (reporting 4 seeds) would have been the departure — but the written
+record post-dates the numbers, and that ordering is recorded rather than smoothed over.
+**What happens on a second divergence of the same seed is not registered here.**
+
+### A6.2 — the rerun's provenance
+
+| | |
+|---|---|
+| started | 2026-09-14 11:34:30, `run --only p3_ir_seed3 --redo`, **from epoch 0** (`resume=False`, pretrained `yolo26m.pt`) |
+| config | seed 3, batch 12, workers 8, `data_ir_shiponly_stride2.yaml` — identical to seeds 0–2, 4 |
+| labels | `train=fb97ca09db53 trainval=df9905302271` at start **and** end — the same bracket as every other IR seed (§5.3) |
+| interruption | host restart 14:00:15, initiated by `wmiprvse.exe`, not by any project script. Resumed from `last.pt` at **epoch 29** via Ultralytics' own resume path (optimizer and EMA intact — this was not a `trainer.stop` checkpoint) |
+| end | early stop at epoch 38; best epoch 18, mAP50-95 **0.13907** |
+
+**Two dips, neither an alarm.** Epochs 4–5 (0.0252, 0.0217) sit immediately after the
+3-epoch warmup. Epoch 29 — the first epoch after the resume — fell to 0.0394 (0.28× the
+0.1391 best) and recovered to 0.0997 the next epoch; the rule needs two consecutive epochs
+below 0.60×, and the alarm did not fire. That the one sub-0.60× epoch is the resume epoch
+is noted as a likely resume artifact, not demonstrated as one.
+
+Mid-run resumes are not unique to this seed: `p3_vis_seed0` resumed at epochs 4 and 29 and
+`p3_vis_seed1` at 15. No Stage 2 run is excluded or flagged for having resumed.
+
+### A6.3 — the bookkeeping bug that stamped the rerun "diverged"
+
+`run_queue.py` marks a run `diverged` whenever its state entry carries a
+`divergence_alarm`, and `--redo` never cleared the 2026-09-11 one. The healthy rerun was
+therefore logged `DIVERGED at epoch 6` — the *first* attempt's epoch. Corrected:
+
+* **state** — `p3_ir_seed3` set to `done` by hand; the first attempt's record (alarm,
+  start, finish) is kept under `superseded`, and its `DIVERGENCE-ALARM.txt` is renamed
+  `…-superseded-20260914.txt`. Backup: `state.json.bak-20260914-seed3fix`.
+* **code** — `--redo` on a terminal run now moves the previous record to `superseded` and
+  renames the alarm file before the new run starts.
+
+A second fault surfaced in the same window: after the 14:00 restart **two runners started
+13 s apart** on this queue. The second died on a locked label cache before training; had
+it not, both would have trained seed 3 into one directory. `run_queue.py run` now takes a
+per-queue `runner.lock` and refuses while a live `run_queue.py` holds it; a lock left by a
+dead process (crash, reboot, recycled PID) is taken over.
+
+Neither fault touched a checkpoint, a label, or a data list.
+
+### A6.4 — the Mahalanobis reference, rebuilt from Stage 2 checkpoints
+
+The audit's open half (`holdout-contamination-audit-2026-09-10.md` §3) is under way.
+Retraining changes the feature extractor, so the reference cache has to be rebuilt from
+the **Stage 2** checkpoints in any case — the clean list alone would not have been enough.
+
+* **VIS** from `runs/derived/maha_fit_vis_p04out.txt` (3,181 frames, 0 pohang04);
+  **IR** from `runs/derived/maha_fit_ir.txt` (4,000 frames, 0 pohang04), unchanged.
+* `conf 0.001`, imgsz 640 — the settings every existing `*_train_clean.pkl` was built with.
+* **All five seeds per arm**, to `runs/cache_p3/seed{N}/gauss_{vis,ir}_train_clean.pkl`.
+  No existing cache is overwritten (§11).
+
+**Not decided here, and required before Stage 3 runs:** how five seeds become the
+checkpoint set a §6 arm or the §7 look is scored on — per-seed scoring then aggregation,
+or a single designated seed. It must be registered **without** reference to any
+seed's benchmark score, or it becomes checkpoint selection on development data.

@@ -768,12 +768,61 @@ def wait_while_paused(state: dict) -> bool:
     return True
 
 
+def _runner_alive(pid: int) -> bool:
+    """True if `pid` is a live run_queue.py process. The cmdline check matters: after a
+    reboot Windows reuses PIDs, and a recycled one must not lock the queue forever."""
+    try:
+        import psutil
+    except ImportError:
+        return True  # cannot tell -> refuse; delete runner.lock by hand if it is stale
+    try:
+        return "run_queue.py" in " ".join(psutil.Process(pid).cmdline())
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return False
+
+
+def acquire_runner_lock() -> Path | None:
+    """One runner per queue directory. On 2026-09-14 two runners were started 13 s apart
+    after a reboot; the second died on a locked label cache, but had it got past that it
+    would have trained the same run into the same directory as the first. state.json's
+    "pid" cannot guard this -- it is written seconds after start and never cleared."""
+    lock = QUEUE_DIR / "runner.lock"
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                holder = int(lock.read_text(encoding="utf-8").strip() or 0)
+            except (OSError, ValueError):
+                holder = 0
+            if holder and _runner_alive(holder):
+                print(f"refusing to start: runner pid {holder} already works {QUEUE_DIR} "
+                      f"(delete {lock} only if that process is not a queue runner)")
+                return None
+            lock.unlink(missing_ok=True)  # stale: holder died (crash, reboot)
+            continue
+        with os.fdopen(fd, "w") as f:
+            f.write(str(os.getpid()))
+        return lock
+    return None
+
+
 def cmd_run(args) -> int:
     cfg = load_config(args.config)
     queue = read_json(QUEUE_JSON, None)
     if queue is None:
         print(f"no queue at {QUEUE_JSON} — run `python scripts/run_queue.py init` first.")
         return 1
+    lock = acquire_runner_lock()
+    if lock is None:
+        return 1
+    try:
+        return _cmd_run_locked(args, cfg, queue)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def _cmd_run_locked(args, cfg: dict, queue: dict) -> int:
 
     from uqfusion.uq.ensemble import train_ensemble_member
     from uqfusion.uq.mc_dropout import train_mc_dropout
@@ -861,6 +910,23 @@ def cmd_run(args) -> int:
                 log(f"=== {run_id}: REFUSED by gate\n{exc}")
                 i += 1
                 continue
+
+        # --redo starts a NEW run in the same slot, so the old run's verdict must not
+        # carry over. Before this, a redone p3_ir_seed3 (2026-09-14) trained healthily
+        # to early stop and was still stamped "DIVERGED at epoch 6": the check below
+        # reads rs["divergence_alarm"], and nothing had cleared the 2026-09-11 one.
+        # The old alarm is kept, moved aside, so the history is not lost.
+        if args.redo and rs.get("status") in TERMINAL:
+            old = {k: rs.pop(k) for k in ("status", "started", "finished", "divergence_alarm",
+                                          "best_weights", "run_dir", "error") if k in rs}
+            old["superseded"] = now()
+            rs.setdefault("superseded", []).append(old)
+            alarm_txt = (Path(cfg["paths"]["outputs_root"]) / queue.get("out_subdir", "phase2")
+                         / run_id / "DIVERGENCE-ALARM.txt")
+            if alarm_txt.is_file():
+                alarm_txt.rename(alarm_txt.with_name(
+                    f"DIVERGENCE-ALARM-superseded-{datetime.now():%Y%m%d-%H%M%S}.txt"))
+            log(f"=== {run_id}: --redo, previous {old.get('status')} record moved to 'superseded'")
 
         rs.update(status="running", started=rs.get("started") or now(), error=None)
         save_state(state)
