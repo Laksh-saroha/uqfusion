@@ -42,3 +42,6 @@ docs.backup-2026-09-08/
 # ad-hoc per-class validation probe
 scratch_val_perclass*.py
 scratch_val_perclass*.log
+
+# server dgxanode01 snapshot (workspace mirror, ~37 GB of weights/logs); see server_dgxanode01/README.md
+server_dgxanode01/
