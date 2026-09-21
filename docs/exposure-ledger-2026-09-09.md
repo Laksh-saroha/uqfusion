@@ -17,6 +17,7 @@ no future reader has to reconstruct it from logs.
 | `pohang01` | 1,032 | night | **development (held out of gate fits only)** | Excluded from `FIT_RUNS`, so no gate constant was fitted on it — but it has been reported on repeatedly, and every night verdict in the project is scored here. |
 | `pohang02` | 247 | day | **development** | Declared `TEST_RUNS` *after* exposure. See §2. |
 | `pohang03` | 117 | day | **development** | Declared `TEST_RUNS` *after* exposure. See §2. |
+| `pohang04` | 12,482 | day (solar-elevation rule, A9.4) | **held out → spent 2026-09-20** | The Phase 3 §7.2 single look, scored exactly once and never again. See §7. |
 
 `DEVELOPMENT_RUNS` in `src/uqfusion/eval/ctx.py` is now the union of the three day runs,
 and `sel("dev")` returns exactly those frames.
@@ -91,6 +92,12 @@ increasing order of honesty:
    inside the loop, and today they do not.
 3. Acquire or reserve a genuinely untouched release and freeze the corruption families,
    seeds, comparisons and stopping rule *before* looking at it.
+
+**Option 3 was taken, and it is now spent.** `pohang04` was reserved, its inputs frozen by
+hash in commit `85a07c1`, and its families, seeds, cells and stopping rule fixed in Amendments
+8 and 9 before any of it was scored. The look ran on 2026-09-20 (§7). That option is no longer
+available to this project: there is no second untouched release, and re-scoring `pohang04`
+would need a new pre-registration stating that it is no longer held out.
 
 **Do not describe night as held out from detector training.** `pohang01` is held out of the
 *gate* fits. D6-rev explicitly permits night training frames, and the VIS retrain of
@@ -189,3 +196,40 @@ from the detector" are different claims and only the first is true.
   Decided on `TUNE_RUNS` (pohang00); reported on `TEST_RUNS` (pohang02+03) and on night
   (pohang01). Adds one further inspection of all four runs. **No pohang04 frame is scored.**
   Logged before the run, per §4.3.
+
+* **2026-09-20 — Phase 3 §7.2, the pohang04 single look**
+  (`prereg-phase3-retrain-2026-09-10.md` §7.2 with Amendments 8 and 9,
+  `scripts/holdout_p04_look.py`, freeze commit `85a07c1`). Preset `crossmodal26m`,
+  `runs/cache_p3`, five Phase 3 systems (VIS seed *k* + IR seed *k*, *k* = 0..4), 11 cells,
+  VIS draws 941–944 with IR = VIS + 10. **12,482 pohang04 day pairs**, fused ship AP scored
+  against VIS ground truth only (A8 — there are no thermal labels). Ran 18.6 h; outputs
+  `docs/eval/holdout_p04_look.md` and `.json`, marker `runs/holdout_p04/LOOK_TAKEN.json`.
+
+  Verdict cell `clean/clean`, rule A9.3: **NO-GAP**.
+
+  | | |
+  |---|---:|
+  | `AP_ref` (pohang02+03, the **lower** development group) | 0.2898 |
+  | `AP_p04` (seed mean) | 0.2682 |
+  | D = `AP_ref` − `AP_p04` | **+0.0216** |
+  | D 95% CI (unpaired moving-block bootstrap, L = 20, n_boot = 1000, seed 1) | **[−0.0120, +0.0502]** |
+
+  **NO-GAP here does not mean no gap.** The point estimate clears every reported floor,
+  including 0.0100; the verdict is NO-GAP solely because the interval's lower bound is
+  below zero, which is the second conjunct of A9.3. All four `gap_by_floor` entries are
+  `false` for that one reason. The defensible statement is *"a gap of +0.0216 was observed;
+  the data exclude neither zero nor a gap as large as +0.05."* Writing it as "pohang04 shows
+  no generalization gap" repeats the R-F3 error (`project-ir-ladder-underpowered`), this time
+  into the paper. The interval is wide because it is unpaired and therefore carries run-level
+  variance: the two development groups differ from each other by **0.1057** (pohang00 0.3955
+  vs pohang02+03 0.2898), 4.9× the held-out gap. pohang04 falls just below the bottom of the
+  development range, not outside it. `above_development` is `false` (U = −0.1272 against
+  pohang00).
+
+  Logged **after** the run, necessarily and by design: the marker is created with `O_EXCL`
+  *before* scoring, so the exposure is incurred the instant the look starts, and a
+  before-the-fact entry could describe an event that then refused at one of the six gates.
+
+  **pohang04 is now spent.** Any further scoring of it — a different architecture, a new
+  cell, a re-run of this same command — is a second look and requires a new pre-registration
+  recording that the set is no longer held out.
