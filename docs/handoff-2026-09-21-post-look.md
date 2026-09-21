@@ -63,12 +63,19 @@ Only `clean/clean` carries a verdict (A9.2). The other ten are descriptive.
 
 ## 2. State of the repo
 
-HEAD is the commit that recorded all of this. The freeze commit `85a07c1` is its parent and
-**was not amended** — rewriting a freeze commit destroys the audit trail it exists to provide.
-Nothing has been pushed to `origin`.
+Branch `fusion-uq-phase3`. **Nothing has been pushed to `origin`** — all of this is local.
 
-Committed in this pass: the two look outputs, the marker, the ledger update, the superseded
-freeze handoff, this handoff, and `prereg-p2feat-vis-2026-09-20.md`.
+| commit | what |
+|---|---|
+| `6ce9a9b` | Mirror the look marker into `docs/eval` so it survives a rebuild of `runs/` (§3) |
+| `e0fc896` | The look itself: outputs, ledger update, both handoffs, the p2feat prereg |
+| `85a07c1` | FREEZE — the parent, **not amended**; rewriting a freeze commit destroys the audit trail it exists to provide |
+
+Working tree is clean apart from `local.md`, which is untracked on purpose.
+
+`e0fc896` is also where `handoff-2026-09-20-p04-freeze.md` finally entered the repo. It was
+written before the look and deliberately left uncommitted, because refusal 1 requires HEAD's
+subject to start with `FREEZE` and committing it would have moved HEAD off `85a07c1`.
 
 ---
 
