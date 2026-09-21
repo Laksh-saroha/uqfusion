@@ -74,11 +74,24 @@ freeze handoff, this handoff, and `prereg-p2feat-vis-2026-09-20.md`.
 
 ## 3. What is now impossible
 
-**pohang04 is spent.** `runs/holdout_p04/LOOK_TAKEN.json` exists with
-`numbers_written: true`. The script refuses on an existing marker, and §7.2 allows exactly
-one look. Scoring pohang04 again — a different architecture, a new cell, even a re-run of the
-identical command — is a **second look** and requires a new pre-registration that states
-plainly that the set is no longer held out.
+**pohang04 is spent.** The marker exists with `numbers_written: true`, and §7.2 allows
+exactly one look. Scoring pohang04 again — a different architecture, a new cell, even a
+re-run of the identical command — is a **second look** and requires a new pre-registration
+that states plainly that the set is no longer held out.
+
+The marker is kept in **two** places and the refusal reads both:
+
+| file | role |
+|---|---|
+| `runs/holdout_p04/LOOK_TAKEN.json` | created with `O_EXCL` *before* scoring, so a crash mid-look still spends the look. Not tracked — `runs/` is git-ignored. |
+| `docs/eval/holdout_p04_LOOK_TAKEN.json` | the tracked mirror, written after the numbers. |
+
+The mirror closes a real hole, not a hypothetical one. The caches under `runs/` are
+deterministically rebuildable and the rebuild procedure is documented, so with only the
+ignored marker it was possible to rebuild the tree, check out `85a07c1`, match all 316
+hashes, find no marker, and take a second look believing it was the first. That path now
+refuses. Verified by stubbing `check_freeze` and pointing `MARKER` at a nonexistent path:
+the refusal still fires, naming the mirror.
 
 This also closes §5 option 3 of the exposure ledger. There is no second untouched release.
 

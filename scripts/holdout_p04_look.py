@@ -94,6 +94,12 @@ HP = ROOT / "runs" / "holdout_p04"
 DEVREF = ROOT / "docs/eval/holdout_p04_devref_2026-09-14.json"
 STEP1_COPY = ROOT / "docs/eval/holdout_p04_step1_manifest_2026-09-14.json"
 MARKER = HP / "LOOK_TAKEN.json"
+# `runs/` is git-ignored and the caches in it are deterministically rebuildable, so MARKER
+# alone does not survive a rebuild of the tree: restore `runs/`, check out the freeze commit,
+# and all 316 hashes match again with no marker present. MIRROR is the tracked copy, and the
+# refusal below reads both. It is written after the numbers, not before, because its purpose
+# is durability across a rebuild, not crash-safety -- MARKER already provides that.
+MIRROR = ROOT / "docs/eval/holdout_p04_LOOK_TAKEN.json"
 VERDICT_CELL = ("clean", None)
 
 
@@ -374,8 +380,9 @@ def main() -> int:
     if not args.out:
         raise SystemExit("--out is required for the look")
     head = check_freeze()
-    if MARKER.exists():
-        raise SystemExit(f"REFUSED: {rel(MARKER)} exists -- the single look has already been taken")
+    for taken in (MARKER, MIRROR):
+        if taken.exists():
+            raise SystemExit(f"REFUSED: {rel(taken)} exists -- the single look has already been taken")
     check_freeze_manifest()
     check_labels()
     n = check_inputs()
@@ -431,6 +438,7 @@ def main() -> int:
     m = json.loads(MARKER.read_text(encoding="utf-8"))
     m.update(numbers_written=True, finished_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"), out=args.out)
     MARKER.write_text(json.dumps(m, indent=2), encoding="utf-8")
+    MIRROR.write_text(json.dumps(m, indent=2), encoding="utf-8")
     print(f"[look] {v['outcome']} -- written to {args.out} in {time.time() - t0:.0f}s")
     return 0
 

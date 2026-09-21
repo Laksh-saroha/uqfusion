@@ -1,0 +1,9 @@
+{
+  "head": "85a07c18655981f13339c2c2822f77265ced17f6",
+  "started_utc": "2026-09-20T05:19:13+00:00",
+  "pid": 18236,
+  "n_pairs": 12482,
+  "numbers_written": true,
+  "finished_utc": "2026-09-20T23:46:08+00:00",
+  "out": "docs/eval/holdout_p04_look.md"
+}
