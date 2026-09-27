@@ -277,3 +277,11 @@ from the detector" are different claims and only the first is true.
   mean of the draw-averaged `fused − VIS_only` or `fused − IR_only` is ≤ −0.0060 **and** its
   between-seed 95% t-interval (df 4) lies entirely below zero. **Adopts nothing**; a failure is a
   scope limit on the paper's claim. Logged before the run.
+
+* **2026-09-27 — Phase 3 fog severity 1, development, descriptive** (`scripts/p3_corrupt_cells.py
+  --conds fog_s1`; TODO-improvements §D.4, "the interesting middle of the range is severity 1").
+  Same systems, draws, arms, day/night split and **fail criterion** as the corrupted-cells entry
+  above, for one new VIS condition, `fog` at severity 1, with clean IR. Caches are built by
+  `scripts/build_cache_multi.py`, which runs the corruption once per draw for all seeds. It was
+  verified bit-identical to `build_cache.py` (fog s2, draw 941, 5 seeds × 40 frames, max |diff| 0).
+  **No pohang04 frame is scored.** Adopts nothing. Logged before the run.
