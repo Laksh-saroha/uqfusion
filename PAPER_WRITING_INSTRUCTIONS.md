@@ -1,5 +1,12 @@
 # Instructions for Writing the uqfusion Research Paper
 
+> **Partly superseded 2026-09-27 — read `PAPER_DRAFT2.md` and `docs/handoff-2026-09-27.md` first.**
+> * §0 rule 6 (pohang04 embargo): lifted. The look was taken on 2026-09-20 and §7 of Draft 2 reports it.
+> * §2 contribution 2: the claim "≥ max(VIS, IR) on all 8 cells" belongs to the pre-restore checkpoints. On the Phase 3 systems it holds on 6 of 8 and fails on clean/night and glare/night (`docs/eval/p3_corrupt_cells_2026-09-27.md`, `docs/eval/p3_night_check_2026-09-27.md`). Draft 2's three contributions replace §2's.
+> * §3.4 "pohang04 was never used for anything": false. See Draft 2 §3.6 and prereg A8.5.
+> * §9 Q3 and Q4 are decided: Q3 is disagreement ranking (G2), and Draft 2 Table 2 reports the three-arm table day-primary. Q4 is a non-inferiority margin (G3), declared but never run. The Mahalanobis rebuild is done (A6.4).
+> * R-D1 now also has a `crossmodal26m` result (NULL): `docs/eval/uq_mechanism_ablation_26m_2026-09-27.md`.
+
 > Derived solely from `PAPER_CONTEXT_COMPILED.md` (compiled 2026-09-17). Every number, verdict and file name below traces to a Part/section of that document, cited in brackets as [Pn.m]. When drafting, quote from the compiled document, never from memory. Where the compiled document records a correction, use the corrected value and never the original.
 
 ---
@@ -124,7 +131,7 @@ This section carries contribution 1 and must be complete:
 - **Benchmark cells:** 8 cells = {clean, fog, lowlight, glare} × {day, night} on 2,232 paired frames; later 10–11 cell grids add IR corruptions [P7.1, P8.5]. Adverse conditions are Albumentations-simulated; disclose [P1.16].
 - **Tune/test discipline:** TUNE = pohang00 (836 frames), TEST = pohang02+03 (364 frames); pohang01 (night) excluded from fitting. Report the overfitting trap it caught (support IoU 0.55 wins TUNE, loses all six held-out variants; 0.30 wins all six) [P6.5].
 - **Exposure ledger / no untouched test set:** state plainly that pohang02/03 were declared TEST after the fact and fail a model-selection-bias test; `role="final"` now structurally refuses selectors spanning scored frames; pohang04 is the only untouched data and is reserved for exactly one look [P9.2].
-- **Noise floor:** paired deltas (11–52× tighter than unpaired); combined draw+bootstrap 2σ floor 0.0014–0.0031 (full range 0.0000–0.0031); buoy carries 74–75% of macro variance at 5.3% of GT mass; 2 of 11 cells carry ~zero information [P9.1 item 2, P8.13].
+- **Noise floor:** paired deltas (3–16× tighter than unpaired on informative cells; corrected 2026-09-27 from 11–52×); combined draw+bootstrap 2σ floor 0.0014–0.0031 (full range 0.0000–0.0031); buoy carries 74–75% of macro variance at 5.3% of GT mass; 2 of 11 cells carry ~zero information [P9.1 item 2, P8.13].
 - **Dependence-aware intervals:** block bootstrap, inflation 1.9–1.99× vs iid, ceiling at L=20 (2 s) because pohang03 has 117 frames; 1.95× applied project-wide; night has no estimable between-run interval (single run) [P9.1 item 6, P8.13].
 - **AP convention:** local linear-interp; delta disagreement vs COCO 0.000285; absolute disagreement up to −0.0050; Ultralytics 8.4.7 vs 8.4.90 gap ~0.034 must never sit in the same table [P9.1 item 5, P4.6].
 - **Metric contracts:** D-ECE conditions on confidence only; AUSE/AURC ranking-only (rank-reversal control moves AUSE 0.0630→0.3569); NLL/interval-ECE are TP-only and published with `tp_share`; AURC is a grid mean (gap to integral 0.0215, published side by side); WBF fused confidence can exceed 1.0 (max 1.7532, 0.0641% of detections), disclosed not repaired [P9.1 item 7].
