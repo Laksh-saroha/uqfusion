@@ -1,0 +1,20 @@
+# Output of scripts/diag_rd1_fog_score_path.py, run 2026-09-27 at d9b24f4 (descriptive; logged in exposure ledger §7)
+
+[diag] full     S5 done (90s)
+[diag] full     S7 done (143s)
+[diag] vis_only S5 done (178s)
+[diag] vis_only S7 done (215s)
+
+[diag] VIS veto rate: day 0.000  night 1.000
+[diag] metric: mAP50-95 over classes, as R-D1 scores it; block bootstrap L=20, n_boot 1000
+
+variant   slice  frames        S5        S7     S5-S7  95% CI
+full      all      2232  0.044793  0.038637 +0.006156  [+0.003934, +0.007107]
+full      day      1200  0.048683  0.042159 +0.006524  [+0.004062, +0.007917]
+full      night    1032  0.087702  0.078269 +0.009434  [+0.005014, +0.013005]
+vis_only  all      2232  0.028624  0.023616 +0.005009  [+0.002174, +0.005572]
+vis_only  day      1200  0.045928  0.037421 +0.008507  [+0.004829, +0.009910]
+vis_only  night    1032  0.000000  0.000000 +0.000000  [+0.000000, +0.000000]
+
+[diag] day: full +0.006524, VIS re-ranking alone +0.008507, cross-stream remainder -0.001983
+
