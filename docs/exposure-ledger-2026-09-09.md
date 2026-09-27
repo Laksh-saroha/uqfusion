@@ -233,3 +233,23 @@ from the detector" are different claims and only the first is true.
   **pohang04 is now spent.** Any further scoring of it — a different architecture, a new
   cell, a re-run of this same command — is a second look and requires a new pre-registration
   recording that the set is no longer held out.
+
+* **2026-09-27 — Phase 3 night check, development, descriptive** (`scripts/p3_night_check.py`).
+  Preset `crossmodal26m`, `runs/cache_p3/seed{0..4}`, cell `clean/clean` only, the five Phase 3
+  systems. Per seed: VIS-only, IR-only, fused as shipped, and fused with the veto's night arm
+  removed (V1's OFF arm, `off_arm` in `scripts/eval_night_veto.py`). Ship AP; day (pohang00/02/03)
+  and night (pohang01) reported separately, never pooled (Phase 3 prereg §8). Adds one further
+  inspection of all four development runs, the first under the Phase 3 checkpoints at night.
+  **No pohang04 frame is scored.**
+
+  *Why:* the paper's "fused ≥ max(VIS, IR) on every cell" was measured on pre-restore checkpoints
+  whose VIS scored 0.0000 at night; §7 reports Phase 3 checkpoints trained on restored labels.
+  V1 (`night-veto-axis-closed-2026-09-04.md`) measured removing the night veto from a restored-label
+  VIS at **+0.1785** on clean night. This checks whether that holds for the reported system.
+
+  *Fixed before the number:* the claim **fails on a slice** if `fused − VIS_only` or
+  `fused − IR_only` (seed means) is ≤ −0.0060 **and** its between-seed 95% t-interval (df 4) lies
+  entirely below zero. A paired block bootstrap (L = 20, n_boot = 1000, seed 0) is reported as
+  evaluation noise only. **Adopts nothing:** the veto axis is closed (`prereg-night-veto-v3.md` §6)
+  and the shipped system is frozen, so a failure is reported as a scope limit on the claim, not
+  answered with a rule change. Logged before the run.
