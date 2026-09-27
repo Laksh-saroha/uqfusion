@@ -72,10 +72,11 @@ VENV_PY = ROOT / ".venv" / "Scripts" / "python.exe"
 QUEUE_JSON, STATE_JSON, LIVE_JSON, CONTROL_JSON = (OUT / f"{n}.json" for n in ("queue", "state", "live", "control"))
 K = "metrics/mAP50-95(B)"
 EXT_EPOCHS, PATIENCE = 100, 20
-# The server used 6 workers (small models) / 2 (large). Raised 2026-09-27 at the author's request: at 6 the
-# laptop GPU sat at ~43% on yolov8n, data-loading bound. Workers set loading parallelism, not the recipe.
-# Ultralytics opens 2x workers for the val loader, so 10 already means ~30 loader processes in 32 GB RAM.
-SMALL_MIN_PER_EPOCH, SMALL_WORKERS, DEFAULT_WORKERS = 6.0, 10, 6
+# The server used 6 workers (small models) / 2 (large). Workers set loading parallelism, not the recipe.
+# Measured here on yolov8n: 6 workers 9.2 it/s at ~83% GPU; 10 workers ~8.0 it/s, because Ultralytics also
+# opens 2x workers for the val loader and ~30 loader processes exhaust 32 GB RAM (17k pages/s). So 6, and 6
+# rather than 2 for large models (18 loader processes either way).
+SMALL_MIN_PER_EPOCH, SMALL_WORKERS, DEFAULT_WORKERS = 6.0, 6, 6
 # Batch: the base recipe is 16 with nbs=64 (gradient accumulation to an effective 64). Where 16 does not fit
 # in 12 GB (yolo12x reserved 24 GB), the author asked for a smaller batch: the largest of these that fits.
 # All divide 64, so the accumulation keeps the effective batch, optimizer steps per epoch, LR and weight
