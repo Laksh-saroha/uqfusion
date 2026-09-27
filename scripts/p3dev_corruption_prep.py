@@ -104,9 +104,12 @@ def caches() -> int:
     log_dir = CACHE / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     t0, fails = time.time(), 0
-    for k in SEEDS:
-        w = ROOT / f"runs/phase3_stage2/p3_vis_seed{k}/weights/best.pt"
-        for v in VIS_DRAWS:
+    # Draw-major: each finished draw is a complete five-seed set, usable on its own. A
+    # corrupted cache costs ~11 min (the corruption is CPU-bound at native resolution),
+    # so the four draws take ~11 h and a partial run must still carry every seed.
+    for v in VIS_DRAWS:
+        for k in SEEDS:
+            w = ROOT / f"runs/phase3_stage2/p3_vis_seed{k}/weights/best.pt"
             d = CACHE / f"seed{k}" / sub(v)
             d.mkdir(parents=True, exist_ok=True)
             for stem in CLEAN_PKL:
@@ -114,7 +117,7 @@ def caches() -> int:
             for stem, kind, sev in CONDS:
                 if not build(gp, w, stem, PV, kind, sev, v, d, log_dir):
                     fails += 1
-        print(f"[cache] seed {k} done (elapsed {(time.time() - t0) / 60:.0f} min)", flush=True)
+        print(f"[cache] draw {v} done for all seeds (elapsed {(time.time() - t0) / 60:.0f} min)", flush=True)
     print(f"[cache] {'ALL OK' if not fails else f'{fails} FAILED'}", flush=True)
     return 1 if fails else 0
 
