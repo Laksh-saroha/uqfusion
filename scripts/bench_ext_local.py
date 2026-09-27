@@ -19,10 +19,12 @@ Added over the server script:
     never reached are cut from `results.csv` first.
   * A run whose base gap is already >= 20 met patience inside its base run and trains no epoch.
     The server script would have trained a 26th, and a late best there re-opens a closed run.
-  * Recipe and memory guards. On a first-epoch OOM, Ultralytics 8.4.90 halves the batch and
-    retries, which silently changes the recipe. On Windows the driver may spill VRAM into system
-    RAM rather than raise OOM: `yolo12x` at batch 16 reserved 24 GB on this 12 GB card and ran
-    ~10x slower. Either way the run fails and is recorded; nothing is shrunk.
+  * Batch planning. On Windows the driver may spill VRAM into system RAM rather than raise OOM:
+    `yolo12x` at batch 16 reserved 24 GB on this 12 GB card and ran ~10x slower. Before a family's
+    first run, the largest batch in BATCHES whose probe stays under 90% of VRAM is chosen
+    (`batch_plan.json`). A batch below 16 keeps nbs=64, so the effective batch is still 64, and
+    the deviation is recorded per run. Silent changes are refused: Ultralytics 8.4.90 halves the
+    batch on a first-epoch OOM, and a spill past the card's memory mid-run fails the run.
   * A data gate before every run: `bench_ext_fingerprint.py --quick`, then
     `label_hash_ledger.py --expect 8ed69b5974ed`. That is the restored tree that full-pass
     `bench_ext_fingerprint.py` proved the server benchmark read.
@@ -70,7 +72,17 @@ VENV_PY = ROOT / ".venv" / "Scripts" / "python.exe"
 QUEUE_JSON, STATE_JSON, LIVE_JSON, CONTROL_JSON = (OUT / f"{n}.json" for n in ("queue", "state", "live", "control"))
 K = "metrics/mAP50-95(B)"
 EXT_EPOCHS, PATIENCE = 100, 20
-SMALL_MIN_PER_EPOCH, SMALL_WORKERS, DEFAULT_WORKERS = 6.0, 6, 2     # the server rule
+# The server used 6 workers (small models) / 2 (large). Raised 2026-09-27 at the author's request: at 6 the
+# laptop GPU sat at ~43% on yolov8n, data-loading bound. Workers set loading parallelism, not the recipe.
+# Ultralytics opens 2x workers for the val loader, so 10 already means ~30 loader processes in 32 GB RAM.
+SMALL_MIN_PER_EPOCH, SMALL_WORKERS, DEFAULT_WORKERS = 6.0, 10, 6
+# Batch: the base recipe is 16 with nbs=64 (gradient accumulation to an effective 64). Where 16 does not fit
+# in 12 GB (yolo12x reserved 24 GB), the author asked for a smaller batch: the largest of these that fits.
+# All divide 64, so the accumulation keeps the effective batch, optimizer steps per epoch, LR and weight
+# decay identical; only BatchNorm sees fewer images per forward. Recorded per run as a deviation.
+BATCHES = (16, 8, 4, 2)
+FIT_FRACTION = 0.90          # fits = probe peak reserved VRAM (train, and a val-sized forward) under 90% of the card
+PLAN_JSON = OUT / "batch_plan.json"
 EXCLUDED = {"vis_bench_yolov8s_seed2": "diverged in the base grid (DIVERGENCE-ALARM.txt)"}
 TRAIN_LABEL_HASH = "8ed69b5974ed"
 HEARTBEAT_S = 1.0
@@ -222,7 +234,9 @@ def run_one(rid: str) -> int:
         return RC_DONE
     args = yaml.safe_load(open(base / "args.yaml", encoding="utf-8"))
     base_fitness, gap, mpe = orig_stats(base)
-    batch = int(args["batch"])
+    batch_base = int(args["batch"])
+    plan = read_json(PLAN_JSON, {}).get(family(rid), {})
+    batch = plan.get("batch", batch_base) if plan else batch_base
     workers = SMALL_WORKERS if mpe < SMALL_MIN_PER_EPOCH else DEFAULT_WORKERS
     last = ext / "weights" / "last.pt"
     state_p = ext / "ext_state.json"
@@ -236,9 +250,11 @@ def run_one(rid: str) -> int:
     if last.is_file():
         ck = torch.load(last, map_location="cpu", weights_only=False)
         ck_epoch, has_opt = ck.get("epoch", -1), ck.get("optimizer") is not None
+        ck_args = ck.get("train_args") or {}
         del ck
         if ck_epoch >= 0 and has_opt:
-            resume = True
+            resume = True                                  # a resume keeps the batch/workers it started with
+            batch, workers = int(ck_args.get("batch", batch)), int(ck_args.get("workers", workers))
             if any(e > ck_epoch + 1 for e, _ in ext_rows(ext)):     # csv ran ahead of the checkpoint
                 src = ext / "results.csv"
                 bak = ext / f"results.csv.pre_resume_{int(time.time())}"
@@ -251,8 +267,13 @@ def run_one(rid: str) -> int:
             return finalize(rid, ext, base_fitness, gap, batch, workers, state)   # finished, marker lost
     elif ext.exists():
         ext.rename(ext.with_name(f"{ext.name}.aborted_{int(time.time())}"))
+    if batch is None:
+        raise RuntimeError(f"VRAM-GUARD: no batch in {BATCHES} fits {family(rid)} on this card (batch_plan.json)")
     ext.mkdir(parents=True, exist_ok=True)
+    state.update(batch=batch, batch_base=batch_base, workers=workers)
     state_p.write_text(json.dumps(state), encoding="utf-8")
+    if batch != batch_base:
+        set_run_state(rid, note=f"batch {batch} (base {batch_base}), nbs 64 -> effective batch 64 unchanged")
     vram = torch.cuda.get_device_properties(0).total_memory
     tick = {"i": 0, "n": 0, "t": time.time(), "last": 0.0}
 
@@ -316,7 +337,7 @@ def run_one(rid: str) -> int:
             model.train(resume=True)
         else:
             model.train(data=str(DATA_YAML), epochs=EXT_EPOCHS, patience=PATIENCE, batch=batch,
-                        imgsz=args["imgsz"], workers=workers, seed=args["seed"],
+                        nbs=int(args.get("nbs", 64)), imgsz=args["imgsz"], workers=workers, seed=args["seed"],
                         deterministic=args["deterministic"], optimizer=args["optimizer"], amp=args["amp"],
                         cos_lr=args["cos_lr"], close_mosaic=args["close_mosaic"],
                         project=str(OUT), name=ext.name, exist_ok=True, verbose=True)
@@ -343,7 +364,8 @@ def finalize(rid, ext, base_fitness, gap, batch, workers, state) -> int:
     rec = {"run_id": rid, "status": "done", "host": socket.gethostname(), "base_fitness": base_fitness,
            "gap_at_start": gap, "ext_epochs": n, "ext_best_fitness": bf, "ext_best_epoch": be,
            "improved_over_base": bf > base_fitness, "stop": stop, "replay": "OK" if ok else "MISMATCH",
-           "batch": batch, "workers": workers, "min_per_epoch": None, "resumes": state.get("resumes", 0),
+           "batch": batch, "batch_base": state.get("batch_base", batch), "nbs": 64,
+           "workers": workers, "min_per_epoch": None, "resumes": state.get("resumes", 0),
            "started_at": state.get("started_at"), "finished_at": now(), "error": "",
            "rows_contiguous": [e for e, _ in rows] == list(range(1, n + 1)),
            "data_yaml": DATA_YAML.relative_to(ROOT).as_posix(), "label_hash_train": TRAIN_LABEL_HASH}
@@ -368,58 +390,91 @@ class _ProbeDone(Exception):
     pass
 
 
-def probe_one(f: str) -> int:
-    """~30 training iterations of family `f` at its real batch, in a fresh process; prints one JSON line."""
+class _NoFit(Exception):
+    pass
+
+
+def probe_one(f: str, batch: int) -> int:
+    """Train family `f` for ~30 iterations at `batch` in a fresh process, then run one val-sized forward
+    (2 x batch, half precision, as Ultralytics validates). Prints one JSON line."""
     import torch
     from ultralytics import YOLO
 
-    rid = next(r for r in candidates() if family(r) == f)
+    rid = next(r for r in sorted(p.name for p in BASE.iterdir()) if not r.endswith("_ext") and family(r) == f)
     args = yaml.safe_load(open(BASE / rid / "args.yaml", encoding="utf-8"))
-    batch, out = int(args["batch"]), {"family": f, "run": rid}
+    vram = torch.cuda.get_device_properties(0).total_memory
+    limit = FIT_FRACTION * vram
+    out = {"family": f, "run": rid, "batch": batch, "limit_gb": round(limit / 2**30, 2)}
 
     def guard(trainer):
         if int(trainer.batch_size) != batch:
-            raise RuntimeError(f"RECIPE-GUARD: batch reduced to {trainer.batch_size}")
+            raise _NoFit(f"Ultralytics reduced batch to {trainer.batch_size} after an OOM")
 
-    def end(trainer):                                 # before the final-epoch validation, which is not needed
-        out["peak_reserved_gb"] = round(torch.cuda.max_memory_reserved() / 2**30, 2)
+    def batch_end(trainer):                           # stop early: a spill makes every later iteration ~10x slower
+        if torch.cuda.memory_reserved() > limit:
+            raise _NoFit(f"{torch.cuda.memory_reserved() / 2**30:.1f} GB reserved during training")
+
+    def end(trainer):                                 # skip the final full validation; measure one val batch instead
+        out["peak_train_gb"] = round(torch.cuda.max_memory_reserved() / 2**30, 2)
+        m = (trainer.ema.ema if trainer.ema else trainer.model).half().eval()
+        x = torch.zeros(2 * batch, 3, args["imgsz"], args["imgsz"], device=trainer.device, dtype=torch.half)
+        with torch.inference_mode():
+            m(x)
+        out["peak_val_gb"] = round(torch.cuda.max_memory_reserved() / 2**30, 2)
         raise _ProbeDone
 
     m = YOLO(str(BASE / rid / "weights" / "last.pt"))
     m.add_callback("on_train_epoch_start", guard)
+    m.add_callback("on_train_batch_end", batch_end)
     m.add_callback("on_train_epoch_end", end)
     t0 = time.time()
     try:
-        m.train(data=str(DATA_YAML), epochs=1, batch=batch, imgsz=args["imgsz"], workers=2, fraction=0.02,
-                close_mosaic=0, plots=False, amp=args["amp"], project=str(OUT / "_probe"), name=f,
-                exist_ok=True, verbose=False)
-        out["fits"] = None
+        m.train(data=str(DATA_YAML), epochs=1, batch=batch, nbs=int(args.get("nbs", 64)), imgsz=args["imgsz"],
+                workers=2, fraction=0.02, close_mosaic=0, plots=False, amp=args["amp"],
+                project=str(OUT / "_probe"), name=f"{f}_b{batch}", exist_ok=True, verbose=False)
+        out["fits"], out["error"] = False, "training ended without reaching the probe hook"
     except _ProbeDone:
-        vram = torch.cuda.get_device_properties(0).total_memory / 2**30
-        out["fits"] = out["peak_reserved_gb"] <= vram               # above = spilled to system RAM
+        out["fits"] = max(out["peak_train_gb"], out["peak_val_gb"]) * 2**30 <= limit
+    except _NoFit as e:
+        out["fits"], out["error"] = False, str(e)
     except Exception as e:                                            # noqa: BLE001
         out["fits"], out["error"] = False, f"{type(e).__name__}: {str(e)[:160]}"
-    out["batch"], out["seconds"] = batch, round(time.time() - t0)
+    out["seconds"] = round(time.time() - t0)
     print("PROBE " + json.dumps(out), flush=True)
     return 0
 
 
+def plan_batch(f: str) -> int | None:
+    """The largest batch in BATCHES that fits family `f` here, probed once and kept in batch_plan.json."""
+    plan = read_json(PLAN_JSON, {})
+    if f in plan:
+        return plan[f]["batch"]
+    OUT.mkdir(parents=True, exist_ok=True)
+    tried = []
+    for b in BATCHES:
+        r = subprocess.run([sys.executable, "-u", __file__, "--probe-one", f, "--batch", str(b)], cwd=ROOT,
+                           capture_output=True, text=True, errors="replace")
+        line = next((ln for ln in r.stdout.splitlines() if ln.startswith("PROBE ")), None)
+        res = json.loads(line[6:]) if line else {"batch": b, "fits": False, "error": (r.stdout + r.stderr)[-300:]}
+        tried.append(res)
+        log(f"[probe] {f} batch {b}: fits={res['fits']} train {res.get('peak_train_gb')} GB "
+            f"val {res.get('peak_val_gb')} GB ({res.get('error', '')[:120]}) {res.get('seconds')}s")
+        if res["fits"]:
+            break
+    chosen = next((t["batch"] for t in tried if t["fits"]), None)
+    plan = read_json(PLAN_JSON, {})
+    plan[f] = {"batch": chosen, "probes": tried, "at": now()}
+    write_json(PLAN_JSON, plan)
+    return chosen
+
+
 def probe(families: list[str] | None) -> int:
-    """Does each family train at its real batch here, and at what peak memory. Largest first."""
+    """Plan the batch for each family (largest family first) without training anything."""
     pick = {}
     for r in candidates():
         pick.setdefault(family(r), r)
-    fams = families or sorted(pick, key=lambda f: -orig_stats(BASE / pick[f])[2])
-    p = OUT / "probe.json"
-    res = read_json(p, {})
-    OUT.mkdir(parents=True, exist_ok=True)
-    for f in fams:
-        r = subprocess.run([sys.executable, "-u", __file__, "--probe-one", f], cwd=ROOT,
-                           capture_output=True, text=True, errors="replace")
-        line = next((ln for ln in r.stdout.splitlines() if ln.startswith("PROBE ")), None)
-        res[f] = json.loads(line[6:]) if line else {"fits": False, "error": (r.stdout + r.stderr)[-300:]}
-        log(f"[probe] {f}: {res[f]}")
-        p.write_text(json.dumps(res, indent=1), encoding="utf-8")
+    for f in families or sorted(pick, key=lambda f: -orig_stats(BASE / pick[f])[2]):
+        plan_batch(f)
     return 0
 
 
@@ -443,7 +498,9 @@ def init_dashboard(runs: list[str]) -> None:
         "created": now(),
         "note": "dgxanode01 ep25 VIS benchmark extended to patience 20 (warm start, patience carried over)",
         "defaults": {"variant": f"ep25 -> patience 20, {len(runs)} runs (10 done on the server)", "imgsz": 640,
-                     "batch": 16, "workers": "6 small / 2 large", "epochs": EXT_EPOCHS, "patience": PATIENCE},
+                     "batch": "16, lower where it does not fit (nbs 64)",
+                     "workers": f"{SMALL_WORKERS} small / {DEFAULT_WORKERS} large",
+                     "epochs": EXT_EPOCHS, "patience": PATIENCE},
         "runs": [{"id": r, "kind": family(r), "data": DATA_YAML.name} for r in runs]})
     st = read_json(STATE_JSON, {}) or {}
     for r in runs:
@@ -479,6 +536,18 @@ def queue(runs: list[str]) -> int:
                 set_queue_state(queue_status="running")
             if (ext / "ext_done.json").is_file():
                 break
+            if not (ext / "weights" / "last.pt").is_file() and orig_stats(BASE / rid)[1] < PATIENCE:
+                set_run_state(rid, status="probing", note="choosing the largest batch that fits")
+                b = plan_batch(family(rid))
+                base_b = int(yaml.safe_load(open(BASE / rid / "args.yaml", encoding="utf-8"))["batch"])
+                if b is None:
+                    set_run_state(rid, status="failed", finished=now(), error=f"no batch in {BATCHES} fits here")
+                    append_progress({"run_id": rid, "status": "failed", "host": socket.gethostname(),
+                                     "error": f"no batch in {BATCHES} fits", "finished_at": now()})
+                    log(f"=== {rid}: FAILED (no batch in {BATCHES} fits)")
+                    break
+                set_run_state(rid, status="pending", note=(f"batch {b} (base {base_b}), nbs 64 -> effective 64"
+                                                           if b != base_b else "batch 16 fits"))
             bad = gate(rid)
             if bad:
                 set_run_state(rid, status="failed", error=f"DATA GATE: {bad[:200]}")
@@ -523,10 +592,11 @@ def main() -> int:
     g.add_argument("--one")
     g.add_argument("--probe", action="store_true")
     g.add_argument("--probe-one", help=argparse.SUPPRESS)
+    ap.add_argument("--batch", type=int, default=16, help=argparse.SUPPRESS)
     ap.add_argument("--families", nargs="+", default=None, help="restrict --queue/--probe to these families")
     args = ap.parse_args()
     if args.probe_one:
-        return probe_one(args.probe_one)
+        return probe_one(args.probe_one, args.batch)
     if args.one:
         return run_one(args.one)
     runs = ordered(candidates())
