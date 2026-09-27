@@ -84,7 +84,7 @@ def aurc(risks: list[float]) -> float:
 
 def main() -> int:
     t0 = time.time()
-    ctx = load_context(conditions=CONDITIONS, verbose=True)
+    ctx = load_context(preset="adopted", conditions=CONDITIONS, verbose=True)
     rng = np.random.default_rng(0)
 
     rows, curves = [], {}

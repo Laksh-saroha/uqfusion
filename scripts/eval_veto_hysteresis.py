@@ -64,7 +64,7 @@ def main() -> int:
     # under the 2026-08-19 configuration, BEFORE the finalization made dilate-15
     # the default. Pin that configuration explicitly so `k=1` still means the
     # raw per-frame switch and the assertions below keep holding.
-    ctx = load_context(capability_sel="all", bright_soft=True, veto_filter=None,
+    ctx = load_context(preset="adopted", capability_sel="all", bright_soft=True, veto_filter=None,
                        **({'conditions': tuple(args.conditions)} if args.conditions else {}))
     order = temporal_order(ctx.vis_by_cond["clean"])
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}

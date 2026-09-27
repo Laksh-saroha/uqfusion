@@ -71,7 +71,7 @@ def variant_ctx(ctx, name: str):
 
 def build(cache_path: Path, variants=VARIANTS) -> dict:
     t0 = time.time()
-    ctx = load_context()
+    ctx = load_context(preset="adopted")
     n = ctx.n()
     payload = {
         "conditions": list(ctx.conditions),

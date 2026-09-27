@@ -10,8 +10,11 @@ table used the D5/B5 constants while every analysis used the D-6 ladder fit, and
 gated glare read 0.0641 instead of 0.2058. That happened because the setup was
 duplicated. This module exists so it cannot happen again.
 
-`load_context()` reproduces the ADOPTED configuration by default. As of the
-2026-08-20 finalization (`docs/architecture-final-2026-08-20.md`) that is:
+`load_context()` has NO default preset (R-E6): every caller names the system it
+evaluates. The shipped system is `preset="crossmodal26m"` with
+`cache_dir="runs/cache_m"` (or a Phase 3 seed tree under `runs/cache_p3`).
+`preset="adopted"` is the 2026-08-20 finalization
+(`docs/architecture-final-2026-08-20.md`), kept for reproducing that record:
 
     capability-weighted WBF, iou_thr 0.85, sigma-weighted available
     D-6 ladder constants (runs/eval/reliability_constants.json)
@@ -346,7 +349,7 @@ def load_context(
     veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
     tau_lap: float | None = None,
-    preset: str = "adopted",
+    preset: str | None = None,
     ir_condition: str | None = None,
     ir_nms: float | None = None,
     vis_soft_nms: float | None = None,
@@ -358,9 +361,13 @@ def load_context(
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
-    """`preset="adopted"` (default) reproduces the 2026-08-20/09-01 system exactly.
+    """`preset` is required (R-E6). A default let callers evaluate a superseded
+    system without saying so; `adopted` was the default long after it stopped
+    being the shipped system.
 
-    `preset="crossmodal26m"` is `crossmodal` plus the two repairs the full-scale
+    `preset="adopted"` reproduces the 2026-08-20/09-01 system exactly.
+
+    `preset="crossmodal26m"` — the SHIPPED system — is `crossmodal` plus the two repairs the full-scale
     yolo26m / yolo26m-p2feat detectors force, measured in
     `docs/levers-and-the-26m-swap-2026-09-01.md`: the veil axis becomes conditional
     on the night arm, and a cross-modal SUPPORT term replaces the cross-modal
@@ -398,16 +405,19 @@ def load_context(
     # R-E1: captured before the rewrites below, which are lossy.
     preset_requested = preset
 
+    if preset is None:
+        raise ValueError("load_context() needs an explicit preset: 'crossmodal26m' is the "
+                         "shipped system; 'adopted' and 'crossmodal' reproduce older records")
     if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms"):
         raise ValueError(f"unknown preset {preset!r}")
     # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
     # force. It is a separate preset and not a change to `crossmodal` because every
     # published number was measured under the latter and must stay reproducible.
     #
-    # `crossmodal26m_snms` is `crossmodal26m` plus VIS soft-NMS, adopted 2026-09-02.
-    # Same reasoning one layer up: the +0.0106 headline and the whole of
-    # `final_26m_grid_v2.md` were measured under `crossmodal26m`, so that preset does
-    # not move. A caller who wants the shipped system asks for this one.
+    # `crossmodal26m_snms` is `crossmodal26m` plus VIS soft-NMS. It was NOT adopted:
+    # night fails at -1.03e-5 on 4/4 draws (`experiment-log-2026-09-02.md`, "do not
+    # adopt"). It stays loadable only to reproduce that rejection; the shipped system
+    # is `crossmodal26m`.
     if preset == "crossmodal26m_snms":
         if vis_soft_nms is None:
             vis_soft_nms = 0.5

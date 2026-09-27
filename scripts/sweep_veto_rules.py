@@ -130,7 +130,7 @@ def main() -> int:
 
     t0 = time.time()
     kw = {"conditions": tuple(args.conditions)} if args.conditions else {}
-    ctx = load_context(**kw)
+    ctx = load_context(preset="adopted", **kw)
     conds = ctx.conditions
     night = np.isin(ctx.runs, NIGHT_RUNS)
     fitsel = np.isin(ctx.runs, FIT_RUNS)
