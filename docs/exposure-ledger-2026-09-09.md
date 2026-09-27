@@ -259,3 +259,9 @@ from the detector" are different claims and only the first is true.
   checkpoints R-D1 used), conditions `clean`, `fog`, `lowlight`, `glare`, arms S0–S7, paired and
   day+night as R-D1. Only the preset moves. Adds one further inspection of all four development
   runs. **No pohang04 frame is scored.** Logged before the run.
+
+* **2026-09-27 — R-D1 fog score-path decomposition, descriptive** (`scripts/diag_rd1_fog_score_path.py`).
+  Re-scores arms S5 and S7 of the `crossmodal26m` R-D1 run on `fog` only, whole system and with
+  IR detections emptied, sliced day/night, to locate the +0.0062 fog score-path delta. Same
+  frames, caches and seeds as the logged R-D1 run; cannot change its verdict. **No pohang04 frame
+  is scored.** Logged before the run.
