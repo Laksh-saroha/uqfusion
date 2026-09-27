@@ -25,7 +25,8 @@ complete `load_context` input):
 
 Usage:
     python scripts/p3dev_corruption_prep.py            # stats, then caches
-    python scripts/p3dev_corruption_prep.py --stats-only
+    python scripts/p3dev_corruption_prep.py --stats-only     # CPU half
+    python scripts/p3dev_corruption_prep.py --caches-only    # GPU half, in parallel
 """
 
 from __future__ import annotations
@@ -120,9 +121,13 @@ def caches() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--stats-only", action="store_true")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--stats-only", action="store_true")
+    g.add_argument("--caches-only", action="store_true",
+                   help="caches do not read the statistics, so the two halves can run in parallel")
     args = ap.parse_args()
-    stats()
+    if not args.caches_only:
+        stats()
     return 0 if args.stats_only else caches()
 
 
