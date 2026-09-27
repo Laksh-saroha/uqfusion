@@ -253,3 +253,9 @@ from the detector" are different claims and only the first is true.
   evaluation noise only. **Adopts nothing:** the veto axis is closed (`prereg-night-veto-v3.md` §6)
   and the shipped system is frozen, so a failure is reported as a scope limit on the claim, not
   answered with a rule change. Logged before the run.
+
+* **2026-09-27 — R-D1 under `crossmodal26m`** (`docs/prereg-uq-mechanism-ablation-26m.md`,
+  `scripts/ablate_uq_mechanism.py --preset crossmodal26m`). `runs/cache_m` (the old full-scale
+  checkpoints R-D1 used), conditions `clean`, `fog`, `lowlight`, `glare`, arms S0–S7, paired and
+  day+night as R-D1. Only the preset moves. Adds one further inspection of all four development
+  runs. **No pohang04 frame is scored.** Logged before the run.
