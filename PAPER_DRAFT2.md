@@ -292,7 +292,7 @@ Three findings from the rewrite history carry general lessons. First, the origin
 
 *(Figure 2 placeholder: worst-cell gap across the six rewrites.)*
 
-**Table 3b. The shipped rule on the five Phase 3 systems (VIS seed k + IR seed k), `crossmodal26m`, development paired frames (1,200 day / 1,032 night), clean IR, ship AP (local AP).** AP is the seed mean; corrupted cells average four corruption draws (VIS 941–944) per seed before averaging seeds. Deltas carry the between-seed 95% t-interval (df 4). Sources: `docs/eval/p3_night_check_2026-09-27.md` (clean), `docs/eval/p3_corrupt_cells_2026-09-27.md` (corrupted).
+**Table 3b. The shipped rule on the five Phase 3 systems (VIS seed k + IR seed k), `crossmodal26m`, development paired frames (1,200 day / 1,032 night), clean IR, ship AP (local AP).** AP is the seed mean; corrupted cells average four corruption draws (VIS 941–944) per seed before averaging seeds. Deltas carry the between-seed 95% t-interval (df 4). Sources: `docs/eval/p3_night_check_2026-09-27.md` (clean), `docs/eval/p3_corrupt_cells_2026-09-27.md` (corrupted, severity 2), `docs/eval/p3_fog_s1_2026-09-27.md` (fog severity 1, the two supplementary rows).
 
 | Cell | VIS only | IR only | Fused (shipped) | Fused − VIS | VIS veto rate | Fused ≥ max(VIS, IR) |
 |---|---:|---:|---:|---|---:|---|
@@ -304,8 +304,10 @@ Three findings from the rewrite history carry general lessons. First, the origin
 | fog / night | 0.0003 | 0.0687 | **0.0687** | +0.0685 [+0.0618, +0.0751] | 100% | holds |
 | lowlight / night | 0.0005 | 0.0687 | **0.0687** | +0.0682 [+0.0610, +0.0755] | 100% | holds |
 | glare / night | 0.1559 | 0.0687 | **0.0687** | −0.0872 [−0.1047, −0.0697] | 99.8% | **fails** |
+| *fog s1 / day* | 0.0834 | 0.0218 | **0.0895** | +0.0061 [+0.0041, +0.0081] | 0% | holds |
+| *fog s1 / night* | 0.0004 | 0.0687 | **0.0687** | +0.0684 [+0.0612, +0.0755] | 100% | holds |
 
-On the retrained systems the claim holds on six of eight cells and fails on two; the fail criterion was fixed in the exposure ledger before scoring.
+On the retrained systems the claim holds on six of eight cells and fails on two; the fail criterion was fixed in the exposure ledger before scoring. The two italic rows are fog at severity 1, the middle of the fog range, added as a descriptive check and not one of the eight cells. Lighter fog lifts VIS from 0.0601 to 0.0834 by day and leaves it at zero by night, and both rows hold with the same margins as severity 2.
 
 **Day, all four cells.** The veto never fires, so the fused output is the union of both streams. It sits above VIS alone on every day cell, with every between-seed interval clear of zero: +0.0059 to +0.0107. The gain is small. On fog/day it is just below the 0.0060 magnitude floor, so it is resolved in sign but not beyond the floor there.
 
