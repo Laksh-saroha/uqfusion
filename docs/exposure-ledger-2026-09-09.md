@@ -265,3 +265,15 @@ from the detector" are different claims and only the first is true.
   IR detections emptied, sliced day/night, to locate the +0.0062 fog score-path delta. Same
   frames, caches and seeds as the logged R-D1 run; cannot change its verdict. **No pohang04 frame
   is scored.** Logged before the run.
+
+* **2026-09-27 — Phase 3 corrupted cells, development, descriptive** (`scripts/p3_corrupt_cells.py`).
+  Preset `crossmodal26m`, the five Phase 3 systems, VIS conditions `fog`, `lowlight`, `glare`
+  (severity 2) with clean IR, VIS draws 941–944, caches `runs/cache_p3dev/`, statistics
+  `runs/derived_p3dev/`. Per seed and draw: VIS-only, IR-only, fused as shipped; ship AP; day and
+  night separately. Adds one further inspection of all four development runs. **No pohang04 frame
+  is scored.**
+
+  *Fixed before the number:* on each cell, the claim "fused ≥ max(VIS, IR)" **fails** if the seed
+  mean of the draw-averaged `fused − VIS_only` or `fused − IR_only` is ≤ −0.0060 **and** its
+  between-seed 95% t-interval (df 4) lies entirely below zero. **Adopts nothing**; a failure is a
+  scope limit on the paper's claim. Logged before the run.
