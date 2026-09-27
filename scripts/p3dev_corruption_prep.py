@@ -27,6 +27,8 @@ Usage:
     python scripts/p3dev_corruption_prep.py            # stats, then caches
     python scripts/p3dev_corruption_prep.py --stats-only     # CPU half
     python scripts/p3dev_corruption_prep.py --caches-only    # GPU half, in parallel
+    python scripts/p3dev_corruption_prep.py --caches-only --shard 3/10   # one of ten builders
+    python scripts/p3dev_corruption_prep.py --stats-only --draws 942     # one draw's statistics
 """
 
 from __future__ import annotations
@@ -67,10 +69,10 @@ def sub(v: int) -> str:
     return f"draw{v}_{v + 10}"
 
 
-def stats() -> None:
+def stats(draws=VIS_DRAWS) -> None:
     hfs.verify(40)
     paths = hfs.read_list(PV)
-    for v in VIS_DRAWS:
+    for v in draws:
         for d in ("brightness", "structure"):
             (STATS / d / sub(v)).mkdir(parents=True, exist_ok=True)
             for stem in CLEAN_JSON:
@@ -99,26 +101,34 @@ def stats() -> None:
             print(f"[stats] {sub(v)}/{stem} {len(br)} frames in {time.time() - t:.0f}s", flush=True)
 
 
-def caches() -> int:
+def caches(draws=VIS_DRAWS, shard: tuple[int, int] = (0, 1)) -> int:
+    """Build the caches of one shard. The unit of work is a (seed, draw) DIRECTORY, so no two
+    shards ever write, link or log into the same place.
+
+    Draw-major order: directories are numbered draw by draw, so with enough shards the early
+    draws finish first as complete five-seed sets. Throughput is bound by the fog corruption,
+    ~290 ms/frame and single-threaded (one OpenCV thread is as fast as 32), so a ~11 min cache
+    uses one core of 32 while the GPU idles; shards are how the build uses the machine.
+    """
+    i, n = shard
     gp = resolve_gpu_python(None)
-    log_dir = CACHE / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
+    dirs = [(v, k) for v in draws for k in SEEDS]
+    mine = [dk for j, dk in enumerate(dirs) if j % n == i]
     t0, fails = time.time(), 0
-    # Draw-major: each finished draw is a complete five-seed set, usable on its own. A
-    # corrupted cache costs ~11 min (the corruption is CPU-bound at native resolution),
-    # so the four draws take ~11 h and a partial run must still carry every seed.
-    for v in VIS_DRAWS:
-        for k in SEEDS:
-            w = ROOT / f"runs/phase3_stage2/p3_vis_seed{k}/weights/best.pt"
-            d = CACHE / f"seed{k}" / sub(v)
-            d.mkdir(parents=True, exist_ok=True)
-            for stem in CLEAN_PKL:
-                link_or_copy(ROOT / f"runs/cache_p3/seed{k}/{stem}.pkl", d / f"{stem}.pkl")
-            for stem, kind, sev in CONDS:
-                if not build(gp, w, stem, PV, kind, sev, v, d, log_dir):
-                    fails += 1
-        print(f"[cache] draw {v} done for all seeds (elapsed {(time.time() - t0) / 60:.0f} min)", flush=True)
-    print(f"[cache] {'ALL OK' if not fails else f'{fails} FAILED'}", flush=True)
+    print(f"[cache] shard {i}/{n}: {[f'seed{k}/{sub(v)}' for v, k in mine]}", flush=True)
+    for v, k in mine:
+        w = ROOT / f"runs/phase3_stage2/p3_vis_seed{k}/weights/best.pt"
+        d = CACHE / f"seed{k}" / sub(v)
+        d.mkdir(parents=True, exist_ok=True)
+        log_dir = CACHE / "logs" / f"seed{k}_{sub(v)}"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        for stem in CLEAN_PKL:
+            link_or_copy(ROOT / f"runs/cache_p3/seed{k}/{stem}.pkl", d / f"{stem}.pkl")
+        for stem, kind, sev in CONDS:
+            if not build(gp, w, stem, PV, kind, sev, v, d, log_dir):
+                fails += 1
+        print(f"[cache] seed{k}/{sub(v)} done (elapsed {(time.time() - t0) / 60:.0f} min)", flush=True)
+    print(f"[cache] shard {i}/{n} {'ALL OK' if not fails else f'{fails} FAILED'}", flush=True)
     return 1 if fails else 0
 
 
@@ -128,10 +138,15 @@ def main() -> int:
     g.add_argument("--stats-only", action="store_true")
     g.add_argument("--caches-only", action="store_true",
                    help="caches do not read the statistics, so the two halves can run in parallel")
+    ap.add_argument("--draws", type=int, nargs="+", default=list(VIS_DRAWS), choices=VIS_DRAWS)
+    ap.add_argument("--shard", default="0/1", help="i/n: build every n-th (seed, draw) directory from i")
     args = ap.parse_args()
+    i, n = (int(x) for x in args.shard.split("/"))
+    if not 0 <= i < n:
+        raise SystemExit(f"bad --shard {args.shard}")
     if not args.caches_only:
-        stats()
-    return 0 if args.stats_only else caches()
+        stats(tuple(args.draws))
+    return 0 if args.stats_only else caches(tuple(args.draws), (i, n))
 
 
 if __name__ == "__main__":
