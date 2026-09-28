@@ -36,6 +36,9 @@ Added over the server script:
         python scripts/dashboard.py --queue-dir runs/vis_benchmark_stride4_ep25_ext --open
     "stops by" there is in extension epochs: a seeded best epoch of -6 shows as "stops by 14".
     Pause stops after the current epoch's checkpoint; Resume continues that run, patience intact.
+  * Delegation. Runs listed in `<out>/delegated.json` train on another machine from the portable
+    package (`scripts/bench_ext_package.py`); the queue skips them and the dashboard shows "skipped".
+    The package runs this same file. On a moved package, a resumed checkpoint's paths are re-pointed.
 
 Skipped: the 10 finished server extensions, and `yolov8s_seed2`, which diverged and is excluded
 from the benchmark. The server pilot `yolo26m_seed0_ext` restarted patience (the old path bug)
@@ -85,7 +88,15 @@ BATCHES = (16, 8, 4, 2)
 FIT_FRACTION = 0.90          # fits = probe peak reserved VRAM (train, and a val-sized forward) under 90% of the card
 PLAN_JSON = OUT / "batch_plan.json"
 EXCLUDED = {"vis_bench_yolov8s_seed2": "diverged in the base grid (DIVERGENCE-ALARM.txt)"}
+# Runs handed to another machine: {"to": "...", "runs": [...]}. The queue re-reads it before every run.
+DELEGATED_JSON = OUT / "delegated.json"
 TRAIN_LABEL_HASH = "8ed69b5974ed"
+# The portable package (scripts/bench_ext_package.py) has no .venv and no label ledger, which needs the
+# uqfusion package and the full train tree. Its gate is the fingerprint alone, which still covers every
+# image and label a run reads.
+LEDGER_PY = ROOT / "scripts" / "label_hash_ledger.py"
+GATE_PY = VENV_PY if VENV_PY.is_file() else Path(sys.executable)
+DATA_GATE = "fingerprint --quick" + (f" + label ledger {TRAIN_LABEL_HASH}" if LEDGER_PY.is_file() else "")
 HEARTBEAT_S = 1.0
 RC_DONE, RC_MISMATCH, RC_PAUSED = 0, 3, 4
 FIELDS = ["run_id", "status", "host", "base_fitness", "gap_at_start", "ext_epochs", "ext_best_fitness",
@@ -148,6 +159,12 @@ def set_queue_state(**kw) -> None:
 
 def paused() -> bool:
     return bool((read_json(CONTROL_JSON, {}) or {}).get("paused"))
+
+
+def delegated() -> dict[str, str]:
+    """{run_id: where it runs} for the runs this machine must skip."""
+    d = read_json(DELEGATED_JSON, {}) or {}
+    return {r: d.get("to", "another machine") for r in d.get("runs", [])}
 
 
 # ------------------------------------------------------------------------------- base-run facts
@@ -252,6 +269,13 @@ def run_one(rid: str) -> int:
         ck = torch.load(last, map_location="cpu", weights_only=False)
         ck_epoch, has_opt = ck.get("epoch", -1), ck.get("optimizer") is not None
         ck_args = ck.get("train_args") or {}
+        sd = ck_args.get("save_dir")
+        if ck_epoch >= 0 and has_opt and sd and os.path.normcase(os.path.abspath(sd)) != os.path.normcase(str(ext)):
+            # The folder moved (the package on a drive with another letter). Ultralytics resumes into the
+            # checkpoint's save_dir, so point its paths here. The weights and optimizer state are untouched.
+            log(f"=== {rid}: checkpoint paths {sd} -> {ext}")
+            ck["train_args"].update(data=str(DATA_YAML), project=str(OUT), save_dir=str(ext))
+            torch.save(ck, last)
         del ck
         if ck_epoch >= 0 and has_opt:
             resume = True                                  # a resume keeps the batch/workers it started with
@@ -369,7 +393,8 @@ def finalize(rid, ext, base_fitness, gap, batch, workers, state) -> int:
            "workers": workers, "min_per_epoch": None, "resumes": state.get("resumes", 0),
            "started_at": state.get("started_at"), "finished_at": now(), "error": "",
            "rows_contiguous": [e for e, _ in rows] == list(range(1, n + 1)),
-           "data_yaml": DATA_YAML.relative_to(ROOT).as_posix(), "label_hash_train": TRAIN_LABEL_HASH}
+           "data_yaml": DATA_YAML.relative_to(ROOT).as_posix(), "label_hash_train": TRAIN_LABEL_HASH,
+           "data_gate": DATA_GATE}
     try:
         import torch
         import ultralytics
@@ -481,11 +506,13 @@ def probe(families: list[str] | None) -> int:
 
 # --------------------------------------------------------------------------------------------- queue
 def gate(rid: str) -> str | None:
-    fp = subprocess.run([str(VENV_PY), "-u", str(ROOT / "scripts" / "bench_ext_fingerprint.py"), "--quick"],
+    fp = subprocess.run([str(GATE_PY), "-u", str(ROOT / "scripts" / "bench_ext_fingerprint.py"), "--quick"],
                         cwd=ROOT, capture_output=True, text=True)
     if fp.returncode != 0:
         return "fingerprint: " + (fp.stdout + fp.stderr).strip()[-300:]
-    lh = subprocess.run([str(VENV_PY), "-u", str(ROOT / "scripts" / "label_hash_ledger.py"), "--scope", "train",
+    if not LEDGER_PY.is_file():
+        return None
+    lh = subprocess.run([str(GATE_PY), "-u", str(LEDGER_PY), "--scope", "train",
                          "--expect", TRAIN_LABEL_HASH, "--note", f"bench-ext before {rid}"],
                         cwd=ROOT, capture_output=True, text=True)
     if lh.returncode != 0:
@@ -495,10 +522,12 @@ def gate(rid: str) -> str | None:
 
 def init_dashboard(runs: list[str]) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    deleg = delegated()
+    here = f"{len(runs)} runs" + (f", {sum(r in deleg for r in runs)} of them delegated" if deleg else "")
     write_json(QUEUE_JSON, {
         "created": now(),
         "note": "dgxanode01 ep25 VIS benchmark extended to patience 20 (warm start, patience carried over)",
-        "defaults": {"variant": f"ep25 -> patience 20, {len(runs)} runs (10 done on the server)", "imgsz": 640,
+        "defaults": {"variant": f"ep25 -> patience 20, {here} ({socket.gethostname()})", "imgsz": 640,
                      "batch": "16, lower where it does not fit (nbs 64)",
                      "workers": f"{SMALL_WORKERS} small / {DEFAULT_WORKERS} large",
                      "epochs": EXT_EPOCHS, "patience": PATIENCE},
@@ -512,7 +541,9 @@ def init_dashboard(runs: list[str]) -> None:
             d = json.loads(done.read_text())
             rs.update(status="done", epochs_done=d["ext_epochs"], best_epoch=d["ext_best_epoch"],
                       best_map50_95=round(d["ext_best_fitness"], 5), finished=d["finished_at"],
-                      note=f"{d['stop']}, replay {d['replay']}, base {base_fitness:.5f}")
+                      note=f"{d['stop']}, replay {d['replay']}, base {base_fitness:.5f}, host {d.get('host')}")
+        elif r in deleg:
+            rs.update(status="skipped", note=f"delegated to {deleg[r]}")
         else:
             rs.setdefault("status", "pending")
             rs.setdefault("best_epoch", -gap)
@@ -526,7 +557,11 @@ def queue(runs: list[str]) -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "logs").mkdir(exist_ok=True)
     init_dashboard(runs)
-    log(f"=== queue: {len(runs)} runs, smallest family first (pid {os.getpid()})")
+    if os.name == "nt":             # keep Windows from sleeping while the queue runs; released when it exits
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+    log(f"=== queue: {len(runs)} runs, smallest family first (pid {os.getpid()}, host {socket.gethostname()}, "
+        f"gate {DATA_GATE})")
     for rid in runs:
         ext = OUT / f"{rid}_ext"
         while True:
@@ -536,6 +571,11 @@ def queue(runs: list[str]) -> int:
                     time.sleep(10)
                 set_queue_state(queue_status="running")
             if (ext / "ext_done.json").is_file():
+                break
+            deleg = delegated()
+            if rid in deleg:
+                set_run_state(rid, status="skipped", note=f"delegated to {deleg[rid]}")
+                log(f"=== {rid}: skipped, delegated to {deleg[rid]}")
                 break
             if not (ext / "weights" / "last.pt").is_file() and orig_stats(BASE / rid)[1] < PATIENCE:
                 set_run_state(rid, status="probing", note="choosing the largest batch that fits")
@@ -604,11 +644,14 @@ def main() -> int:
     if args.families:
         runs = [r for r in runs if family(r) in args.families]
     if args.list:
+        deleg = delegated()
         for r in runs:
             bf, gap, mpe = orig_stats(BASE / r)
             print(f"{r:30s} base {bf:.5f} gap {gap:2d} patience left {max(PATIENCE - gap, 0):2d}  "
-                  f"server {mpe:5.1f} min/epoch")
-        print(f"{len(runs)} runs; floor (no new best) {sum(max(PATIENCE - orig_stats(BASE / r)[1], 0) for r in runs)} epochs")
+                  f"server {mpe:5.1f} min/epoch" + (f"  -> delegated to {deleg[r]}" if r in deleg else ""))
+        here = [r for r in runs if r not in deleg]
+        print(f"{len(runs)} runs, {len(here)} here ({len(runs) - len(here)} delegated); floor (no new best) here "
+              f"{sum(max(PATIENCE - orig_stats(BASE / r)[1], 0) for r in here)} epochs; data gate: {DATA_GATE}")
         return 0
     if args.probe:
         return probe(args.families)
