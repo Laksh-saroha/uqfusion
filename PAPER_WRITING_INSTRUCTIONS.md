@@ -6,6 +6,7 @@
 > * §3.4 "pohang04 was never used for anything": false. See Draft 2 §3.6 and prereg A8.5.
 > * §9 Q3 and Q4 are decided: Q3 is disagreement ranking (G2), and Draft 2 Table 2 reports the three-arm table day-primary. Q4 is a non-inferiority margin (G3), declared but never run. The Mahalanobis rebuild is done (A6.4).
 > * R-D1 now also has a `crossmodal26m` result (NULL): `docs/eval/uq_mechanism_ablation_26m_2026-09-27.md`.
+> * **2026-10-08: Table 1 is the patience-20 backbone benchmark** (Draft 2 §6.1; `docs/eval/bench_patience20_2026-10-08/`), on restored labels. The Phase 1 grid is now Table 1b, the record of the yolo26m selection. §0 rule 4, §2, §3 (the AP-convention line and Results item 1), §5 and §6 below are updated to match.
 
 > Derived solely from `PAPER_CONTEXT_COMPILED.md` (compiled 2026-09-17). Every number, verdict and file name below traces to a Part/section of that document, cited in brackets as [Pn.m]. When drafting, quote from the compiled document, never from memory. Where the compiled document records a correction, use the corrected value and never the original.
 
@@ -16,7 +17,7 @@
 1. **The paper reports a null result as its headline.** Predicted uncertainty does not improve VIS+IR fusion at any tested floor (R-D1) [P7]. The positive, reproducible contribution is *image-statistic sensor selection with union aggregation of detections* [P0, P1.8]. Do not write the paper the design document imagined (live uncertainty-gated fusion). Write the paper the measurements support.
 2. **Never describe the shipped system as "uncertainty-gated fusion."** The required phrase is "image-statistic sensor selection with union aggregation of detections" [P0]. The shipped fusion weight `w_vis` is a single constant, 0.9930, on every frame and condition [P7.1].
 3. **Corrected numbers only.** The compiled document keeps both the original and corrected value of several quantities. Use only the corrected one (list in §8 below).
-4. **State the AP convention on every absolute number.** Local linear-interp AP, not COCO; deltas are convention-safe (worst disagreement 0.000285, 5× below the noise floor) but absolutes are not [P9.1 item 5].
+4. **State the AP convention on every absolute number.** Local linear-interp AP, not COCO; deltas are convention-safe (worst disagreement 0.000285, 5× below the noise floor) but absolutes are not [P9.1 item 5]. The one exception is Table 1, which reports Ultralytics 8.4.90 validation mAP (ship and buoy) from the training logs; its caption says so and none of its values sits beside a local-AP number.
 5. **Every delta must be accompanied by a paired, dependence-aware interval** (block bootstrap, L=20, 1.95× inflation applied) and compared against the measured noise floor 0.0014–0.0031 (2σ paired) or the Phase 3 floor 0.0060 [P9.1 items 2 and 6]. A delta below the floor is "not resolved," never "no effect."
 6. **Nothing from pohang04 appears in the paper unless the single pre-registered look has been taken.** As of the compiled document it has not [P11.6]. See §10 for how to draft around it.
 7. **Report the things that point the wrong way.** The project norm is that unfavorable results are reported, not discarded (e.g., S5−S6 clean = −0.013157) [P7.3].
@@ -47,7 +48,7 @@ Secondary findings worth a subsection each (choose by page budget):
 - Night VIS blindness was a **label artifact, not a sensor limit**: 0.0000 → 0.2520 mAP50-95 after restoring 94,553 boxes [P3.5].
 - **Checkpoint-selection instability**: best-epoch vs epoch-mean inverts the MC-Dropout ranking; between-seed sd of best-fitness (0.00212) is 2–5× smaller than within-run epoch noise (0.0035–0.0106) [P5.7].
 - **Redundancy = independence**: temporal agreement lifts 1.00×, cross-modal IoU-0.30 agreement 2.08×, confidence 4.80×, σ-below-median 3.00× [P6.5, P8.11].
-- **Phase 1 backbone benchmark is a negative result**: top-8 span 0.0055 vs seed sd 0.0010–0.0066, not separable; only the n/t capacity floor (0.2486–0.2567) is robust [P4.4].
+- **Backbone benchmark is a negative result** (Table 1, patience 20, restored labels): yolo26x 0.2666 ± 0.0040, yolo26l 0.2664 ± 0.0070, yolo26m 0.2626 ± 0.0109 are not separable; the other five n/t models sit at 0.1777–0.1943 and yolo26n escapes the floor at 0.2384; patience barely reorders the field (ρ = 0.948 on the 24 fully logged families) except yolo26n (+0.0276). Phase 1 (Table 1b, selection record): top-8 span 0.0055 vs seed sd 0.0010–0.0066, not separable; n/t floor 0.2486–0.2567 [P4.4; Draft 2 §6.1].
 - **The Mahalanobis OOD scorer's night blind spot** was reference-set contamination (782/4,000 night frames in fit set); day-only refit separates correctly (D_night 89.0 vs D_day 30.9) [P6.1, P8.9].
 
 ---
@@ -133,7 +134,7 @@ This section carries contribution 1 and must be complete:
 - **Exposure ledger / no untouched test set:** state plainly that pohang02/03 were declared TEST after the fact and fail a model-selection-bias test; `role="final"` now structurally refuses selectors spanning scored frames; pohang04 is the only untouched data and is reserved for exactly one look [P9.2].
 - **Noise floor:** paired deltas (3–16× tighter than unpaired on informative cells; corrected 2026-09-27 from 11–52×); combined draw+bootstrap 2σ floor 0.0014–0.0031 (full range 0.0000–0.0031); buoy carries 74–75% of macro variance at 5.3% of GT mass; 2 of 11 cells carry ~zero information [P9.1 item 2, P8.13].
 - **Dependence-aware intervals:** block bootstrap, inflation 1.9–1.99× vs iid, ceiling at L=20 (2 s) because pohang03 has 117 frames; 1.95× applied project-wide; night has no estimable between-run interval (single run) [P9.1 item 6, P8.13].
-- **AP convention:** local linear-interp; delta disagreement vs COCO 0.000285; absolute disagreement up to −0.0050; Ultralytics 8.4.7 vs 8.4.90 gap ~0.034 must never sit in the same table [P9.1 item 5, P4.6].
+- **AP convention:** local linear-interp; delta disagreement vs COCO 0.000285; absolute disagreement up to −0.0050; Ultralytics 8.4.7 vs 8.4.90 gap ~0.034 must never sit in the same table [P9.1 item 5, P4.6]. Table 1 (Ultralytics 8.4.90 validation mAP) is the declared exception (Draft 2 §5.5).
 - **Metric contracts:** D-ECE conditions on confidence only; AUSE/AURC ranking-only (rank-reversal control moves AUSE 0.0630→0.3569); NLL/interval-ECE are TP-only and published with `tp_share`; AURC is a grid mean (gap to integral 0.0215, published side by side); WBF fused confidence can exceed 1.0 (max 1.7532, 0.0641% of detections), disclosed not repaired [P9.1 item 7].
 - **Pre-registration and decision rules:** list the pre-registrations that gate reported verdicts: night-label restore (ALIVE bands), reprice-inherited-constants (margin 2×hypot(sd_draw, sd_paired)), soft-NMS adoption (every-cell, draw-averaged), R-D1 mechanism ablation (≥3 of 4 conditions at 0.0060), Phase 3 retrain with Amendments A1–A9, Stage 1 crossing (non-inferiority on ≥3 of 4) [P3.5, P9.1 item 3, P8.12, P7.2, P11.5, P11.3].
 - **Change-impact reclassification:** after applying both corrections, 20 of 74 previously significant findings became INDETERMINATE; large effects survive (no_veto on night/fog/glare; veil repair +0.0716) [P8.13].
@@ -144,7 +145,7 @@ This section carries contribution 1 and must be complete:
 
 Present in this order. Each subsection names its table/figure from §5.
 
-1. **Phase 1 backbone benchmark (Table 1)** [P4]. Lead with the negative: top-8 not separable. State the selection rule and why yolo26m over yolo26x (−0.0033 mAP for 1.86× two-stream throughput, 28.5 vs 15.3 FPS) [P4.5]. Disclose: ultralytics-version row tagged and excluded from bare comparison; pilot campaign split irrecoverable; heterogeneous batch bounded at +0.0017; `train_time_s` is a lower bound [P4.6]. Day/night slice: night AP 0.0000 on all 27 pre-restore checkpoints; day and pooled rankings agree on top-3, so selection stands [P4.9].
+1. **Backbone benchmark (Table 1, patience 20; Table 1b, Phase 1)** [P4; Draft 2 §6.1]. Lead with the negative: the YOLO26 m/l/x tier is not separable (0.2666 / 0.2664 / 0.2626, gaps below seed sd). Report the n/t floor with yolo26n as the exception, and that patience barely reorders the field except yolo26n. Keep the † footnote on Table 1: 14 runs have no continuation logs in the repo, score their ep25 best, and contribute Δ = 0 by construction; never drop it or describe all 93 as replayed. Disclose for Table 1: server base runs continued on the laptop, per-family batch with nbs 64, yolov8s seed 3 for the diverged seed 2, yolo12x seed 0's missing row, val-selected epoch (not a holdout claim). Then Table 1b as the selection record: state the selection rule and why yolo26m over yolo26x (−0.0033 mAP for 1.86× two-stream throughput, 28.5 vs 15.3 FPS) [P4.5]; on Table 1 the rule picks yolo26m again (−0.0040), and yolo26l (now second) was never timed, so say so. Disclose: ultralytics-version row tagged and excluded from bare comparison; pilot campaign split irrecoverable; heterogeneous batch bounded at +0.0017; `train_time_s` is a lower bound [P4.6]. Day/night slice: night AP 0.0000 on all 27 pre-restore checkpoints; day and pooled rankings agree on top-3, so selection stands [P4.9].
 2. **UQ head calibration (Table 2)** [P8.1 `table2_gaussian.md`]: VIS d_ece 0.0663, NLL 3.34, AUSE 0.088, mAP50-95 0.2580; IR d_ece 0.0344, NLL 3.29, AUSE 0.056, mAP50-95 0.0676. Report day-only as primary and pooled as secondary with the 46.2% night share in the caption; both VIS and IR are SUSPECT on the night slice and this is not label-driven [P8.15]. **Do not rank UQ arms on mAP** [P5.7]. **Do not publish a three-arm (Gaussian / MC-Dropout / Ensemble) comparison** unless decision Q3 (estimand) is resolved; if it is included, state which estimand and disclose the R-C2 mismatch and the NLL σ=0 artifact [P5.9, P8.11].
 3. **Fusion robustness (Table 3)** [P8.1 `final_system` family, `docs/eval/final_system_2026-09-01.md`]: crossmodal preset clean/day ≈0.371–0.374 vs VIS-alone ≈0.368; glare/day ≈0.296–0.298 vs 0.289; night cells exactly `ir_only`; `no_veto` costs −0.002 to −0.017 on night/fog/glare; `with_maha` costs −0.02 to −0.03 on lowlight/day. Worst-cell gap +0.0000 [P6.4]. Include the evolution table of worst-cell gap: −0.0180 → −0.0632 (detector swap) → +0.0000 [P6.3–P6.5].
 4. **R-D1 mechanism ablation (Table 4)** [P7.3]: reproduce the coordinate-path table verbatim (clean −0.000566 [−0.000893, −0.000041]; fog 0; lowlight −0.000001; glare +0.000406). 0/4 at every floor. Score path 0/4 at 0.0060. Include the explanation why fog/lowlight score-path positives are within-stream re-ranking, not fusion (VIS vetoed on 100% of fog frames). Include the two wrong-way results and the self-identified rule flaw (3-of-3 informative would have been correct; bias is against a positive) [P7.3].
@@ -214,7 +215,8 @@ Each step must name the measurement that forced it. Never present the final syst
 
 | ID | Content | Source |
 |---|---|---|
-| Table 1 | Phase 1 seed-means, `main` campaign, with n, sd, FPS (pinned clock only) | P4.4, P4.5, P4.7 |
+| Table 1 | Patience-20 backbone benchmark, 31 variants × 3 seeds: mAP50-95 and mAP50 (Ultralytics 8.4.90 val), ep25 value, Δ, best epoch; † on the 14 runs without continuation logs | `docs/eval/bench_patience20_2026-10-08/`; Draft 2 §6.1 |
+| Table 1b | Phase 1 seed-means, `main` campaign, with n, sd, FPS (pinned clock only); the selection record | P4.4, P4.5, P4.7 |
 | Table 2 | Per-modality UQ calibration (D-ECE, NLL, AUSE, AURC grid-mean + integral, tp_share, mAP), day-only primary | P8.1, P9.1 item 7, P8.15 |
 | Table 3 | 8-cell fusion table: VIS-only, IR-only, naive fusion, crossmodal26m, no_veto, with_maha; CIs from block bootstrap | P8.1, P6.4 |
 | Table 4 | R-D1 arms S0–S7, coordinate and score path deltas with CIs, pass counts at 4 floors | P7.2, P7.3 |
@@ -242,7 +244,9 @@ Never write:
 - "the fused system exploits sensor agreement" (0.05% partner rate; concatenation) [P1.8].
 - "night VIS is blind" (it was untrained) [P3.5].
 - "architectures are indistinguishable" for the IR ladder (underpowered) [P4.8].
-- "yolo26x is the best backbone" (not separable) [P4.4].
+- "yolo26x is the best backbone" or "yolo26l is the best backbone" (the top three are not separable in Table 1; not separable in Table 1b either) [P4.4; Draft 2 §6.1].
+- "all 93 runs were trained to patience 20 and replayed" (14 are † rows without continuation logs) [Draft 2 §6.1].
+- Any comparison of a Table 1 value with a Table 1b value (different labels, split, classes, AP convention, epoch budget).
 - "we annotated MIT data" or any MIT/MassMIND/SMD usage [P3.13].
 - "first per-frame adaptive VIS-IR fusion" (UA-CMDet, DICTA 2024) [P10.1].
 - "the server is 1.23× faster" or "7% slower" (both retracted; ~4.5%) [P2.3, P12.1].
