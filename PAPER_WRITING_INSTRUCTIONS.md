@@ -75,18 +75,19 @@ Order of sentences:
 
 ### 3.3 Related work
 
-Build the comparison table from the replacement axes in [P10.1]: domain, sensors, uncertainty target, inference-time adaptation, calibration evaluated, registration assumptions, compute. Rows: UA-CMDet (Sun et al., 2022), DICTA 2024 (doi 10.1109/DICTA63115.2024.00029), Gaussian YOLOv3 (Choi et al., ICCV 2019), maritime YOLO variants with no uncertainty (SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea), and this work.
+Build the comparison table from the replacement axes in [P10.1]: domain, sensors, uncertainty target, inference-time adaptation, calibration evaluated, registration assumptions, compute. Rows: Gaussian YOLOv3 (Choi et al., 2019), UA-CMDet (Sun et al., 2022), Zhao et al. 2024 (DICTA, doi 10.1109/DICTA63115.2024.00029), RDSC-YOLOv4 (Liu et al., 2021) and YOLOv7-Sea (Zhao et al., 2023) as the maritime rows with no uncertainty, and this work. SID-YOLOv5 and EG-YOLO, named in earlier drafts, could not be traced to any publication on 2026-10-08; do not name them.
 
-- This work's row: "hard veto on image statistics; fusion weight constant 0.9930 (measured)"; calibration column "D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor."
-- **Leave the other papers' calibration/registration/compute cells blank or marked "not reported here"** until those papers are actually read. Do not fill from memory [P10.1].
-- Cite β-NLL (Seitzer 2022) and warm-up (Skafte 2019) for the NLL failure mode [P1.5]. Cite Deep Evidential Regression as considered, not benchmarked [P1.9].
-- Bibliography facts to get right [P10.2]: RT-DETR CVPR 2024; D-FINE **ICLR 2025**; Pohang Canal Dataset = Chung et al., IJRR 2023, arXiv 2303.05555 (sensor release); PoLaRIS = separate annotation release, arXiv 2412.06192, ICRA 2025, github.com/sparolab/PoLaRIS (author names pending a direct read); MassMIND classes are segmentation classes, not ship/buoy; SMD is not a pre-paired fusion testbed.
+- This work's row: "hard veto on image statistics; fusion weight constant 0.9926 (measured)" (0.9926 is the shipped `crossmodal26m`; 0.9930 belongs to the predecessor `crossmodal`); calibration column "D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor."
+- **Table R's cells for other works were filled from direct reads of each full text on 2026-10-08** (Gaussian YOLOv3 and UA-CMDet from arXiv, the rest from the published versions). Any new row needs the same read; never fill a cell from memory [P10.1].
+- What the reads changed, keep it: in UA-CMDet and Zhao et al. 2024 the "uncertainty" is a per-label training-loss weight, removed at inference, and neither paper evaluates calibration; UA-CMDet's inference-time adaptation is an illumination-weighted NMS on the RGB scores, which is the closest prior mechanism to the shipped veto (both demote VIS on an image statistic); Gaussian YOLOv3 does use its σ at inference, to rescore boxes.
+- Cite β-NLL (Seitzer 2022) for the NLL failure mode and its fix [P1.5]. The mean-first warm-up is the common practice Skafte et al. (2019) describe, not their proposal (they propose a split scheme); cite it that way. Cite Deep Evidential Regression as considered, not benchmarked [P1.9].
+- Bibliography facts to get right [P10.2]: Pohang Canal Dataset = Chung et al., IJRR 42(12), 2023 (sensor release); PoLaRIS = Choi, Cho, Lee, Kim, Yang, Kim and Cho, ICRA 2025, pp. 13626–13632, a separate annotation release (arXiv 2412.06192); MassMIND is LWIR-only instance segmentation in seven categories, not ship/buoy; SMD is visible plus near-infrared video that need not show the same scene, so not a paired fusion testbed. The CC BY-NC 4.0 licence is Pohang's (AWS Open Data registry); no licence is stated for the PoLaRIS labels. RT-DETR and D-FINE are not cited by the text and are not in the References; add them only with a sentence that needs them. The References section of `PAPER_DRAFT2.md` holds the verified entries; copy from there.
 
 ### 3.4 Dataset
 
 Source: [P3].
 
-- Pohang Canal + PoLaRIS: 7.5 km route, stereo VIS 2048×1080 @10 Hz, LWIR 640×512 16-bit @10 Hz, two classes (ship, buoy), CC BY-NC 4.0, five runs; pohang01 is night; **pohang04 has zero IR labels** [P3.1].
+- Pohang Canal + PoLaRIS: 7.5 km route, stereo VIS 2048×1080 @10 Hz, LWIR 640×512 16-bit @10 Hz, two classes (ship, buoy), Pohang imagery under CC BY-NC 4.0, five runs; pohang01 is night; **pohang04 has zero IR labels** [P3.1].
 - Verified counts (use these, from `verify_dataset_claims.py`, 2026-09-10) [P3.2]:
   - 158,319 images (VIS 127,309 / IR 31,010)
   - 1,183,736 boxes (VIS 962,960 / IR 220,776)

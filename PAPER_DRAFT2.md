@@ -17,7 +17,7 @@ Electro-optical sensors fail silently at sea: visible cameras degrade in fog, gl
 
 Maritime detection systems increasingly pair a visible camera with a thermal camera on the assumption that the two fail in different conditions. Visible imagery degrades in fog, haze, glare, rain and darkness. Infrared sees through glare and darkness but fails during thermal crossover, when vessel and water reach the same temperature. Neither failure announces itself. A detector that has stopped seeing simply emits fewer boxes, which a naive fusion rule reads as low uncertainty rather than as a blind sensor. The problem this project set out to address is therefore not accuracy but reliability: whether the system can tell, frame by frame, which stream to believe.
 
-Most maritime detectors in the literature (SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea, and feature-fusion networks) output no uncertainty at all. Outside the maritime domain, single-pass localization variance is established (Gaussian YOLOv3) and uncertainty-aware cross-modal fusion is established too (UA-CMDet, 2022; DICTA 2024). We claim neither the variance head nor the idea of conditioning fusion on uncertainty as new. What is thin is the maritime evidence: whether such uncertainties are calibrated on paired VIS and LWIR maritime video, and whether the uncertainty doing the conditioning is itself trustworthy when measured with dependence-aware intervals against a stated noise floor, with null results reported.
+Maritime YOLO variants such as RDSC-YOLOv4 (Liu et al., 2021) and YOLOv7-Sea (Zhao et al., 2023) report accuracy and output no uncertainty. Outside the maritime domain, single-pass localization variance is established (Gaussian YOLOv3; Choi et al., 2019), and uncertainty-aware visible–infrared detection is established too (UA-CMDet, Sun et al., 2022; Zhao et al., 2024). We claim neither the variance head nor the idea of conditioning fusion on uncertainty as new. What is thin is the maritime evidence: whether such uncertainties are calibrated on paired VIS and LWIR maritime video, and whether the uncertainty doing the conditioning is itself trustworthy when measured with dependence-aware intervals against a stated noise floor, with null results reported.
 
 This paper is a pre-registered study whose primary hypothesis was rejected. We designed a system in which a per-modality reliability score, combining box-level aleatoric variance and frame-level distributional distance, would weight the two streams instant by instant. We built it, measured every component, and found that the mechanism does not move the fused result. We report that null with the decision rule fixed in advance. We also report the mechanism that worked in its place, and the measured way in which it later failed.
 
@@ -35,29 +35,30 @@ The project's stance, stated in its scope document and enforced throughout, is t
 
 ### 2.1 Uncertainty in single-stage detectors
 
-Gaussian YOLOv3 (Choi et al., ICCV 2019) attaches a per-coordinate Gaussian to the box regressor and trains it with a negative log-likelihood. We follow that pattern. Heteroscedastic NLL has a known failure mode in which the network explains away hard examples by inflating variance instead of improving the mean (Seitzer et al., 2022); the beta-NLL weighting and a warm-up in which the mean trains under the plain box loss first (Skafte et al., 2019) are the standard mitigations, and we use both. Deep Evidential Regression was considered and not benchmarked. MC-Dropout and deep ensembles are the reference alternatives for producing the uncertainty signal on the same backbone; §3.6 and §6.2 explain why a three-arm comparison is reported only on development data.
+Gaussian YOLOv3 (Choi et al., 2019) attaches a per-coordinate Gaussian to the box regressor, trains it with a negative log-likelihood, and at inference multiplies each box's detection score by one minus its mean predicted uncertainty. We follow the head and the loss; our σ moves no score (§4.2). Heteroscedastic NLL has a known failure mode in which the network explains away hard examples by inflating variance instead of improving the mean (Seitzer et al., 2022). We use two mitigations: Seitzer et al.'s beta-NLL weighting, and a warm-up in which the mean trains first, which Skafte et al. (2019) describe as the most common training strategy before proposing a split alternative. Deep Evidential Regression (Amini et al., 2020) was considered and not benchmarked. MC-Dropout (Gal and Ghahramani, 2016) and deep ensembles (Lakshminarayanan et al., 2017) are the reference alternatives for producing the uncertainty signal on the same backbone; §3.6 and §6.2 explain why a three-arm comparison is reported only on development data.
 
 ### 2.2 Visible–infrared fusion with uncertainty
 
-UA-CMDet (Sun et al., 2022) performs drone-based RGB–IR vehicle detection with uncertainty-aware learning and illumination-aware NMS at inference, which is genuinely per-frame adaptive. A DICTA 2024 paper (doi 10.1109/DICTA63115.2024.00029) proposes uncertainty-aware cross-modality fusion for visible–infrared detection. An earlier draft of this project claimed that existing VIS–IR fusion is static; that claim was wrong and is withdrawn. Learned attention is not static merely because its parameters are frozen at inference: the attention values still depend on the input.
+UA-CMDet (Sun et al., 2022) detects vehicles in paired drone RGB–IR images with a two-stage oriented detector. Its uncertainty belongs to annotations and is not predicted: a rule built from the cross-modal IoU of the two modalities' ground-truth boxes and from the RGB image's illumination weights each object's training loss, and the module is removed after training. At inference an illumination-aware NMS multiplies the RGB branch's scores by the image's illumination weight before merging the RGB, IR and fusion branches, which is genuinely per-frame adaptive. Zhao et al. (2024) fuse visible and infrared backbone features with an attention module and weight the visible and infrared branch losses by a label uncertainty estimated during training from each branch's own predictions; that module is also removed at inference. Neither paper evaluates calibration; both report mAP only. The closest prior mechanism to our shipped decision layer is therefore UA-CMDet's illumination-weighted NMS: both demote the visible stream on a statistic of the image rather than on a predicted uncertainty. Ours removes the stream outright, and only when IR votes night (§4.2). An earlier draft of this project claimed that existing VIS–IR fusion is static; that claim was wrong and is withdrawn. Learned attention is not static merely because its parameters are frozen at inference: the attention values still depend on the input.
 
 ### 2.3 Maritime detectors and datasets
 
-The maritime YOLO variants listed in §1 report accuracy without uncertainty. The Pohang Canal dataset (Chung et al., IJRR 2023) is the sensor release; PoLaRIS (arXiv 2412.06192, ICRA 2025) is a separate, later annotation release providing YOLO-format boxes for two classes. The Singapore Maritime Dataset presents visible and infrared material separately and is not a pre-paired fusion testbed. MassMIND's seven categories are segmentation classes, not a ship/buoy taxonomy, and no instance-to-class mapping exists in our repository. The MIT Marine Perception dataset was planned and never onboarded; no data, code or annotation from it exists in this work.
+The maritime YOLO variants cited in §1 report accuracy without uncertainty: RDSC-YOLOv4 lightens YOLOv4 for an unmanned surface vehicle, and YOLOv7-Sea adds a small-object head, an attention module and five-scale test-time augmentation for drone search and rescue. The Pohang Canal dataset (Chung et al., 2023) is the sensor release; PoLaRIS (Choi et al., 2025) is a separate, later annotation release providing ship and buoy boxes on the visible and thermal images. The Singapore Maritime Dataset (Prasad et al., 2017) offers visible and near-infrared videos that do not necessarily show the same scene, so it is not a paired fusion testbed. MassMIND (Nirgudkar et al., 2023) is long-wave infrared only, labelled by instance segmentation in seven categories that are not a ship/buoy taxonomy, and no instance-to-class mapping exists in our repository. The MIT Marine Perception dataset was planned and never onboarded; no data, code or annotation from it exists in this work.
 
 ### 2.4 Comparison axes
 
-Table R positions this work against the nearest prior systems. Cells for other papers' calibration protocols, registration assumptions and compute are left blank rather than filled from memory; they will be completed from a direct read of each paper.
+Table R positions this work against the nearest prior systems. Every cell for another work comes from a direct read of its full text on 2026-10-08 (Gaussian YOLOv3 and UA-CMDet from their arXiv versions, the others from the published versions); "speed not reported" means the paper gives no figure.
 
 **Table R. Positioning.**
 
 | Work | Domain | Sensors | Uncertainty target | Inference-time adaptation | Calibration evaluated | Registration assumption | Compute |
 |---|---|---|---|---|---|---|---|
-| Gaussian YOLOv3 | road | RGB | box coordinates | none | — | n/a | single pass |
-| UA-CMDet (2022) | drone | RGB + IR | — | illumination-aware NMS | — | — | — |
-| DICTA 2024 | generic | VIS + IR | — | — | — | — | — |
-| Maritime YOLO variants | maritime | RGB (some IR) | none | none | no | n/a | single pass |
-| This work | maritime | VIS + LWIR | box coordinates (σ²), frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9930 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor | nearest-timestamp pairing, 3–6 px median residual | two single-pass detectors; 57.0 FPS per detector, detector time only (§6.1) |
+| Gaussian YOLOv3 (Choi et al., 2019) | road (KITTI, BDD) | RGB | box coordinates, one Gaussian per coordinate | per box: score × (1 − mean predicted uncertainty) | no calibration metric; IoU plotted against predicted uncertainty | n/a | single pass; above 42 fps on a GTX 1080 Ti |
+| UA-CMDet (Sun et al., 2022) | drone (DroneVehicle) | RGB + IR | per-object training-loss weights from a rule (cross-modal ground-truth IoU, RGB illumination); not predicted | per frame: RGB scores × illumination weight, then NMS over RGB, IR and fusion branches | no (mAP only) | distortion correction and a per-pair affine alignment; residual misalignment is down-weighted in training | two-stage oriented detector (RoI Transformer, ResNet-50-FPN); uncertainty module removed after training; speed not reported |
+| Zhao et al. (2024), DICTA | drone (DroneVehicle), surveillance (M3FD) | VIS + IR | per-label training-loss weights estimated from each branch's predictions; not predicted at inference | input-dependent attention over fused backbone features | no (mAP only) | datasets distributed as aligned pairs | two-stream backbone with RoI Transformer, Faster R-CNN or RetinaNet heads; speed not reported |
+| RDSC-YOLOv4 (Liu et al., 2021) | maritime, surface vehicle (SeaShips, SeaBuoys) | RGB | none | none | no | n/a | single pass; 68 FPS on an RTX 2080 Ti |
+| YOLOv7-Sea (Zhao et al., 2023) | maritime, drone (SeaDronesSee) | RGB | none | test-time augmentation over five scales | no | n/a | five passes per image; speed not reported |
+| This work | maritime | VIS + LWIR | box coordinates (σ²), frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9926 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor | nearest-timestamp pairing, 3–6 px median residual | two single-pass detectors; 57.0 FPS per detector, detector time only (§6.1) |
 
 ---
 
@@ -65,7 +66,7 @@ Table R positions this work against the nearest prior systems. Cells for other p
 
 ### 3.1 Pohang Canal and PoLaRIS
 
-The Pohang Canal dataset covers a 7.5 km route through canal, inner and outer port, and near-coastal water, recorded by the KAIST MORIN lab. It provides stereo visible video at 2048×1080 and 10 Hz and a thermal camera at 640×512, 16-bit, 10 Hz. PoLaRIS supplies YOLO-format boxes for two classes, ship and buoy, under CC BY-NC 4.0. There are five runs: pohang00 (day, dense in both modalities), pohang01 (night), and pohang02 to pohang04 with varying IR coverage. pohang04 has no IR labels at all. The two cameras are not spatially co-registered; frames are paired by nearest timestamp, and the residual misalignment was measured rather than assumed at 3–6 px median per run, with within-run swings of up to about 10 px.
+The Pohang Canal dataset (Chung et al., 2023) covers a 7.5 km route through canal, inner and outer port, and near-coastal water, recorded by the KAIST MORIN lab, and is distributed under CC BY-NC 4.0 (AWS Open Data registry entry). It provides stereo visible video at 2048×1080 and 10 Hz and a thermal camera at 640×512, 16-bit, 10 Hz (image sizes and bit depth confirmed on the files). PoLaRIS (Choi et al., 2025) supplies boxes for two classes, ship and buoy, which we use in YOLO format. There are five runs: pohang00 (day, dense in both modalities), pohang01 (night), and pohang02 to pohang04 with varying IR coverage. pohang04 has no IR labels at all. The two cameras are not spatially co-registered; frames are paired by nearest timestamp, and the residual misalignment was measured rather than assumed at 3–6 px median per run, with within-run swings of up to about 10 px.
 
 ### 3.2 Verified counts
 
@@ -140,17 +141,17 @@ Each modality runs its own YOLO backbone with separate weights. From each backbo
 - calibrated OOD score `O_m = sigmoid((d_m − μ_d) / τ)`;
 - reliability `R_m = r_frame,m · r_box,m` with `r_box,m = exp(−λ U_box,m)` and `r_frame,m = 1 − O_m`, falling back to `r_frame,m` on empty frames;
 - temporal smoothing `R̄_m(t) = α R_m(t) + (1 − α) R̄_m(t−1)`;
-- fusion weight `w_m = R̄_m / (R̄_vis + R̄_ir)` fed to Weighted Boxes Fusion (WBF).
+- fusion weight `w_m = R̄_m / (R̄_vis + R̄_ir)` fed to Weighted Boxes Fusion (WBF; Solovyev et al., 2021).
 
 The design document itself marked every constant and the multiplicative form as choices to be validated empirically. They were, and the validation is the subject of this paper.
 
 ### 4.2 As shipped (preset `crossmodal26m`)
 
-**Detectors.** VIS uses yolo26m with two classes. IR uses yolo26m with a P2 feature neck and a single class, because IR cannot see buoys: its buoy AP50-95 is 0.0002. Backbone selection is in §6.1.
+**Detectors.** VIS uses yolo26m (Jocher et al., 2026) with two classes. IR uses yolo26m with a P2 feature neck and a single class, because IR cannot see buoys: its buoy AP50-95 is 0.0002. Backbone selection is in §6.1.
 
-**Gaussian head.** A fresh log-variance branch (`cv4`) is bolted in place onto the live detection head of a loaded model; there is no fork of the training library. Variance is parameterized as log σ² over left-top-right-bottom distances in stride units and converted to pixels at inference, riding through post-processing as extra channels. Training adds a fourth loss term with beta-NLL weighting and a warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 reports that this parity is not yet demonstrated. Porting to YOLO26's end-to-end head forced three changes: σ rides the one-to-one branch only, because inference decodes from it; post-processing is overridden to gather σ with the boxes' top-k index; and the NLL target is left unclamped because at reg_max = 1 the stock clamp collapses every target to a constant. One ablation, training σ on undetached features, cannot be run on end-to-end heads because the library detaches the branch upstream.
+**Gaussian head.** A fresh log-variance branch (`cv4`) is bolted in place onto the live detection head of a loaded model; there is no fork of the training library. Variance is parameterized as log σ² over left-top-right-bottom distances in stride units and converted to pixels at inference, riding through post-processing as extra channels. Training adds a fourth loss term with beta-NLL weighting (Seitzer et al., 2022) and a warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 reports that this parity is not yet demonstrated. Porting to YOLO26's end-to-end head forced three changes: σ rides the one-to-one branch only, because inference decodes from it; post-processing is overridden to gather σ with the boxes' top-k index; and the NLL target is left unclamped because at reg_max = 1 the stock clamp collapses every target to a constant. One ablation, training σ on undetached features, cannot be run on end-to-end heads because the library detaches the branch upstream.
 
-**Mahalanobis OOD score.** Backbone features are captured by a forward hook and scored against a Ledoit–Wolf covariance fit on a reference set of clean training frames. In the shipped preset the parameters `mu_d = 1e9` and `lam = 0` make this score mathematically inert in the fusion weight. It is retained as a diagnostic and discussed in §6.3 and §8.
+**Mahalanobis OOD score.** Following Lee et al. (2018), backbone features are captured by a forward hook and scored against a Ledoit–Wolf covariance (Ledoit and Wolf, 2004) fit on a reference set of clean training frames. In the shipped preset the parameters `mu_d = 1e9` and `lam = 0` make this score mathematically inert in the fusion weight. It is retained as a diagnostic and discussed in §6.3 and §8.
 
 **Decision layer.** The shipped decision layer is a hard sensor-selection veto followed by union aggregation (Figure 1).
 
@@ -176,7 +177,7 @@ The design document itself marked every constant and the multiplicative form as 
 
 ### 5.1 Benchmark cells and substrates
 
-The development benchmark uses 2,232 paired VIS–IR frames from the validation split. Eight cells cross four conditions (clean, fog, low-light, glare) with day and night. Later grids add IR-side corruptions for ten or eleven cells. Adverse conditions are simulated with Albumentations (fog, sun flare, rain, motion blur, Gaussian and ISO noise); they are not field-collected. Night frames come from a single run, pohang01. Day-only slices on 9,284 frames are used where noted.
+The development benchmark uses 2,232 paired VIS–IR frames from the validation split. Eight cells cross four conditions (clean, fog, low-light, glare) with day and night. Later grids add IR-side corruptions for ten or eleven cells. Adverse conditions are simulated with Albumentations (Buslaev et al., 2020) (fog, sun flare, rain, motion blur, Gaussian and ISO noise); they are not field-collected. Night frames come from a single run, pohang01. Day-only slices on 9,284 frames are used where noted.
 
 ### 5.2 Tune and test discipline
 
@@ -190,19 +191,19 @@ Deltas between systems are always paired on the same frames and the same corrupt
 
 ### 5.4 Dependence-aware intervals
 
-Frames at 10 Hz are autocorrelated, and a frame-level iid bootstrap underestimates the standard error. We measured the inflation with block bootstraps up to block length L = 20 (2 s), the longest the shortest run (pohang03, 117 paired frames) permits: intervals widen by 1.9× to 1.99×. Two qualifications apply. First, this is a lower bound, because the block length is capped by the shortest run, not chosen from the autocorrelation. Second, it was measured on deltas between VIS uncertainty arms and then applied to fusion cells, where it was not re-measured. From 2026-09-10 onward every new interval is a block-bootstrap interval, and the factor 1.95 sets the Phase 3 magnitude floor at 0.0060 rather than 0.0031. Night, being a single run, has no block length at which a between-night-run interval is estimable.
+Frames at 10 Hz are autocorrelated, and a frame-level iid bootstrap underestimates the standard error. We measured the inflation with moving-block bootstraps (Künsch, 1989) up to block length L = 20 (2 s), the longest the shortest run (pohang03, 117 paired frames) permits: intervals widen by 1.9× to 1.99×. Two qualifications apply. First, this is a lower bound, because the block length is capped by the shortest run, not chosen from the autocorrelation. Second, it was measured on deltas between VIS uncertainty arms and then applied to fusion cells, where it was not re-measured. From 2026-09-10 onward every new interval is a block-bootstrap interval, and the factor 1.95 sets the Phase 3 magnitude floor at 0.0060 rather than 0.0031. Night, being a single run, has no block length at which a between-night-run interval is estimable.
 
 ### 5.5 AP convention
 
-All absolute AP values use local linear-interpolation AP with the project's maximum detection count, not COCO AP. The two conventions disagree on deltas by at most 0.000285, five times below the noise floor, so no decision can flip on convention; they disagree on absolutes by up to −0.0050, so every absolute value states its convention. The one table outside this convention is Table 1, the backbone benchmark: it reports the training library's own validation mAP (Ultralytics 8.4.90, ship and buoy), because it is read from training logs, says so in its caption, and none of its values is set beside a local-AP number. Two training-library versions (8.4.7 and 8.4.90) disagree on mAP50-95 by about 0.034 for identical weights and data; no table in this paper places numbers from different library versions side by side.
+All absolute AP values use local linear-interpolation AP with the project's maximum detection count, not COCO AP (Lin et al., 2014). The two conventions disagree on deltas by at most 0.000285, five times below the noise floor, so no decision can flip on convention; they disagree on absolutes by up to −0.0050, so every absolute value states its convention. The one table outside this convention is Table 1, the backbone benchmark: it reports the training library's own validation mAP (Ultralytics 8.4.90, ship and buoy), because it is read from training logs, says so in its caption, and none of its values is set beside a local-AP number. Two training-library versions (8.4.7 and 8.4.90) disagree on mAP50-95 by about 0.034 for identical weights and data; no table in this paper places numbers from different library versions side by side.
 
 ### 5.6 Metric contracts
 
-Six claims about the uncertainty metrics were tested and hold: D-ECE conditions on confidence only; AUSE and AURC are ranking-only (a rank-reversing control moves AUSE from 0.0630 to 0.3569); NLL and interval-ECE are computed on true positives only and are published with their true-positive share and recall denominators; AURC is a grid mean, whose gap to the trapezoidal integral (0.0215) is published alongside. One defect was found and is disclosed rather than repaired: WBF can emit fused confidences above 1.0 (maximum 1.7532, on 0.0641 percent of detections) because two overlapping same-stream boxes count as confirmation. This traces to WBF mechanics, not to cross-modal support.
+Six claims about the uncertainty metrics were tested and hold: D-ECE, here the confidence-only form of the detection calibration error of Küppers et al. (2020), conditions on confidence only; AUSE (Ilg et al., 2018) and AURC (Geifman et al., 2019) are ranking-only (a rank-reversing control moves AUSE from 0.0630 to 0.3569); NLL and interval-ECE are computed on true positives only and are published with their true-positive share and recall denominators; AURC is a grid mean, whose gap to the trapezoidal integral (0.0215) is published alongside. One defect was found and is disclosed rather than repaired: WBF can emit fused confidences above 1.0 (maximum 1.7532, on 0.0641 percent of detections) because two overlapping same-stream boxes count as confirmation. This traces to WBF mechanics, not to cross-modal support.
 
 ### 5.7 Pre-registrations and decision rules
 
-Every verdict in §6 and §7 was fixed in advance. The registrations and their rules are: the night-label restore (ALIVE bands and a day guard); the re-pricing of inherited constants (margin 2·hypot(sd_draw, sd_paired)); soft-NMS adoption (every cell non-negative, draw-averaged); the R-D1 mechanism ablation (at least three of four conditions above a 0.0060 floor with block-bootstrap CI excluding zero); the Phase 3 retrain with nine append-only amendments; the Stage 1 correspondence crossing (non-inferiority within 0.0060 on at least three of four conditions); and the pohang04 single look (§7). After the interval and convention corrections were applied retroactively, 20 of 74 previously significant fusion findings became indeterminate; the large effects (removing the veto on night, fog and glare; the veil repair at +0.0716) survived. That count widens the recorded intervals by the 1.95 factor rather than re-scoring each finding, so it inherits the factor's qualifications from §5.4.
+Every verdict in §6 and §7 was fixed in advance. The registrations and their rules are: the night-label restore (ALIVE bands and a day guard); the re-pricing of inherited constants (margin 2·hypot(sd_draw, sd_paired)); soft-NMS (Bodla et al., 2017) adoption (every cell non-negative, draw-averaged); the R-D1 mechanism ablation (at least three of four conditions above a 0.0060 floor with block-bootstrap CI excluding zero); the Phase 3 retrain with nine append-only amendments; the Stage 1 correspondence crossing (non-inferiority within 0.0060 on at least three of four conditions); and the pohang04 single look (§7). After the interval and convention corrections were applied retroactively, 20 of 74 previously significant fusion findings became indeterminate; the large effects (removing the veto on night, fog and glare; the veil repair at +0.0716) survived. That count widens the recorded intervals by the 1.95 factor rather than re-scoring each finding, so it inherits the factor's qualifications from §5.4.
 
 ### 5.8 Identity checks and power
 
@@ -214,7 +215,7 @@ A one-frame shift in cache pairing moves gated fusion by −0.000968, below the 
 
 ### 6.1 Backbone benchmark is a negative result
 
-Ninety-three training runs, 31 YOLO variants with three seeds each, were trained on the restored labels of §3.5 and stopped by one rule: 20 epochs without a new best mAP50-95. The grid first trained 25 epochs on the training server. Each run was then continued from its 25-epoch weights with the early stopper seeded to keep counting from the base run's best epoch, so a run that had already spent 15 of its 20 epochs stopped after five more without a new best. Each run is scored at its best epoch, the earliest maximum, which is the checkpoint the stopper keeps.
+Ninety-three training runs, 31 YOLO variants with three seeds each from six families (YOLOv8, Jocher et al., 2023; YOLOv9, C.-Y. Wang et al., 2024; YOLOv10, A. Wang et al., 2024; YOLO11, Jocher and Qiu, 2024; YOLO12, Tian et al., 2025; YOLO26, Jocher et al., 2026), were trained on the restored labels of §3.5 and stopped by one rule: 20 epochs without a new best mAP50-95. The grid first trained 25 epochs on the training server. Each run was then continued from its 25-epoch weights with the early stopper seeded to keep counting from the base run's best epoch, so a run that had already spent 15 of its 20 epochs stopped after five more without a new best. Each run is scored at its best epoch, the earliest maximum, which is the checkpoint the stopper keeps.
 
 **Table 1. VIS backbone benchmark at patience 20, seed mean ± sd.** Ultralytics 8.4.90 validation mAP over ship and buoy, read from the training logs. This is not local AP, so no value here is comparable with any other table (§5.5). Restored labels (train-label hash `8ed69b5974ed`), stride-4 train split (24,070 frames), full VIS validation split (11,352 frames, pohang00–04 including the night run). The best epoch is selected on the split it is reported on, a small optimism shared by every row; this is not a held-out claim. *25 epochs* is the same runs' best within their first 25 epochs; *Best epoch* counts from epoch 1. Source: `docs/eval/bench_patience20_2026-10-08/table1_ext.md`, per run in `table1_ext_runs.csv`.
 
@@ -612,4 +613,62 @@ Placeholder.
 
 ## References
 
-To be completed from direct reads. Entries required by the text: Chung et al., IJRR 2023 (Pohang Canal, arXiv 2303.05555); PoLaRIS, arXiv 2412.06192, ICRA 2025; Choi et al., ICCV 2019 (Gaussian YOLOv3); Sun et al., 2022 (UA-CMDet); DICTA 2024, doi 10.1109/DICTA63115.2024.00029; Seitzer et al., 2022 (beta-NLL); Skafte et al., 2019 (variance warm-up); RT-DETR, CVPR 2024; D-FINE, ICLR 2025; Weighted Boxes Fusion; Ledoit–Wolf covariance; Albumentations; SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea.
+Amini, A., Schwarting, W., Soleimany, A., and Rus, D. (2020). Deep evidential regression. In *Advances in Neural Information Processing Systems 33* (NeurIPS 2020).
+
+Bodla, N., Singh, B., Chellappa, R., and Davis, L. S. (2017). Soft-NMS: improving object detection with one line of code. In *Proceedings of the IEEE International Conference on Computer Vision (ICCV)*, pp. 5562–5570. doi:10.1109/ICCV.2017.593.
+
+Buslaev, A., Iglovikov, V. I., Khvedchenya, E., Parinov, A., Druzhinin, M., and Kalinin, A. A. (2020). Albumentations: fast and flexible image augmentations. *Information*, 11(2), 125. doi:10.3390/info11020125.
+
+Choi, Jiwon, Cho, D., Lee, G., Kim, H., Yang, G., Kim, J., and Cho, Y. (2025). PoLaRIS dataset: a maritime object detection and tracking dataset in Pohang Canal. In *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, pp. 13626–13632. doi:10.1109/ICRA55743.2025.11128583. Preprint arXiv:2412.06192.
+
+Choi, Jiwoong, Chun, D., Kim, H., and Lee, H.-J. (2019). Gaussian YOLOv3: an accurate and fast object detector using localization uncertainty for autonomous driving. In *Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)*, pp. 502–511. doi:10.1109/ICCV.2019.00059.
+
+Chung, D., Kim, J., Lee, C., and Kim, J. (2023). Pohang Canal dataset: a multimodal maritime dataset for autonomous navigation in restricted waters. *The International Journal of Robotics Research*, 42(12), 1104–1114. doi:10.1177/02783649231191145.
+
+Gal, Y., and Ghahramani, Z. (2016). Dropout as a Bayesian approximation: representing model uncertainty in deep learning. In *Proceedings of the 33rd International Conference on Machine Learning (ICML)*, PMLR 48, pp. 1050–1059.
+
+Geifman, Y., Uziel, G., and El-Yaniv, R. (2019). Bias-reduced uncertainty estimation for deep neural classifiers. In *International Conference on Learning Representations (ICLR)*. arXiv:1805.08206.
+
+Ilg, E., Çiçek, Ö., Galesso, S., Klein, A., Makansi, O., Hutter, F., and Brox, T. (2018). Uncertainty estimates and multi-hypotheses networks for optical flow. In *Computer Vision – ECCV 2018*, Lecture Notes in Computer Science, pp. 677–693. doi:10.1007/978-3-030-01234-2_40.
+
+Jocher, G., Chaurasia, A., and Qiu, J. (2023). *Ultralytics YOLOv8* (software, version 8.0.0; this work used the Ultralytics library at version 8.4.90). https://github.com/ultralytics/ultralytics. AGPL-3.0.
+
+Jocher, G., and Qiu, J. (2024). *Ultralytics YOLO11* (software, version 11.0.0). https://github.com/ultralytics/ultralytics. AGPL-3.0.
+
+Jocher, G., Qiu, J., Liu, M., Lyu, S., Akyon, F. C., and Kalfaoglu, M. E. (2026). Ultralytics YOLO26: unified real-time end-to-end vision models. arXiv:2606.03748.
+
+Künsch, H. R. (1989). The jackknife and the bootstrap for general stationary observations. *The Annals of Statistics*, 17(3), 1217–1241. doi:10.1214/aos/1176347265.
+
+Küppers, F., Kronenberger, J., Shantia, A., and Haselhoff, A. (2020). Multivariate confidence calibration for object detection. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops (CVPRW)*, pp. 1322–1330. doi:10.1109/CVPRW50498.2020.00171.
+
+Lakshminarayanan, B., Pritzel, A., and Blundell, C. (2017). Simple and scalable predictive uncertainty estimation using deep ensembles. In *Advances in Neural Information Processing Systems 30* (NeurIPS 2017).
+
+Ledoit, O., and Wolf, M. (2004). A well-conditioned estimator for large-dimensional covariance matrices. *Journal of Multivariate Analysis*, 88(2), 365–411. doi:10.1016/S0047-259X(03)00096-4.
+
+Lee, K., Lee, K., Lee, H., and Shin, J. (2018). A simple unified framework for detecting out-of-distribution samples and adversarial attacks. In *Advances in Neural Information Processing Systems 31* (NeurIPS 2018).
+
+Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Dollár, P., and Zitnick, C. L. (2014). Microsoft COCO: common objects in context. In *Computer Vision – ECCV 2014*, Lecture Notes in Computer Science, pp. 740–755. doi:10.1007/978-3-319-10602-1_48.
+
+Liu, T., Pang, B., Zhang, L., Yang, W., and Sun, X. (2021). Sea surface object detection algorithm based on YOLO v4 fused with reverse depthwise separable convolution (RDSC) for USV. *Journal of Marine Science and Engineering*, 9(7), 753. doi:10.3390/jmse9070753.
+
+Nirgudkar, S., DeFilippo, M., Sacarny, M., Benjamin, M., and Robinette, P. (2023). MassMIND: Massachusetts Maritime INfrared Dataset. *The International Journal of Robotics Research*, 42(1–2), 21–32. doi:10.1177/02783649231153020.
+
+Prasad, D. K., Rajan, D., Rachmawati, L., Rajabally, E., and Quek, C. (2017). Video processing from electro-optical sensors for object detection and tracking in a maritime environment: a survey. *IEEE Transactions on Intelligent Transportation Systems*, 18(8), 1993–2016. doi:10.1109/TITS.2016.2634580.
+
+Seitzer, M., Tavakoli, A., Antic, D., and Martius, G. (2022). On the pitfalls of heteroscedastic uncertainty estimation with probabilistic neural networks. In *International Conference on Learning Representations (ICLR)*. arXiv:2203.09168.
+
+Skafte, N., Jørgensen, M., and Hauberg, S. (2019). Reliable training and estimation of variance networks. In *Advances in Neural Information Processing Systems 32* (NeurIPS 2019).
+
+Solovyev, R., Wang, W., and Gabruseva, T. (2021). Weighted boxes fusion: ensembling boxes from different object detection models. *Image and Vision Computing*, 107, 104117. doi:10.1016/j.imavis.2021.104117.
+
+Sun, Y., Cao, B., Zhu, P., and Hu, Q. (2022). Drone-based RGB-infrared cross-modality vehicle detection via uncertainty-aware learning. *IEEE Transactions on Circuits and Systems for Video Technology*, 32(10), 6700–6713. doi:10.1109/TCSVT.2022.3168279. Preprint arXiv:2003.02437.
+
+Tian, Y., Ye, Q., and Doermann, D. (2025). YOLOv12: attention-centric real-time object detectors. In *Advances in Neural Information Processing Systems 38* (NeurIPS 2025). arXiv:2502.12524.
+
+Wang, A., Chen, H., Liu, L., Chen, K., Lin, Z., Han, J., and Ding, G. (2024). YOLOv10: real-time end-to-end object detection. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024).
+
+Wang, C.-Y., Yeh, I-H., and Liao, H.-Y. M. (2024). YOLOv9: learning what you want to learn using programmable gradient information. In *Computer Vision – ECCV 2024*, Lecture Notes in Computer Science, pp. 1–21. doi:10.1007/978-3-031-72751-1_1.
+
+Zhao, H., Zhang, H., and Zhao, Y. (2023). YOLOv7-sea: object detection of maritime UAV images based on improved YOLOv7. In *Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision Workshops (WACVW)*, pp. 233–238. doi:10.1109/WACVW58289.2023.00029.
+
+Zhao, J., Wang, Y., Zhang, Y., Wang, H., and Guo, Y. (2024). Uncertainty-aware cross-modality fusion for visible-infrared object detection. In *Proceedings of the International Conference on Digital Image Computing: Techniques and Applications (DICTA)*, pp. 117–125. doi:10.1109/DICTA63115.2024.00029.
