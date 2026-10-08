@@ -39,6 +39,15 @@ RUN_FIELDS = ["run_id", "family", "status", "host", "batch", "workers", "base_ep
               "best_epoch", "base_map50_95", "precision", "recall", "map50", "map50_95", "improved",
               "stop", "replay", "rows_contiguous", "note"]
 
+# Recorded on the author's statement: each run reached patience 20 and no extension epoch beat its ep25 best.
+# Their extension logs are not in the repo, so the stop is not replayed and the score is the ep25 best row
+# (plus any extension rows that are on disk). Marked "author-reported" in the run CSV and "AR" in the table.
+AUTHOR_REPORTED_ON = "2026-10-08"
+AUTHOR_REPORTED = {f"vis_bench_{f}_seed{s}" for f, seeds in [
+    ("yolo11x", (1, 2)), ("yolo12l", (1, 2)), ("yolo12x", (1, 2)), ("yolo26x", (2,)),
+    ("yolov10l", (1, 2)), ("yolov10x", (1, 2)), ("yolov9e", (0, 1, 2))] for s in seeds}
+AR = "author-reported"
+
 
 def rows_of(path: Path) -> list[dict]:
     if not path.is_file():
@@ -93,15 +102,29 @@ def one_run(rid: str, on_server: dict[str, int]) -> dict:
         ext_dir = OUT / f"{rid}_ext"
         done = json.loads((ext_dir / "ext_done.json").read_text()) if (ext_dir / "ext_done.json").is_file() else {}
         ext = rows_of(ext_dir / "results.csv")
-        if done.get("status") != "done":
+        gap = base[-1]["epoch"] - b_best["epoch"]
+        if done.get("status") == "done":
+            rec.update(status="done", host=done.get("host", ""), batch=done.get("batch"),
+                       workers=done.get("workers"), stop=done.get("stop", ""), replay=done.get("replay", ""))
+            ext_n = int(done.get("ext_epochs", len(ext)))
+            for s in done.get("batch_switches", []):
+                rec["note"] = (f"batch {s['from']} -> {s['to']} from ext epoch {s['at_ext_epoch']} ({s['why']}); "
+                               "nbs 64 keeps the effective batch at 64")
+        elif gap >= PATIENCE:
+            # The base run's own stopper fired at its last epoch: final, with no extension epoch to train.
+            rec.update(status="done", host="dgxanode01", **args_of(BASE / rid), stop="patience", replay="OK",
+                       note=f"base best at epoch {b_best['epoch']}, gap {gap} >= patience {PATIENCE}: "
+                            "final at ep25, no extension epoch")
+            ext_n = 0
+        elif rid in AUTHOR_REPORTED:
+            ext_n = PATIENCE - gap                                # where the stopper fires if nothing beats the base
+            rec.update(status="done", host=AR, stop="patience", replay=AR,
+                       note=f"{AR} {AUTHOR_REPORTED_ON}: patience {PATIENCE} reached at ext epoch {ext_n}, no new best; "
+                            + (f"{len(ext)} of {ext_n} ext epochs logged here, none above the base"
+                               if ext else "extension logs not in the repo"))
+        else:
             rec.update(status="training" if ext else "queued", ext_epochs=len(ext))
             return rec
-        rec.update(status="done", host=done.get("host", ""), batch=done.get("batch"), workers=done.get("workers"),
-                   stop=done.get("stop", ""), replay=done.get("replay", ""))
-        ext_n = int(done.get("ext_epochs", len(ext)))
-        for s in done.get("batch_switches", []):
-            rec["note"] = (f"batch {s['from']} -> {s['to']} from ext epoch {s['at_ext_epoch']} ({s['why']}); "
-                           "nbs 64 keeps the effective batch at 64")
 
     best = b_best
     for r in ext:                                                 # strict >: the earliest maximum stands
@@ -174,7 +197,9 @@ def build(out_dir: Path) -> str:
         batches = sorted({r["batch"] for r in d if r.get("batch")}, reverse=True)
         hosts = sorted({r["host"] for r in d})
         gain = [r["map50_95"] - r["base_map50_95"] for r in d]
-        return (f"| {i} | `{f}` | {len(d)}/{len(rs)} | {ms([r['map50_95'] for r in d])} | {ms([r['map50'] for r in d], 3)} "
+        n_ar = sum(r.get("replay") == AR for r in d)
+        seeds = f"{len(d)}/{len(rs)}" + (f" ({n_ar} AR)" if n_ar else "")
+        return (f"| {i} | `{f}` | {seeds} | {ms([r['map50_95'] for r in d])} | {ms([r['map50'] for r in d], 3)} "
                 f"| {ms([r['precision'] for r in d], 3)} | {ms([r['recall'] for r in d], 3)} "
                 f"| {ms([r['base_map50_95'] for r in d])} | {mean(gain):+.4f} | {sum(r['improved'] for r in d)}/{len(d)} "
                 f"| {mean(r['best_epoch'] for r in d):.0f} | {'/'.join(map(str, batches))} | {', '.join(hosts)} |")
@@ -188,6 +213,10 @@ def build(out_dir: Path) -> str:
               f"Re-run `scripts/bench_ext_table.py` when the queue ends.", ""]
     else:
         L += [f"All {len(runs)} runs finished; {len(fams)} families.", ""]
+    ar_runs = [r for r in done if r.get("replay") == AR]
+    if ar_runs:
+        L += [f"**{len(ar_runs)} of the {len(done)} finished runs are author-reported (AR):** their extension logs are "
+              "not in the repo, so their stop is not replayed and each scores its ep25 best. See Notes.", ""]
 
     L += ["## Ranking (families with every seed finished)", "", head]
     L += [fam_row(i, f, complete[f]) for i, f in enumerate(order, 1)]
@@ -209,6 +238,9 @@ def build(out_dir: Path) -> str:
               f"* **Moved ≥ 3 places:** " + (", ".join(f"`{f}` {base_rank[f]:.0f}→{i}" for i, f in enumerate(order, 1)
                                                 if abs(base_rank[f] - i) >= 3) or "none") + ".",
               f"* **Runs that beat their ep25 best:** {sum(r['improved'] for r in done)} of {len(done)}."]
+        top_ar = [(f, sum(r.get("replay") == AR for r in complete[f]), len(complete[f])) for f in order[:5]]
+        if any(n for _, n, _ in top_ar):
+            L += ["* **AR runs in the top 5:** " + ", ".join(f"`{f}` {n}/{k}" for f, n, k in top_ar if n) + "."]
 
     if partial:
         L += ["", "## Families not yet complete (not ranked)", "", head]
@@ -217,8 +249,9 @@ def build(out_dir: Path) -> str:
         L += ["", "Pending: " + ", ".join(f"`{r['run_id'].replace('vis_bench_', '')}` ({r['status']})"
                                           for r in runs if r["status"] != "done") + "."]
 
-    bad = [r for r in done if r.get("replay") != "OK" or (not r.get("rows_contiguous", True) and "note" not in r)]
-    gaps = [r for r in done if r.get("note")]
+    bad = [r for r in done if r.get("replay") not in ("OK", AR)
+           or (not r.get("rows_contiguous", True) and "note" not in r)]
+    gaps = [r for r in done if r.get("note") and r.get("replay") != AR]
     L += ["", "## Notes", "",
           "* **Score:** best-epoch row over base + extension, earliest maximum, the checkpoint EarlyStopping keeps. "
           "The epoch is chosen on the same val split it is reported on (as in Phase 1), so absolute values carry a "
@@ -231,9 +264,18 @@ def build(out_dir: Path) -> str:
           "with nbs=64 kept, so the effective batch is 64 throughout; "
           "loader workers 6 (server 2). Batch and host are per family above, per run in `table1_ext_runs.csv`.",
           f"* **Excluded:** {', '.join(f'`{k}` ({v})' for k, v in EXCLUDED.items())}. `yolov8s` reports seeds 0, 1, 3.",
-          "* **Replay / rows:** " + ("every finished run replays its stopper exactly; rows are contiguous except where noted below."
+          "* **Replay / rows:** " + (("every finished run " + ("except the AR ones " if ar_runs else "")
+                                      + "replays its stopper exactly; rows are contiguous except where noted below.")
                                      if not bad else "; ".join(f"`{r['run_id']}` replay={r.get('replay')} "
                                                                f"contiguous={r.get('rows_contiguous')}" for r in bad) + ".")]
+    if ar_runs:
+        L += [f"* **Author-reported (AR), recorded {AUTHOR_REPORTED_ON}:** the author reports that each of these runs "
+              f"reached patience {PATIENCE} with no extension epoch above its ep25 best. Their extension logs are not "
+              "in the repo, so the stop is not replayed; the score, best epoch, precision, recall and mAP50 are the "
+              "ep25 best row from the server's base log, and *Ext epochs* is where the stopper fires in that case. "
+              "Runs: " + ", ".join(f"`{r['run_id'].replace('vis_bench_', '')}`" for r in ar_runs) + "."]
+        L += [f"* `{r['run_id'].replace('vis_bench_', '')}`: {r['note']}." for r in ar_runs
+              if "logged here" in r.get("note", "")]
     L += [f"* `{r['run_id'].replace('vis_bench_', '')}`: {r['note']}." for r in gaps]
     md = "\n".join(L) + "\n"
     (out_dir / "table1_ext.md").write_text(md, encoding="utf-8")
