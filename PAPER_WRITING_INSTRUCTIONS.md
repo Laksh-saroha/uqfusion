@@ -225,12 +225,15 @@ Each step must name the measurement that forced it. Never present the final syst
 | Table D | Night-box filter accounting: 749,579 → 616,891 → 749,579 → 711,444 with hashes | P3.5 |
 | Table N | Noise-floor summary per cell: sd_draw, sd_paired, 2σ floor, buoy variance share | P8.13, P9.1 |
 | Table L | Negative/inert levers with delta and CI | P8 (see §3.7 item 8) |
-| Figure 1 | Shipped decision layer: IR-night vote, VIS dark/veil, veto → WBF concat → support multiplier; annotate `w_vis = 0.9930` | P1.8, P6.4 |
-| Figure 2 | Worst-cell gap evolution across the six gate rewrites | P6 |
-| Figure 3 | Reliability diagrams / sparsification curves per modality | P1.14, P8.1 |
-| Figure 4 | Night restore: night mAP before/after with CI and ALIVE bands | P3.5 |
-| Figure 5 | Lift screen bar chart: conf 4.80×, σ 3.00×, cross-modal 2.08×, temporal 1.00× | P6.5 |
-| Figure 6 | Best-epoch vs epoch-mean inversion for the UQ arms | P5.7 |
+| Figure 1 | Shipped decision layer: IR-night vote, VIS dark/veil, veto → WBF concat → support multiplier; annotate `w_vis = 0.9926` (`crossmodal26m`) | P1.8, P6.4; `fig_decision_layer` |
+| Figure 2 | Reliability, interval coverage and sparsification error per modality, three arms, day slice | P1.14, P8.1; `fig_uq_calibration` |
+| Figure 3 | Lift screen: conf 4.80×, σ 3.00×, cross-modal 2.08×, temporal 1.00× | P6.5; `fig_lift_screen` |
+| Figure 4 | Best-epoch vs epoch-mean inversion for the UQ arms | P5.7; `fig_checkpoint_selection` |
+| Figure 5 | Worst-cell gap evolution across the six gate rewrites | P6; `fig_gate_history` |
+| Figure 6 | Table 3b per cell: VIS, IR, fused on the five Phase 3 systems | Draft 2 §6.3; `fig_phase3_cells` |
+| Figure 7 | Night restore: night mAP before/after with CI and ALIVE bands | P3.5; `fig_night_restore` |
+
+Figures are numbered in reading order and drawn by `scripts/paper_figures.py` into `docs/figures/` (PDF for the manuscript, PNG for preview); each caption names its source file.
 
 Caption rules: every AP caption states convention (local linear-interp), substrate (2,232 paired frames or the day-only 9,284), corruption draw seeds, and whether the CI is block-bootstrapped with the 1.95× factor.
 
