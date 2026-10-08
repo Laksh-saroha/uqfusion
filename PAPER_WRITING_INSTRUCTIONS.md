@@ -23,6 +23,7 @@
 7. **Report the things that point the wrong way.** The project norm is that unfavorable results are reported, not discarded (e.g., S5−S6 clean = −0.013157) [P7.3].
 8. **No claims about MIT, MassMIND or SMD data.** Pohang Canal + PoLaRIS is the only dataset. The earlier manual-annotation claim about MIT was measured false and is retired [P3.13, P10.2].
 9. **No claim of novelty for the σ head or for the idea of conditioning fusion on uncertainty.** Both are prior art (Gaussian YOLOv3; UA-CMDet 2022; DICTA 2024) [P10.1]. Novelty is confined to the three defensible items in §2.
+10. **Name the class set on every AP.** Ship is primary (pre-registered for Phase 3; the only class IR emits). Tables 1b, 3b, 5, 7 and Figures 6–7 are ship AP; Tables 1 and 4 are the ship+buoy macro; Table 2 gives both. Never put a macro beside a ship AP, and never report a single-class stream on the macro: it reads exactly half its ship AP. Declared in Draft 2 §5.5 (TODO-improvements §D.3).
 
 ---
 
@@ -117,7 +118,7 @@ Write the method in two layers and label them explicitly:
   - Veil arm: `grad_gini` (scale-free Gini of gradient magnitude), single-frame, no temporal filter [P6.4].
   - Rule: **`night AND (dark OR veil)`** vetoes VIS; a vetoed stream is *removed from the WBF input list*, not down-weighted (WBF renormalizes weights) [P6.1, P6.5].
   - Single surviving stream is passed through untouched (`single_passthrough`) [P6.4].
-  - Merge: WBF at iou_thr 0.85 with constant capability-prior weights; at this threshold only 0.05% of VIS boxes have an IR partner, so the merge is concatenation. Document merge as effectively `merge_iou='off'` [P1.8, P8.4].
+  - Merge: WBF at iou_thr 0.85 with constant capability-prior weights (VIS 0.3233, IR 0.0024 after ÷4, `w_vis` 0.9926), fitted on the 1,200 clean day frames the day cells score. "Run-disjoint" in older records means night-run-excluded only; never call the prior run-disjoint (§9 item 20). At this threshold only 0.05% of VIS boxes have an IR partner, so the merge is concatenation. Document merge as effectively `merge_iou='off'` [P1.8, P8.4].
   - Cross-modal support: score multiplier at IoU 0.30, γ=0.5, never moves a coordinate; TEST delta +0.0033 [P6.5].
   - IR-stream dedup: NMS @ 0.70 [P8.4].
 - State explicitly which mechanisms are **off** in the shipped preset and why: `sigma_weighted=False`, `sigma_score_alpha=0`, Mahalanobis weight inert, `vis_soft_nms` off (pre-registered rejection) [P7.1, P8.12].
@@ -133,7 +134,7 @@ This section carries contribution 1 and must be complete:
 - **Benchmark cells:** 8 cells = {clean, fog, lowlight, glare} × {day, night} on 2,232 paired frames; later 10–11 cell grids add IR corruptions [P7.1, P8.5]. Adverse conditions are Albumentations-simulated; disclose [P1.16].
 - **Tune/test discipline:** TUNE = pohang00 (836 frames), TEST = pohang02+03 (364 frames); pohang01 (night) excluded from fitting. Report the overfitting trap it caught (support IoU 0.55 wins TUNE, loses all six held-out variants; 0.30 wins all six) [P6.5].
 - **Exposure ledger / no untouched test set:** state plainly that pohang02/03 were declared TEST after the fact and fail a model-selection-bias test; `role="final"` now structurally refuses selectors spanning scored frames; pohang04 is the only untouched data and is reserved for exactly one look [P9.2].
-- **Noise floor:** paired deltas (3–16× tighter than unpaired on informative cells; corrected 2026-09-27 from 11–52×); combined draw+bootstrap 2σ floor 0.0014–0.0031 (full range 0.0000–0.0031); buoy carries 74–75% of macro variance at 5.3% of GT mass; 2 of 11 cells carry ~zero information [P9.1 item 2, P8.13].
+- **Noise floor:** paired deltas (3–16× tighter than unpaired on informative cells; corrected 2026-09-27 from 11–52×); combined draw+bootstrap 2σ floor 0.0014–0.0031 (full range 0.0000–0.0031); buoy carries 74–75% of macro variance at 5.3% of GT mass; 2 of 11 cells carry ~zero information [P9.1 item 2, P8.13]. The floor was measured on the **macro**; where buoys do not vary, ship AP's sd is about twice the macro's, so the floor understates a ship delta's noise there by up to 2× (`runs/eval/metric_noise_floor.md` §2). Say so wherever the floor judges a ship-AP delta.
 - **Dependence-aware intervals:** block bootstrap, inflation 1.9–1.99× vs iid, ceiling at L=20 (2 s) because pohang03 has 117 frames; 1.95× applied project-wide; night has no estimable between-run interval (single run) [P9.1 item 6, P8.13].
 - **AP convention:** local linear-interp; delta disagreement vs COCO 0.000285; absolute disagreement up to −0.0050; Ultralytics 8.4.7 vs 8.4.90 gap ~0.034 must never sit in the same table [P9.1 item 5, P4.6]. Table 1 (Ultralytics 8.4.90 validation mAP) is the declared exception (Draft 2 §5.5).
 - **Metric contracts:** D-ECE conditions on confidence only; AUSE/AURC ranking-only (rank-reversal control moves AUSE 0.0630→0.3569); NLL/interval-ECE are TP-only and published with `tp_share`; AURC is a grid mean (gap to integral 0.0215, published side by side); WBF fused confidence can exceed 1.0 (max 1.7532, 0.0641% of detections), disclosed not repaired [P9.1 item 7].
@@ -218,7 +219,7 @@ Each step must name the measurement that forced it. Never present the final syst
 |---|---|---|
 | Table 1 | Patience-20 backbone benchmark, 31 variants × 3 seeds: mAP50-95 and mAP50 (Ultralytics 8.4.90 val), ep25 value, Δ, best epoch; † on the 14 runs without continuation logs | `docs/eval/bench_patience20_2026-10-08/`; Draft 2 §6.1 |
 | Table 1b | Phase 1 seed-means, `main` campaign, with n, sd, FPS (pinned clock only); the selection record | P4.4, P4.5, P4.7 |
-| Table 2 | Per-modality UQ calibration (D-ECE, NLL, AUSE, AURC grid-mean + integral, tp_share, mAP), day-only primary | P8.1, P9.1 item 7, P8.15 |
+| Table 2 | Per-modality UQ calibration (D-ECE, NLL, AUSE, AURC grid-mean + integral, tp_share, ship AP and buoy AP — never the macro, which halves single-class IR; `docs/eval/table2_per_class_2026-10-08.md`), day-only primary | P8.1, P9.1 item 7, P8.15 |
 | Table 3 | 8-cell fusion table: VIS-only, IR-only, naive fusion, crossmodal26m, no_veto, with_maha; CIs from block bootstrap | P8.1, P6.4 |
 | Table 4 | R-D1 arms S0–S7, coordinate and score path deltas with CIs, pass counts at 4 floors | P7.2, P7.3 |
 | Table 5 | Stage 1 2×2 crossing, A−D per condition, TUNE verdict and TEST (descriptive) | P11.3 |
