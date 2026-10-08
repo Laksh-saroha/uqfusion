@@ -99,6 +99,9 @@ def one_run(rid: str, on_server: dict[str, int]) -> dict:
         rec.update(status="done", host=done.get("host", ""), batch=done.get("batch"), workers=done.get("workers"),
                    stop=done.get("stop", ""), replay=done.get("replay", ""))
         ext_n = int(done.get("ext_epochs", len(ext)))
+        for s in done.get("batch_switches", []):
+            rec["note"] = (f"batch {s['from']} -> {s['to']} from ext epoch {s['at_ext_epoch']} ({s['why']}); "
+                           "nbs 64 keeps the effective batch at 64")
 
     best = b_best
     for r in ext:                                                 # strict >: the earliest maximum stands
@@ -224,7 +227,8 @@ def build(out_dir: Path) -> str:
           "pohang00–04, pohang01 night included. These are the training-time val logs, not a new evaluation and "
           "not a holdout claim.",
           "* **Recipe deviations, local runs** (authorized 2026-09-27): batch planned per family, the largest of "
-          "16/8/4/2 under 90% of the 12 GB card, with nbs=64 kept, so the effective batch is 64 throughout; "
+          "16/8/4/2 under 90% of the 12 GB card (80% from 2026-10-06, after `yolov9c` at 16 spilled to system RAM), "
+          "with nbs=64 kept, so the effective batch is 64 throughout; "
           "loader workers 6 (server 2). Batch and host are per family above, per run in `table1_ext_runs.csv`.",
           f"* **Excluded:** {', '.join(f'`{k}` ({v})' for k, v in EXCLUDED.items())}. `yolov8s` reports seeds 0, 1, 3.",
           "* **Replay / rows:** " + ("every finished run replays its stopper exactly; rows are contiguous except where noted below."

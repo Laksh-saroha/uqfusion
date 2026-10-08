@@ -21,10 +21,12 @@ Added over the server script:
     The server script would have trained a 26th, and a late best there re-opens a closed run.
   * Batch planning. On Windows the driver may spill VRAM into system RAM rather than raise OOM:
     `yolo12x` at batch 16 reserved 24 GB on this 12 GB card and ran ~10x slower. Before a family's
-    first run, the largest batch in BATCHES whose probe stays under 90% of VRAM is chosen
-    (`batch_plan.json`). A batch below 16 keeps nbs=64, so the effective batch is still 64, and
-    the deviation is recorded per run. Silent changes are refused: Ultralytics 8.4.90 halves the
-    batch on a first-epoch OOM, and a spill past the card's memory mid-run fails the run.
+    first run, the largest batch in BATCHES whose probe stays under 80% of VRAM is chosen
+    (`batch_plan.json`; 90% before 2026-10-06). A batch below 16 keeps nbs=64, so the effective
+    batch is still 64, and the deviation is recorded per run. Silent changes are refused:
+    Ultralytics 8.4.90 halves the batch on a first-epoch OOM, and a spill past the card's memory
+    mid-run fails the run. The one sanctioned change is a re-plan to a smaller batch: a resume
+    then continues at the planned batch and records the switch (`batch_switches`).
   * A data gate before every run: `bench_ext_fingerprint.py --quick`, then
     `label_hash_ledger.py --expect 8ed69b5974ed`. That is the restored tree that full-pass
     `bench_ext_fingerprint.py` proved the server benchmark read.
@@ -85,7 +87,11 @@ SMALL_MIN_PER_EPOCH, SMALL_WORKERS, DEFAULT_WORKERS = 6.0, 6, 6
 # All divide 64, so the accumulation keeps the effective batch, optimizer steps per epoch, LR and weight
 # decay identical; only BatchNorm sees fewer images per forward. Recorded per run as a deviation.
 BATCHES = (16, 8, 4, 2)
-FIT_FRACTION = 0.90          # fits = probe peak reserved VRAM (train, and a val-sized forward) under 90% of the card
+# fits = probe peak reserved VRAM (train, and a val-sized forward) under 80% of the card. It was 90% until
+# 2026-10-06: yolov9c at batch 16 probed 10.45 of 10.79 GB, then trained at 10.4 GB reserved while Windows (dwm)
+# and desktop apps held another ~1.2 GB, so the driver spilled 4.2 GB to system RAM and epochs went 14 -> 22-30
+# min at ~30-55 W. The card-total guard never fired (10.4 < 12 GB). 80% leaves ~2.4 GB for everything else.
+FIT_FRACTION = 0.80
 PLAN_JSON = OUT / "batch_plan.json"
 EXCLUDED = {"vis_bench_yolov8s_seed2": "diverged in the base grid (DIVERGENCE-ALARM.txt)"}
 # Runs handed to another machine: {"to": "...", "runs": [...]}. The queue re-reads it before every run.
@@ -199,6 +205,20 @@ def ordered(runs: list[str]) -> list[str]:
     return sorted(runs, key=lambda r: (sum(fam[family(r)]) / len(fam[family(r)]), r))
 
 
+def one_seed(runs: list[str]) -> tuple[list[str], list[str]]:
+    """(kept, deferred): one run per family. A family with a finished run (here or on the server) needs none."""
+    have = {family(r) for r in server_done()} | {family(r) for r in runs if (OUT / f"{r}_ext" / "ext_done.json").is_file()}
+    kept, deferred = [], []
+    for r in runs:
+        f = family(r)
+        if (OUT / f"{r}_ext" / "ext_done.json").is_file() or f not in have:
+            kept.append(r)
+            have.add(f)
+        else:
+            deferred.append(r)
+    return kept, deferred
+
+
 def ext_rows(ext: Path) -> list[tuple[int, float]]:
     p = ext / "results.csv"
     if not p.is_file():
@@ -279,7 +299,17 @@ def run_one(rid: str) -> int:
         del ck
         if ck_epoch >= 0 and has_opt:
             resume = True                                  # a resume keeps the batch/workers it started with
-            batch, workers = int(ck_args.get("batch", batch)), int(ck_args.get("workers", workers))
+            planned, ck_batch = batch, int(ck_args.get("batch", batch))
+            batch, workers = ck_batch, int(ck_args.get("workers", workers))
+            if planned is not None and planned < ck_batch:
+                # ...unless the family was re-planned smaller since (batch_plan.json): continue at the plan.
+                # nbs 64 keeps the effective batch; the switch is recorded with the epoch it starts on.
+                batch, at = planned, ck_epoch + 2
+                sw = state.setdefault("batch_switches", [])
+                if not any(s["at_ext_epoch"] == at for s in sw):
+                    sw.append({"from": ck_batch, "to": planned, "at_ext_epoch": at, "at": now(),
+                               "why": plan.get("note", "re-planned in batch_plan.json")})
+                log(f"=== {rid}: batch {ck_batch} -> {planned} from ext epoch {at} (batch_plan.json)")
             if any(e > ck_epoch + 1 for e, _ in ext_rows(ext)):     # csv ran ahead of the checkpoint
                 src = ext / "results.csv"
                 bak = ext / f"results.csv.pre_resume_{int(time.time())}"
@@ -359,7 +389,7 @@ def run_one(rid: str) -> int:
         model.add_callback(ev, fn)
     try:
         if resume:
-            model.train(resume=True)
+            model.train(resume=True, batch=batch)          # Ultralytics honours a batch override on resume
         else:
             model.train(data=str(DATA_YAML), epochs=EXT_EPOCHS, patience=PATIENCE, batch=batch,
                         nbs=int(args.get("nbs", 64)), imgsz=args["imgsz"], workers=workers, seed=args["seed"],
@@ -390,6 +420,7 @@ def finalize(rid, ext, base_fitness, gap, batch, workers, state) -> int:
            "gap_at_start": gap, "ext_epochs": n, "ext_best_fitness": bf, "ext_best_epoch": be,
            "improved_over_base": bf > base_fitness, "stop": stop, "replay": "OK" if ok else "MISMATCH",
            "batch": batch, "batch_base": state.get("batch_base", batch), "nbs": 64,
+           "batch_switches": state.get("batch_switches", []),
            "workers": workers, "min_per_epoch": None, "resumes": state.get("resumes", 0),
            "started_at": state.get("started_at"), "finished_at": now(), "error": "",
            "rows_contiguous": [e for e, _ in rows] == list(range(1, n + 1)),
@@ -520,7 +551,7 @@ def gate(rid: str) -> str | None:
     return None
 
 
-def init_dashboard(runs: list[str]) -> None:
+def init_dashboard(runs: list[str], deferred: list[str] = ()) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     deleg = delegated()
     here = f"{len(runs)} runs" + (f", {sum(r in deleg for r in runs)} of them delegated" if deleg else "")
@@ -544,6 +575,8 @@ def init_dashboard(runs: list[str]) -> None:
                       note=f"{d['stop']}, replay {d['replay']}, base {base_fitness:.5f}, host {d.get('host')}")
         elif r in deleg:
             rs.update(status="skipped", note=f"delegated to {deleg[r]}")
+        elif r in deferred:
+            rs.update(status="skipped", note="deferred: one seed per family for now (--one-seed)")
         else:
             rs.setdefault("status", "pending")
             rs.setdefault("best_epoch", -gap)
@@ -553,13 +586,15 @@ def init_dashboard(runs: list[str]) -> None:
     write_json(STATE_JSON, st)
 
 
-def queue(runs: list[str]) -> int:
+def queue(runs: list[str], deferred: list[str] = ()) -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "logs").mkdir(exist_ok=True)
-    init_dashboard(runs)
+    init_dashboard(runs + list(deferred), deferred)
     if os.name == "nt":             # keep Windows from sleeping while the queue runs; released when it exits
         import ctypes
         ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)   # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+    if deferred:
+        log(f"=== --one-seed: {len(deferred)} runs deferred: {', '.join(deferred)}")
     log(f"=== queue: {len(runs)} runs, smallest family first (pid {os.getpid()}, host {socket.gethostname()}, "
         f"gate {DATA_GATE})")
     for rid in runs:
@@ -635,6 +670,8 @@ def main() -> int:
     g.add_argument("--probe-one", help=argparse.SUPPRESS)
     ap.add_argument("--batch", type=int, default=16, help=argparse.SUPPRESS)
     ap.add_argument("--families", nargs="+", default=None, help="restrict --queue/--probe to these families")
+    ap.add_argument("--one-seed", action="store_true",
+                    help="one run per family; families with a finished run get none (the rest show as skipped)")
     args = ap.parse_args()
     if args.probe_one:
         return probe_one(args.probe_one, args.batch)
@@ -643,6 +680,9 @@ def main() -> int:
     runs = ordered(candidates())
     if args.families:
         runs = [r for r in runs if family(r) in args.families]
+    deferred: list[str] = []
+    if args.one_seed:
+        runs, deferred = one_seed(runs)
     if args.list:
         deleg = delegated()
         for r in runs:
@@ -655,7 +695,7 @@ def main() -> int:
         return 0
     if args.probe:
         return probe(args.families)
-    return queue(runs)
+    return queue(runs, deferred)
 
 
 if __name__ == "__main__":
