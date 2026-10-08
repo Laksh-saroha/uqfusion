@@ -20,11 +20,18 @@ CPU only, no retraining, no new prediction cache: the arms read
 
 Usage:
     python scripts/ablate_uq_mechanism.py --out runs/eval/uq_mechanism_ablation.md
+    python scripts/ablate_uq_mechanism.py --cls 0 --out <new file>   # ship AP
+
+`--cls` scores one class's AP (`per_class[cls]["ap50_95"]`, as `p3_night_check.py`
+does) instead of the ship+buoy macro, in both the arm table and the block bootstrap.
+Both pre-registrations (§4; 26m §3) name `gated_fusion` ship AP; the recorded runs
+scored the macro. Without `--cls` the script is unchanged.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -34,7 +41,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from _ideas_common import write_md
-from uqfusion.eval.apmetrics import frame_parts
+from uqfusion.eval.apmetrics import ap_from_parts, frame_parts
 from uqfusion.eval.blockboot import block_bootstrap_delta
 from uqfusion.eval.ctx import load_context, run_systems
 from uqfusion.eval.identity import system_identity
@@ -135,6 +142,9 @@ def main() -> int:
     ap.add_argument("--cache-dir", default="runs/cache_m")
     ap.add_argument("--preset", default="crossmodal")
     ap.add_argument("--boot", type=int, default=N_BOOT)
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP (0 = ship) instead of the macro")
+    ap.add_argument("--json", default=None, help="also dump the numbers here")
     args = ap.parse_args()
 
     t0 = time.time()
@@ -168,8 +178,12 @@ def main() -> int:
             out = run_systems(ctx, cond, vis_records=v2, ir_records=i2, **opts)
             fused = out["fused_gated"]
             gts = out["gts"]
-            ap_rows[(cond, arm)] = float(out["gated_fusion"]["map50_95"])
             parts[(cond, arm)] = frame_parts(fused, gts)
+            if args.cls is None:
+                ap_rows[(cond, arm)] = float(out["gated_fusion"]["map50_95"])
+            else:
+                e = ap_from_parts(parts[(cond, arm)])["per_class"].get(args.cls)
+                ap_rows[(cond, arm)] = float(e["ap50_95"]) if e else float("nan")
             print(f"[abl] {cond:9s} {arm} {label:38s} AP {ap_rows[(cond, arm)]:.6f} "
                   f"({time.time() - t0:.0f}s)")
 
@@ -178,10 +192,12 @@ def main() -> int:
         rows = []
         for cond in conditions:
             r = block_bootstrap_delta(parts[(cond, a)], parts[(cond, b)], paths[cond],
-                                      BLOCK_LEN, n_boot=args.boot, seed=SEED)
+                                      BLOCK_LEN, n_boot=args.boot, seed=SEED,
+                                      cls=args.cls)
             rows.append({"cond": cond, "delta": r["delta"], "se": r["se"],
                          "ci_lo": r["ci_lo"], "ci_hi": r["ci_hi"],
-                         "spans_zero": r["spans_zero"]})
+                         "spans_zero": r["spans_zero"], "a": r["a"], "b": r["b"],
+                         "n_undefined": r["n_undefined"]})
             print(f"[abl] {a}-{b} {cond:9s} delta {r['delta']:+.6f} "
                   f"[{r['ci_lo']:+.6f}, {r['ci_hi']:+.6f}] "
                   f"{'spans zero' if r['spans_zero'] else 'excludes zero'}")
@@ -212,6 +228,10 @@ def main() -> int:
              "(../../docs/prereg-uq-mechanism-ablation.md) (`a8f087c`, amendment 1 "
              "`f713961`) **before this ran**. The decision rule below was fixed there; "
              "this report only applies it.\n")
+    if args.cls is not None:
+        L.append(f"**Metric: class {args.cls} AP (`per_class[{args.cls}][\"ap50_95\"]`), "
+                 "not the macro.** Every AP and delta below is this class's, in the arm "
+                 "table and in the block bootstrap alike.\n")
     L.append("## The finding this exists because of\n")
     L.append("Read off the resolved context at run time, not quoted from a document:\n")
     L.append("| term | value |\n|---|---|")
@@ -273,7 +293,16 @@ def main() -> int:
              identity=system_identity(ctx, alpha=ALPHA, block_len=BLOCK_LEN,
                                       n_boot=args.boot, seed=SEED,
                                       adopted_floor=ADOPTED_FLOOR,
-                                      cache_dir=args.cache_dir))
+                                      cache_dir=args.cache_dir,
+                                      **({} if args.cls is None else {"cls": args.cls})))
+    if args.json:
+        Path(args.json).write_text(json.dumps({
+            "preset": args.preset, "cache_dir": args.cache_dir, "cls": args.cls,
+            "ap": {f"{c}/{a}": v for (c, a), v in ap_rows.items()},
+            "results": results,
+            "verdicts": {k: {"verdict": v[0], "counts": {str(f): n for f, n in v[1].items()}}
+                         for k, v in verdicts.items()},
+            "audits": audits}, indent=1), encoding="utf-8")
     print(f"\n[abl] verdicts: " + "; ".join(f"{k} {v[0]}" for k, v in verdicts.items()))
     print(f"[abl] wrote {args.out} in {time.time() - t0:.0f}s")
     return 0
