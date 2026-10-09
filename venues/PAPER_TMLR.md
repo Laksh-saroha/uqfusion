@@ -2,13 +2,13 @@
 
 **Anonymous authors** (TMLR review is double-blind; restore the author block for the camera-ready).
 
-> Venue draft for TMLR, derived from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09) by `venues/build_long_drafts.py`. TMLR has no hard page limit, but a main body over 12 pages gets a longer review; condensed subsections keep their headings and move their full text to the appendices. Every number is from Draft 2. See `venues/README.md`.
+> Venue draft for TMLR, derived from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09) by `venues/build_long_drafts.py`. TMLR has no hard page limit, but a main body over 12 pages gets a longer review. The main body is cut toward 15 typeset pages: condensed subsections keep their headings, and their full text, four tables and one figure move to appendices A–M, in the order of the sections they come from. Every number is from Draft 2. See `venues/README.md`.
 
 ---
 
 ## Abstract
 
-We pre-registered a test of whether predicted uncertainty should decide how a two-stream visible–infrared maritime detector fuses its streams, and we report the answer together with the evaluation machinery that produced it. On the Pohang Canal dataset with PoLaRIS boxes, independent YOLO26 detectors with single-pass Gaussian variance heads feed a decision layer. The registered comparison is real predicted σ against the same σ shuffled onto the wrong boxes, on ship AP, with a 0.0060 floor and block-bootstrap intervals. As a coordinate weight σ passes on zero of four conditions; as a score re-ranker it passes on three, so it is informative. It is not useful: the signal lies within each detector's own boxes, the σ-scored system is below the system with no σ on six of eight cells, and a learned within-detector variant failed its pre-registered replication on five retrained detectors (positive on all five, beyond the floor on two). The recorded runs had scored a ship-and-buoy macro instead of the registered metric, and the macro read NULL on both paths; we report the deviation and argue that the scored quantity belongs in the registration. The mechanism that shipped instead, an image-statistic veto with union aggregation, beats the visible stream by day on five retrained systems (+0.0059 to +0.0107 AP) but discards a working visible stream at night (−0.1847) once a label artifact behind its night arm was corrected. The evaluation protocol (paired noise floors, dependence-aware intervals that widen frame-level ones 1.9–1.99×, magnitude floors, a declared class set and one logged look at an untouched run) moved 20 of 74 earlier findings to indeterminate, and the held-out look returns a gap of +0.0216 that excludes neither zero nor 0.05.
+We pre-registered a test of whether predicted uncertainty should decide how a two-stream visible–infrared maritime detector fuses its streams. On the Pohang Canal dataset with PoLaRIS boxes, independent YOLO26 detectors with single-pass Gaussian variance heads feed a decision layer, and the registered comparison is real predicted σ against the same σ shuffled onto the wrong boxes, on ship AP, with a 0.0060 floor and block-bootstrap intervals. As a coordinate weight σ passes on zero of four conditions; as a score re-ranker it passes on three, so it is informative. It is not useful: the signal lies within each detector's own boxes, the σ-scored system is below the system with no σ on six of eight cells, and a learned within-detector variant failed its pre-registered replication on five retrained detectors (positive on all five, beyond the floor on two). The recorded runs had scored a ship-and-buoy macro instead of the registered metric, and the macro read NULL on both paths; we argue that the scored quantity belongs in the registration. The mechanism that shipped instead, an image-statistic veto with union aggregation, beats the visible stream by day on five retrained systems (+0.0059 to +0.0107 AP) but discards a working visible stream at night (−0.1847) once a label artifact behind its night arm was corrected. Paired noise floors, dependence-aware intervals and magnitude floors moved 20 of 74 earlier findings to indeterminate, and one logged look at an untouched run returns a gap of +0.0216 that excludes neither zero nor 0.05.
 
 ---
 
@@ -22,7 +22,7 @@ This paper is a pre-registered study whose primary test returned a split answer.
 
 Three contributions are defensible:
 
-1. **A pre-registered test with a split answer.** As a coordinate weight in the fusion, real σ does not beat the same σ shuffled onto the wrong boxes on any of four conditions at a 0.0060 AP floor (R-D1), and letting σ arbitrate relaxed cross-modal correspondences does not rescue it (Stage 1, S1-NULL). As a score re-ranker, real σ beats shuffled σ on three of four conditions on the registered metric, ship AP, under the shipped preset and its predecessor. The uncertainty is informative. Yet the re-ranking is within each detector's own boxes, and no σ-scored system beats the shipped system without σ: it is below on six of eight cells. A shuffled control establishes that a signal exists, not that using it helps; the registered consequence of a pass assumed otherwise, and we do not adopt it (§6.4). Learned jointly with confidence in a re-ranker of the visible detector's boxes, σ adds +0.0050 [+0.0038, +0.0064] ship AP on one checkpoint. Its pre-registered replication on five retrained detectors finds the gain positive on all five but beyond the floor on too few, and FAILS (§6.8).
+1. **A pre-registered test with a split answer.** As a coordinate weight in the fusion, real σ does not beat the same σ shuffled onto the wrong boxes on any of four conditions at a 0.0060 AP floor (R-D1), and letting σ arbitrate relaxed cross-modal correspondences does not rescue it (Stage 1, S1-NULL). As a score re-ranker, real σ beats shuffled σ on three of four conditions on the registered metric, ship AP, so the uncertainty is informative. It is not useful: the re-ranking is within each detector's own boxes, and the σ-scored system is below the shipped system without σ on six of eight cells (§6.4). Learned jointly with confidence, σ's within-detector gain is positive on all five retrained detectors but fails its pre-registered replication at the floor (§6.8).
 2. **A sensor-selection baseline, and a measured account of how it broke.** A hard veto of the form `night AND (dark OR veil)`, computed from image statistics, with union aggregation of the surviving detections. In daylight it improves on the visible stream alone on all four day cells, for both checkpoint generations (+0.0059 to +0.0107 AP on the five retrained systems). At night it is right where the visible detector is degraded and wrong where it is not. Its night arm was justified by a label-filtering artifact. Once the visible detector is trained on restored night labels, the unchanged rule discards a working stream and costs 0.1847 AP on clean night (§6.6). A rule of this kind encodes a claim about the detector, not about the image, and must be re-priced whenever the detector changes.
 3. **An evaluation protocol that changed the conclusions.** A measured noise floor, dependence-aware intervals, magnitude floors, an exposure ledger, and a single pre-registered look at an untouched run. Applied retroactively, the protocol moved 20 of 74 earlier findings to indeterminate. It also reports the held-out result as what it is: a gap of 0.0216 that the data cannot distinguish from zero or from 0.05.
 
@@ -44,18 +44,7 @@ The maritime YOLO variants cited in §1 report accuracy without uncertainty: RDS
 
 ### 2.4 Comparison axes
 
-Table R positions this work against the nearest prior systems. Every cell for another work comes from a direct read of its full text on 2026-10-08 (Gaussian YOLOv3 and UA-CMDet from their arXiv versions, the others from the published versions); "speed not reported" means the paper gives no figure.
-
-**Table R. Positioning.**
-
-| Work | Domain | Sensors | Uncertainty target | Inference-time adaptation | Calibration evaluated | Registration assumption | Compute |
-|---|---|---|---|---|---|---|---|
-| Gaussian YOLOv3 (Choi et al., 2019) | road (KITTI, BDD) | RGB | box coordinates, one Gaussian per coordinate | per box: score × (1 − mean predicted uncertainty) | no calibration metric; IoU plotted against predicted uncertainty | n/a | single pass; above 42 fps on a GTX 1080 Ti |
-| UA-CMDet (Sun et al., 2022) | drone (DroneVehicle) | RGB + IR | per-object training-loss weights from a rule (cross-modal ground-truth IoU, RGB illumination); not predicted | per frame: RGB scores × illumination weight, then NMS over RGB, IR and fusion branches | no (mAP only) | distortion correction and a per-pair affine alignment; residual misalignment is down-weighted in training | two-stage oriented detector (RoI Transformer, ResNet-50-FPN); uncertainty module removed after training; speed not reported |
-| Zhao et al. (2024), DICTA | drone (DroneVehicle), surveillance (M3FD) | VIS + IR | per-label training-loss weights estimated from each branch's predictions; not predicted at inference | input-dependent attention over fused backbone features | no (mAP only) | datasets distributed as aligned pairs | two-stream backbone with RoI Transformer, Faster R-CNN or RetinaNet heads; speed not reported |
-| RDSC-YOLOv4 (Liu et al., 2021) | maritime, surface vehicle (SeaShips, SeaBuoys) | RGB | none | none | no | n/a | single pass; 68 FPS on an RTX 2080 Ti |
-| YOLOv7-Sea (Zhao et al., 2023) | maritime, drone (SeaDronesSee) | RGB | none | test-time augmentation over five scales | no | n/a | five passes per image; speed not reported |
-| This work | maritime | VIS + LWIR | box coordinates (σ²), frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9926 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor | nearest-timestamp pairing, 3–6 px median residual | two single-pass detectors; 57.0 FPS per detector, detector time only (§6.1) |
+Table R (Appendix A) positions this work against Gaussian YOLOv3, UA-CMDet, Zhao et al. (2024), RDSC-YOLOv4 and YOLOv7-Sea on uncertainty target, inference-time adaptation, calibration, registration and compute; every cell for another work comes from a direct read of its full text. Of the six systems it lists, this work is the only one that evaluates calibration. The two VIS–IR systems use uncertainty only as training-loss weights, removed at inference, and the maritime detectors output none.
 
 ## 3. Dataset
 
@@ -65,27 +54,23 @@ The Pohang Canal dataset (Chung et al., 2023) covers a 7.5 km route through cana
 
 ### 3.2 Verified counts
 
-Counts were re-derived from disk: 158,319 images (127,309 VIS, 31,010 IR), 1,183,736 boxes and 28,388 paired frames. Pairing follows the dataset's own timestamp table, not frame ordinals; 16,544 of the pairs have different VIS and IR indices. Per-run counts are in Appendix A.1.
+Counts were re-derived from disk: 158,319 images (127,309 VIS, 31,010 IR), 1,183,736 boxes and 28,388 paired frames. Pairing follows the dataset's own timestamp table, not frame ordinals; 16,544 of the pairs have different VIS and IR indices. Per-run counts are in Appendix B.1.
 
 ### 3.3 Preprocessing
 
-VIS frames are letterboxed from 2048×1080 into a 640×640 canvas, so 47 percent of every stored VIS frame is pad (which matters in §3.5). IR frames are min–max normalized per frame to 8 bits, which can mask thermal crossover and removes cross-frame radiometric comparability. Details, and a rejected percentile-clip export, are in Appendix A.2.
+VIS frames are letterboxed from 2048×1080 into a 640×640 canvas, so 47 percent of every stored VIS frame is pad (which matters in §3.5). IR frames are min–max normalized per frame to 8 bits, which can mask thermal crossover and removes cross-frame radiometric comparability. Details, and a rejected percentile-clip export, are in Appendix B.2.
 
 ### 3.4 Splits
 
-An interleaved K-block split with guard bands gives 80/10/10 train, validation and test per run, using the same ordinals for both modalities so that VIS–IR pairs never straddle a split. Sizes (Table S) are in Appendix A.3.
+An interleaved K-block split with guard bands gives 80/10/10 train, validation and test per run, using the same ordinals for both modalities so that VIS–IR pairs never straddle a split. Sizes (Table S) are in Appendix B.3.
 
 ### 3.5 The night-box filter and its reversal
 
-A train-only filter (2026-07-15) removed every box in night-run frames whose content-median luminance was below 100, on the reasoning that such boxes were copied from the thermal annotations. A padding constant bug made it cut whole frames: it dropped 132,688 boxes, of which only 38,135 individually fail intensity, gradient and contrast tests. A pre-registered restore (2026-09-02) put back all but those 38,135, a net gain of 94,553 boxes. §6.6 reports the result. The label accounting (Table D) and two provenance anomalies are in Appendix A.4.
+A train-only filter (2026-07-15) removed every box in night-run frames whose content-median luminance was below 100, on the reasoning that such boxes were copied from the thermal annotations. A padding constant bug made it cut whole frames: it dropped 132,688 boxes, of which only 38,135 individually fail intensity, gradient and contrast tests. A pre-registered restore (2026-09-02) put back all but those 38,135, a net gain of 94,553 boxes. §6.6 reports the result. The label accounting (Table D) and two provenance anomalies are in Appendix B.4.
 
 ### 3.6 Holdout and contamination
 
-pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**, and we state exactly what has and has not touched it. Before the Phase 3 pre-registration, its VIS frames were in the standard training lists: the earlier VIS detectors, and the VIS ensemble and MC-Dropout arms, trained on 9,841 pohang04 frames. 2,343 of its frames were also pooled into an earlier VIS validation list, and two VIS-only probes scored that list on 2026-09-02: day-only re-ranking and oracle re-ranking (§6.8). What never touched pohang04 is the fusion system: no fusion score was ever computed on it, since it has no thermal frames in any list. The ten Phase 3 checkpoints never saw it, and neither did the Mahalanobis references built from them. The held-out claim of §7 rests on those facts and no wider one.
-
-Phase 3 lists were built by filtering the existing lists to remove pohang04 rows, preserving every surviving frame's stride identity: VIS train 48,136 to 38,295, val 11,352 to 9,009, test 11,445 to 9,054. IR lists needed no change. Removing an all-day run shifts composition: validation night share rises from 18.2 percent to 23.0 percent, so Phase 3 numbers are not comparable to earlier pooled validation numbers.
-
-A contamination audit found that the Mahalanobis reference list used to fit the earlier OOD scorer contained 819 of 4,000 frames (20.5 percent) from pohang04. For Phase 3 the references were rebuilt from the retrained checkpoints, VIS from a clean list of 3,181 frames and IR from its unchanged 4,000-frame list. All ten reference caches contain zero pohang04 frames (verified per seed). The paired evaluation lists that feed every benchmark cell (2,232 frames) contain no pohang04 frames.
+pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**. Earlier VIS detectors, including the VIS ensemble and MC-Dropout arms, trained on 9,841 of its frames, and two VIS-only probes scored a validation list that included 2,343 of them (§6.8). No fusion score was ever computed on it, and the ten Phase 3 checkpoints and the Mahalanobis references built from them never saw it; the held-out claim of §7 rests on those facts and no wider one. Removing pohang04 from the Phase 3 lists raises the validation night share from 18.2 percent to 23.0 percent, so Phase 3 numbers are not comparable to earlier pooled validation numbers. List sizes and a contamination audit of the earlier Mahalanobis references are in Appendix B.5.
 
 ## 4. Method
 
@@ -108,7 +93,7 @@ The design document itself marked every constant and the multiplicative form as 
 
 **Detectors.** VIS uses yolo26m (Jocher et al., 2026) with two classes. IR uses yolo26m with a P2 feature neck and a single class, because IR cannot see buoys: its buoy AP50-95 is 0.0002. Backbone selection is in §6.1.
 
-**Gaussian head.** A fresh log-variance branch (`cv4`) is bolted in place onto the live detection head of a loaded model; there is no fork of the training library. Variance is parameterized as log σ² over left-top-right-bottom distances in stride units and converted to pixels at inference, riding through post-processing as extra channels. Training adds a fourth loss term with beta-NLL weighting (Seitzer et al., 2022) and a warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 reports that this parity is not yet demonstrated. Porting to YOLO26's end-to-end head forced three changes: σ rides the one-to-one branch only, because inference decodes from it; post-processing is overridden to gather σ with the boxes' top-k index; and the NLL target is left unclamped because at reg_max = 1 the stock clamp collapses every target to a constant. One ablation, training σ on undetached features, cannot be run on end-to-end heads because the library detaches the branch upstream.
+**Gaussian head.** A fresh log-variance branch is attached to the live detection head of a loaded model, with no fork of the training library, and trained with a fourth loss term, beta-NLL (Seitzer et al., 2022), after a warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 reports that this parity is not yet demonstrated. The port to YOLO26's end-to-end head is in Appendix C.
 
 **Mahalanobis OOD score.** Following Lee et al. (2018), backbone features are captured by a forward hook and scored against a Ledoit–Wolf covariance (Ledoit and Wolf, 2004) fit on a reference set of clean training frames. In the shipped preset the parameters `mu_d = 1e9` and `lam = 0` make this score mathematically inert in the fusion weight. It is retained as a diagnostic and discussed in §6.3 and §8.
 
@@ -144,7 +129,7 @@ We state plainly that this repository contained no untouched test set before the
 
 ### 5.3 Noise floor
 
-Deltas between systems are always paired on the same frames and the same corruption draw. Pairing tightens the standard deviation of a delta relative to unpaired resampling by 3–16× on the nine informative cells (11–12× on most; the two zero-information cells have paired sd 0.0000, which is where the quoted 52× comes from) (`runs/eval/delta_noise_floor.md` §1). The combined draw-plus-bootstrap two-sigma floor on a paired delta is 0.0014–0.0031 AP on most cells (full range 0.0000–0.0031). The buoy class carries 74–75 percent of macro-metric variance while making up 5.3 percent of day ground-truth boxes, and two of eleven cells carry essentially no buoy-variance information. These floors were measured on the macro over ship and buoy, while the Phase 3, Stage 1 and held-out verdicts are on ship AP, so the floor was re-measured on ship AP with the same arm, cells, draws and resamples (`docs/eval/delta_noise_floor_ship_2026-10-08.md`). The ship floor is 0.0008–0.0024 on the nine informative cells (full range 0.0000–0.0024), and its maximum, the value that sets the magnitude floor in §5.4, is 0.0024 against the macro's 0.0031. The level sd of ship AP is up to twice the macro's (`runs/eval/metric_noise_floor.md` §2), but that does not carry over to a paired delta: where buoy AP is constant, the macro delta and its noise are both exactly half the ship delta's, and where buoy AP moves, the noisy buoy delta (600 day boxes) raises the macro floor above the ship floor. A delta below the floor is reported as "not resolved," never as "no effect."
+Deltas between systems are always paired on the same frames and the same corruption draw, which tightens the standard deviation of a delta by 3–16× on the nine informative cells. The combined draw-plus-bootstrap two-sigma floor on a paired delta is 0.0014–0.0031 AP on the macro over ship and buoy and 0.0008–0.0024 on ship AP, re-measured with the same arm, cells, draws and resamples; the maximum sets the magnitude floor in §5.4. Buoys carry 74–75 percent of the macro's variance while making up 5.3 percent of day ground-truth boxes. A delta below the floor is reported as "not resolved," never as "no effect." Sources and the two zero-information cells are in Appendix D.1.
 
 ### 5.4 Dependence-aware intervals
 
@@ -154,11 +139,11 @@ Frames at 10 Hz are autocorrelated, and a frame-level iid bootstrap underestimat
 
 All absolute AP values use local linear-interpolation AP with the project's maximum detection count, not COCO AP (Lin et al., 2014). The two conventions disagree on deltas by at most 0.000285, five times below the noise floor, so no decision can flip on convention; they disagree on absolutes by up to −0.0050, so every absolute value states its convention. The one table outside this convention is Table 1, the backbone benchmark: it reports the training library's own validation mAP (Ultralytics 8.4.90, ship and buoy), because it is read from training logs, says so in its caption, and none of its values is set beside a local-AP number. Two training-library versions (8.4.7 and 8.4.90) disagree on mAP50-95 by about 0.034 for identical weights and data; no table in this paper places numbers from different library versions side by side.
 
-**Class set.** Ship is the primary class. It is the only class both detectors emit, since the IR detector is single-class (§4.2), and the Phase 3 pre-registration fixed fused ship AP (class 0) as its quantity before any Phase 3 number existed (`docs/prereg-phase3-retrain-2026-09-10.md`). Tables 1b, 3b, 4b, 5 and 7 and Figures 6 and 7 report ship AP. Table 1 reports the macro over ship and buoy. Table 4 reports ship AP, its registered metric, with the recorded macro beside it as Table 4c (§6.4). Table 2 reports both classes for each stream. Table 3a and Table L (§6.8) report ship AP, except two Table L rows that stay on the macro and say so: day-only re-ranking, whose substrate includes pohang04 and cannot be re-scored, and VIS soft-NMS, whose registration scored the macro and whose failing cell is at night, where the two are identical because no night frame has a buoy. Table L rows recorded on the macro were re-scored on ship from cached detections, each after its unchanged macro path reproduced the record (`docs/eval/class_set_audit_2026-10-08.md`). The constants re-price in §6.3 is reported on the macro, which its registration scored. The macro is not a safe stand-in for ship AP, for three reasons. A VIS veto deletes every buoy, because the surviving IR stream cannot supply one, so a macro delta can move by half a class for a reason unrelated to ship detection. Buoys carry 74–75 percent of the macro's variance on 5.3 percent of the day boxes (§5.3). And a single-class stream scored on the macro reads exactly half its ship AP (Table 2). R-D1 shows the cost: its macro read NULL where its registered ship AP reads POSITIVE (§6.4).
+**Class set.** Ship is the primary class. It is the only class both detectors emit, since the IR detector is single-class (§4.2), and the Phase 3 pre-registration fixed fused ship AP as its quantity before any Phase 3 number existed. Tables report ship AP except Table 1 and Table 4c (the macro over ship and buoy), Table 2 (both classes per stream) and two rows of Table L, each of which says so; the constants re-price of Appendix G is on the macro its registration scored. Rows recorded on the macro were re-scored on ship from cached detections, each after its unchanged macro path reproduced the record. The macro is not a safe stand-in for ship AP: a VIS veto deletes every buoy, because the surviving IR stream cannot supply one; buoys carry 74–75 percent of the macro's variance (§5.3); and a single-class stream scored on the macro reads exactly half its ship AP. R-D1 shows the cost: its macro read NULL where its registered ship AP reads POSITIVE (§6.4). The full accounting is in Appendix D.2.
 
 ### 5.6 Metric contracts
 
-Six claims about the uncertainty metrics were tested and hold (Appendix B): D-ECE, the confidence-only form of the detection calibration error of Küppers et al. (2020), conditions on confidence only; AUSE (Ilg et al., 2018) and AURC (Geifman et al., 2019) are ranking-only; NLL and interval-ECE are computed on true positives and published with their true-positive share. One defect is disclosed rather than repaired: WBF can emit fused confidences above 1.0 (maximum 1.7532, on 0.0641 percent of detections).
+Six claims about the uncertainty metrics were tested and hold (Appendix D): D-ECE, the confidence-only form of the detection calibration error of Küppers et al. (2020), conditions on confidence only; AUSE (Ilg et al., 2018) and AURC (Geifman et al., 2019) are ranking-only; NLL and interval-ECE are computed on true positives and published with their true-positive share. One defect is disclosed rather than repaired: WBF can emit fused confidences above 1.0 (maximum 1.7532, on 0.0641 percent of detections).
 
 ### 5.7 Pre-registrations and decision rules
 
@@ -166,17 +151,17 @@ The verdicts below were fixed in advance; the other results in §6, including Ta
 
 ### 5.8 Identity checks and power
 
-A one-frame shift in cache pairing moves gated fusion by −0.000968, below the noise floor; only a content identity check, now run on every cache load, catches it. Before Phase 3, minimum detectable effects with five seeds were computed (VIS 0.01291, IR 0.01010); neither reaches the 0.0060 floor, so the retrained-versus-deployed comparison was cut in advance and is not reported (Appendix B).
+A one-frame shift in cache pairing moves gated fusion by −0.000968, below the noise floor; only a content identity check, now run on every cache load, catches it. Before Phase 3, minimum detectable effects with five seeds were computed (VIS 0.01291, IR 0.01010); neither reaches the 0.0060 floor, so the retrained-versus-deployed comparison was cut in advance and is not reported (Appendix D).
 
 ## 6. Results
 
 ### 6.1 Backbone benchmark is a negative result
 
-Ninety-three training runs, 31 YOLO variants with three seeds each from six families (YOLOv8, Jocher et al., 2023; YOLOv9, C.-Y. Wang et al., 2024; YOLOv10, A. Wang et al., 2024; YOLO11, Jocher and Qiu, 2024; YOLO12, Tian et al., 2025; YOLO26, Jocher et al., 2026), were trained on the restored labels to a patience-20 stop. On the training library's own validation mAP over ship and buoy (not local AP), the top three, yolo26x (0.2666 ± 0.0040), yolo26l (0.2664 ± 0.0070) and yolo26m (0.2626 ± 0.0109), differ by less than the larger seed sd of every pair: a YOLO26 m/l/x tier with no resolved order. yolo26m was chosen earlier, on the Phase 1 grid, under a rule fixed in advance; it stays inside the tier and runs at 57.0 FPS per detector against 30.7 for yolo26x (detector `predict()` only). The full table (Table 1), the Phase 1 selection record (Table 1b), the disclosures and the IR architecture ladder are in Appendix C.
+Ninety-three training runs, 31 YOLO variants with three seeds each from six families (YOLOv8, Jocher et al., 2023; YOLOv9, C.-Y. Wang et al., 2024; YOLOv10, A. Wang et al., 2024; YOLO11, Jocher and Qiu, 2024; YOLO12, Tian et al., 2025; YOLO26, Jocher et al., 2026), were trained on the restored labels to a patience-20 stop. On the training library's own validation mAP over ship and buoy (not local AP), the top three, yolo26x (0.2666 ± 0.0040), yolo26l (0.2664 ± 0.0070) and yolo26m (0.2626 ± 0.0109), differ by less than the larger seed sd of every pair: a YOLO26 m/l/x tier with no resolved order. yolo26m was chosen earlier, on the Phase 1 grid, under a rule fixed in advance; it stays inside the tier and runs at 57.0 FPS per detector against 30.7 for yolo26x (detector `predict()` only). The full table (Table 1), the Phase 1 selection record (Table 1b), the disclosures and the IR architecture ladder are in Appendix E.
 
 ### 6.2 Per-modality uncertainty calibration
 
-**Table 2. Per-stream uncertainty calibration, three arms, day slice (1,200 of the 2,232 paired validation frames), no fusion. Local AP. Lower is better on every column except the two AP columns; best arm per stream and column in bold.** Source: `docs/eval/uq_day_night_slice_u2_nanpolicy_2026-09-09.md`, pre-registered in `docs/prereg-uq-day-night-slice.md` with Stage B in `docs/prereg-uq-day-night-slice-u2-stageb.md`. Checkpoints trained on restored labels, one per arm: σ head `gauss_vis_seed0_nightfull` / `gauss_ir_seed0_ft`, MC-Dropout `mc_vis_nightfull` / `mc_ir_seed0_ft_refit`, ensemble of five `ens_vis_nightfull_seed0-4` / `ens_ir_seed0_ft`. AUSE and AURC rank boxes by uncertainty, and MC-Dropout and ensemble uncertainties tie wherever members agree (only 57–68 percent of ensemble day boxes have a unique value); across orderings of the ties these two columns move by up to 6×10⁻⁴ (IR ensemble AUSE 0.0769–0.0777, VIS ensemble 0.0948–0.0951), which changes no ordering in the table. The σ head has no ties. AP is local AP50-95 per class. The IR detector is single-class (§4.2) and has no buoy AP; the source file's macro over both classes reads exactly half of IR's ship AP, because the 596 buoy boxes in the IR day labels score zero (`docs/eval/table2_per_class_2026-10-08.md`, which reproduces the source's macro on every row). The arm ordering is the same on either.
+**Table 2. Per-stream uncertainty calibration, three arms, day slice (1,200 of the 2,232 paired validation frames), no fusion. Lower is better on every column except the two AP columns, which are local AP50-95 per class; best arm per stream and column in bold.** One checkpoint per arm, trained on restored labels. The IR detector is single-class (§4.2) and has no buoy AP. Ties in the MC-Dropout and ensemble uncertainties move AUSE and AURC by up to 6×10⁻⁴ and change no ordering. Sources, checkpoints and the tie analysis are in Appendix F.1.
 
 | Stream | Arm | D-ECE | interval-ECE | AUSE | AURC (grid) | NLL (TP-only) | ship AP | buoy AP |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
@@ -192,30 +177,21 @@ Ninety-three training runs, 31 YOLO variants with three seeds each from six fami
 * **σ head:** the best interval calibration by 2.2–4.0×, and the best AURC on both streams. It is the only arm with a likelihood at all, so the only arm whose uncertainty is a usable number rather than a ranking.
 * **MC-Dropout:** last or near-last on nearly every column.
 
-No arm wins everywhere, and the ordering depends on whether one asks for calibrated confidence or calibrated intervals (Figure 2). That is a calibration result, not a detection result. mAP differences here come from one checkpoint per arm and are not a ranking (next paragraph).
+No arm wins everywhere, and the ordering depends on whether one asks for calibrated confidence or calibrated intervals (Figure 2). That is a calibration result, not a detection result. mAP differences here come from one checkpoint per arm and are not a ranking (Appendix F.4).
 
 ![uq_calibration](../docs/figures/fig_uq_calibration.png)
 
 **Figure 2. Per-stream calibration of the three uncertainty arms, day slice (1,200 of the 2,232 paired validation frames), no fusion; the primary basis of Table 2.** Left: precision at IoU 0.5 against confidence in D-ECE's ten bins (bins with at least 20 boxes). Middle: empirical against nominal Gaussian coverage of |error| ≤ kσ for k = 0.5–3, true positives only; for MC-Dropout and the ensemble σ is member disagreement (§6.2). Right: risk (1 − IoU, a false positive counting 1) of the retained boxes minus the oracle ordering's, as the most uncertain boxes are removed; its mean over the grid is AUSE. Dashed lines are perfect calibration. Recomputed from Table 2's caches with the same metric code: D-ECE and interval-ECE reproduce Table 2 exactly, AUSE and AURC to within the spread across tie orders (see Table 2's note). Source: `docs/eval/uq_day_night_slice_u2_nanpolicy_2026-09-09.md`.
 
-**Scope and caveats.**
-* These are development-data numbers only. The VIS MC-Dropout and ensemble arms trained on 9,841 pohang04 frames (§3.6), so no three-arm number may appear on the held-out run.
-* None of these checkpoints is a Phase 3 checkpoint, and none of the three arms was ever used as a fusion input. R-D1 (§6.4) tests the σ head only.
-* The pre-registered estimand for MC-Dropout and the ensemble is **disagreement ranking**, not predictive likelihood. The disagreement statistic omits the within-member variance term and produces σ = 0 when members agree, which is why their NLL is undefined and the NLL column carries no arm ranking.
-* The ensemble's five members form one replicate, not five.
-* Night is SUSPECT on both streams. The same band on the negative-control stream means the night miscalibration is not label-driven, at least for these restored-label checkpoints.
+**Scope.** These are development-data numbers from single checkpoints that are neither Phase 3 checkpoints nor fusion inputs; R-D1 (§6.4) tests the σ head only. The VIS MC-Dropout and ensemble arms trained on 9,841 pohang04 frames (§3.6), so no three-arm number may appear on the held-out run. For those two arms the registered estimand is disagreement ranking, not predictive likelihood, so their NLL is undefined. Night is SUSPECT on both streams (Appendix F.2).
 
 The σ head is evaluated here as a localization-error-scale estimate on its own terms, not as a fusion input. Signal screens support that reading: boxes with σ below the per-frame median are true positives 3.00× more often than chance (3.39× at IoU 0.75), the second-strongest signal after confidence (4.80×; Figure 3). But σ is informative about error magnitude, not direction: leave-one-run-out ridge regression finds live out-of-fold R² on only two of four box edges (0.017–0.098), and applying a σ-driven coordinate correction end to end costs 0.02–0.11 mAP.
 
-![lift_screen](../docs/figures/fig_lift_screen.png)
-
-**Figure 3. Which per-box signals predict a true positive.** Lift = P(TP | signal fires) / P(TP | it does not), VIS boxes on the clean day frames of the paired set, full-scale pre-restore yolo26m caches. A signal at lift 1.0 carries no information, and no weight placed on it can change an AP ranking. Filled: true positive at IoU 0.50; hollow: at IoU 0.75. Temporal support is a box at IoU ≥ 0.30 in one of the two preceding frames. Source: `runs/eval/signal_lift_26m.md`.
-
-Day-only is the primary basis because the registered screen placed night in its SUSPECT band on both streams. That rationale, one registered rule amended after it fired, and why the arms are not ranked on mAP (Figure 4) are in Appendix D.
+Figure 3 (Appendix F.3) shows the full lift screen. Day-only is the primary basis because the registered screen placed night in its SUSPECT band on both streams; that rationale, one registered rule amended after it fired, and why the arms are not ranked on mAP (Figure 4) are in Appendix F.4.
 
 ### 6.3 Fusion robustness of the sensor-selection baseline
 
-The decision layer of §4.2 is the sixth rewrite of the gate; each rewrite was forced by a measured failure of the previous one. The history (Table 3a, Figure 5), the pre-restore measurements behind it and its three general lessons are in Appendix E; two of the lessons recur in §8. Here we re-measure the shipped rule on the five Phase 3 systems.
+The decision layer of §4.2 is the sixth rewrite of the gate; each rewrite was forced by a measured failure of the previous one. The history (Table 3a, Figure 5), the pre-restore measurements behind it and its three general lessons are in Appendix G.1; two of the lessons recur in §8. Here we re-measure the shipped rule on the five Phase 3 systems.
 
 **Table 3b. The shipped rule on the five Phase 3 systems (VIS seed k + IR seed k), `crossmodal26m`, development paired frames (1,200 day / 1,032 night), clean IR, ship AP (local AP).** AP is the seed mean; corrupted cells average four corruption draws (VIS 941–944) per seed before averaging seeds. Deltas carry the between-seed 95% t-interval (df 4). Sources: `docs/eval/p3_night_check_2026-09-27.md` (clean), `docs/eval/p3_corrupt_cells_2026-09-27.md` (corrupted, severity 2), `docs/eval/p3_fog_s1_2026-09-27.md` (fog severity 1, the two supplementary rows).
 
@@ -236,7 +212,7 @@ On the retrained systems the claim holds on six of eight cells and fails on two 
 
 ![phase3_cells](../docs/figures/fig_phase3_cells.png)
 
-**Figure 6. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean over VIS seed k + IR seed k, development paired frames (1,200 day / 1,032 night), clean IR; corrupted cells average four corruption draws (seeds 941–944) per system.** By day the fused output sits just above VIS alone on every cell. At night VIS is vetoed on every frame, so the fused output equals IR alone: right where VIS fails (fog, low light), wrong where it still works (clean, glare). Labelled deltas carry between-seed 95% t-intervals in Table 3b. Sources: `docs/eval/p3_night_check_2026-09-27.json`, `docs/eval/p3_corrupt_cells_2026-09-27.json`.
+**Figure 6. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean.** By day the fused output sits just above VIS alone on every cell. At night VIS is vetoed on every frame, so the fused output equals IR alone: right where VIS fails (fog, low light), wrong where it still works (clean, glare). Sources: `docs/eval/p3_night_check_2026-09-27.json`, `docs/eval/p3_corrupt_cells_2026-09-27.json`.
 
 **Day, all four cells.** The veto never fires, so the fused output is the union of both streams. It sits above VIS alone on every day cell, with every between-seed interval clear of zero: +0.0059 to +0.0107. The gain is small. On fog/day it is just below the 0.0060 magnitude floor, so it is resolved in sign but not beyond the floor there.
 
@@ -284,37 +260,17 @@ The score path is POSITIVE under both presets. Real σ beats shuffled σ on clea
 
 Real σ in the score is below no σ, with a CI excluding zero, on six of eight cells. Under `crossmodal`, lowlight spans zero, and fog is above S0 only because VIS is vetoed on every fog frame there, so that cell is IR re-ranking its own boxes. Constant and shuffled σ are below S0 on all eight cells. At α = 1.0, multiplying scores by σ costs ship AP, and real σ costs less than shuffled σ; that difference is what passed. The registered response to POSITIVE is to re-examine the shipped preset for adopting the mechanism. Against S0 the re-examination says not to adopt it at α = 1.0, and the shipped preset is unchanged. Whether another α would beat S0 is untested. The registration fixed α in advance because tuning it on the cells being reported would select on them, and no held-out data remains on which to tune it.
 
-**The gain is re-ranking within a stream, not fusion.** We decomposed the score-path deltas under both presets by emptying the IR stream, descriptively and after the verdict (`scripts/diag_rd1_fog_score_path.py`; `docs/eval/uq_mechanism_ablation_ship_2026-10-08.md` §4).
-* By day, VIS re-ranking alone, with IR detections removed, gives +0.0160 on clean and +0.0153 on glare under both presets, and +0.0167 on fog under `crossmodal26m`. Adding the IR stream moves these by −0.0040 to +0.0035, with no consistent sign: −0.0008 and −0.0010 on clean and glare under `crossmodal`; +0.0035, −0.0040 and +0.0019 on clean, fog and glare under `crossmodal26m`.
-* Under `crossmodal` VIS is vetoed on every fog frame, so fog's day part (+0.0063) is IR re-ranking IR boxes.
-* At night VIS is vetoed on every frame, so the night part (+0.0083 to +0.0104) is IR re-ranking IR boxes, on the same uncorrupted frames in every condition.
-* Lowlight fails by day. There, real σ does not re-rank VIS boxes (+0.0006, CI spans zero), and lowlight's pooled delta (+0.0040, +0.0034) is the night IR part.
+**The gain is re-ranking within a stream, not fusion.** We decomposed the score-path deltas by emptying the IR stream, descriptively and after the verdict (Appendix H.2). By day, VIS re-ranking alone gives +0.0160 on clean and +0.0153 on glare under both presets, and adding the IR stream moves these by −0.0040 to +0.0035, with no consistent sign. Wherever VIS is vetoed, on every night frame and on fog under `crossmodal`, the delta is IR re-ranking IR boxes. Lowlight fails by day because real σ does not re-rank VIS boxes there (+0.0006, CI spans zero).
 
 The signal σ carries is therefore a within-detector one: it orders a detector's own boxes better than chance. It does not tell the system which stream to believe, which is the job it was built for.
 
-**Why the macro hid it.** Buoys are detected only by VIS (§4.2). On fog and lowlight, buoy AP is zero or near it in every arm, so the macro delta is half the ship delta or close to it (`crossmodal` fog: +0.0079 on ship, +0.0040 on the macro). On clean and glare, real σ re-ranks buoys worse than shuffled σ, by 0.0157 and 0.0054 under both presets, which turns the clean macro delta negative and leaves glare's at +0.0005 and +0.0007. The macro thus averaged a halved ship gain with a buoy loss, and read NULL.
-
-**Table 4c. R-D1 as recorded: real minus shuffled σ, gated-fusion mAP50-95, the macro over ship and buoy (§5.5). Secondary.** Sources: `runs/eval/uq_mechanism_ablation.md` (`crossmodal`), `docs/eval/uq_mechanism_ablation_26m_2026-09-27.md` (`crossmodal26m`).
-
-| Path | Condition | `crossmodal` | `crossmodal26m` |
-|---|---|---|---|
-| coordinate (S1 − S3) | clean | −0.000566 [−0.000893, −0.000041] | −0.000578 [−0.000879, −0.000036] |
-| | fog | +0.000000 [0, 0] | −0.000009 [−0.000039, +0.000090] |
-| | lowlight | −0.000001 [−0.000004, +0.000008] | −0.000001 [−0.000005, +0.000010] |
-| | glare | +0.000406 [−0.000123, +0.000764] | +0.000397 [−0.000124, +0.000761] |
-| score (S5 − S7) | clean | −0.004420 [−0.011030, +0.005829] | −0.004232 [−0.010648, +0.005676] |
-| | fog | +0.003960 [+0.002691, +0.005183] | **+0.006156** [+0.003934, +0.007107] |
-| | lowlight | +0.001995 [+0.000944, +0.002684] | +0.001722 [+0.000592, +0.002397] |
-| | glare | +0.000514 [−0.004569, +0.004948] | +0.000724 [−0.004205, +0.005273] |
-| **passing at 0.0060** | coordinate / score | **0 / 0 of 4** | **0 / 1 of 4** |
-
-Two macro results that earlier drafts reported as pointing the wrong way do not survive on ship AP. On clean, shuffled σ beat real σ on the coordinate path (−0.000566); on ship AP the CI spans zero. On clean, real-σ score re-ranking was worse than a constant (S5 − S6 = −0.013157 [−0.022630, −0.000678] under `crossmodal`, −0.014141 [−0.023552, −0.001021] under `crossmodal26m`); on ship AP, S5 − S6 is positive on all eight cells, so that result was buoy re-ranking. One flaw in the original rule is self-identified. Under `crossmodal` the coordinate-path bar should have been three of three informative conditions, since fog there is structurally incapable of a coordinate-path effect. The flaw biases against a positive verdict, and the `crossmodal26m` re-run, in which day fog keeps both streams, removes it and returns the same coordinate-path verdict.
+**Why the macro hid it.** Buoys are detected only by VIS (§4.2). On fog and lowlight, buoy AP is zero or near it in every arm, so the macro delta is half the ship delta or close to it (`crossmodal` fog: +0.0079 on ship, +0.0040 on the macro). On clean and glare, real σ re-ranks buoys worse than shuffled σ, by 0.0157 and 0.0054 under both presets, which turns the clean macro delta negative and leaves glare's at +0.0005 and +0.0007. The macro thus averaged a halved ship gain with a buoy loss, and read NULL. The recorded macro table (Table 4c) and two macro results that do not survive on ship AP are in Appendix H.1.
 
 Independent probes agree that σ does not improve the fused result. Inverse-variance WBF differs from stock WBF by at most 0.0005 on any cell. Adding σ to the fusion score moves TEST by +0.0010 with a CI spanning zero, and costs 0.0101 on TUNE, where its strength was chosen. A learned VIS re-ranker does gain on ship AP out of fold (+0.0063, Table L), and σ carries most of it: without σ the same arm gives +0.0014 [−0.0020, +0.0044], and σ's paired increment is +0.0050 [+0.0038, +0.0064]. It orders one detector's boxes, so it is not fusion. It was not registered, and its pre-registered replication on the five Phase 3 detectors FAILS: positive on all five, beyond the floor on too few (§6.8). The Mahalanobis weight was already inert in the shipped preset.
 
 ### 6.5 Relaxing correspondence does not rescue the coordinate path (Stage 1)
 
-The coordinate-path null of R-D1 was measured at a merge threshold (0.85) where almost nothing merges. Two prior negative results on correspondence (a per-frame registration refinement that raised the partner rate 80× to 4.02 percent but lowered held-out AP by 0.0025; relaxing the threshold to 0.55, which cost −0.0138) were each measured with σ inert. Phase 3 Stage 1 crossed the two: threshold {0.85, 0.55} × σ-weighting {off, live}. Cells A (shipped), B (shipped threshold, σ on; bit-identical to A) and C (relaxed, σ off; C − A = −0.0138) were known. Cell D (relaxed and σ live) was the experiment. D had to be non-inferior to A within 0.0060 on at least three of four conditions on TUNE.
+The coordinate-path null of R-D1 was measured at a merge threshold (0.85) where almost nothing merges, and two earlier negative results on correspondence were each measured with σ inert (Appendix H.3). Phase 3 Stage 1 crossed the two: threshold {0.85, 0.55} × σ-weighting {off, live}. Cells A (shipped), B (shipped threshold, σ live) and C (relaxed, σ off) were known. Cell D, relaxed with σ live, was the experiment: it had to be non-inferior to A within 0.0060 on at least three of four conditions on TUNE.
 
 **Table 5. Stage 1 crossing, A − D on TUNE (pohang00), block bootstrap.**
 
@@ -325,7 +281,7 @@ The coordinate-path null of R-D1 was measured at a merge threshold (0.85) where 
 | lowlight | +0.0014 | [−0.0001, +0.0040] | yes |
 | glare | +0.0115 | [+0.0070, +0.0157] | no |
 
-One of four: verdict S1-NULL, robust at every floor from 0.0014 to 0.0100. The lone pass is not a rescue; low-light passes because relaxing correspondence barely costs anything there (C − A = −0.0013), not because live σ recovered anything. σ was confirmed live in the plumbing (it changed the fused output on 753–836 of 836 clean frames), yet the interaction terms B − A and D − C sit inside [−0.0002, +0.0004] everywhere with every CI spanning zero. TEST numbers were computed and are reported for completeness: two of four non-inferior, with fog favouring the rejected relaxed setting by +0.0028. As pre-declared, they were not used to override the TUNE verdict. The correspondence question is closed; no threshold below 0.55 will be tried under this project, and the fusion is documented as union aggregation, not consensus.
+One of four: verdict S1-NULL, robust at every floor from 0.0014 to 0.0100. Low-light passes because relaxing correspondence barely costs anything there (C − A = −0.0013), not because live σ recovered anything: σ changed the fused output on 753–836 of 836 clean frames, yet the interaction terms B − A and D − C sit inside [−0.0002, +0.0004] everywhere, with every CI spanning zero. TEST, pre-declared not to override TUNE, gives two of four. The correspondence question is closed, and the fusion is documented as union aggregation, not consensus.
 
 ### 6.6 Night visible blindness was a label artifact
 
@@ -337,49 +293,23 @@ The visible detector was not blind at night. It was untrained at night. The 0.00
 
 **Figure 7. Night VIS mAP50-95 before and after the label restore.** 2,068 `pohang01` validation frames, 16,179 ground-truth boxes, all ship, so mAP50-95 is ship AP. The interval is the paired bootstrap interval (1,000 resamples) on the difference, which equals the new arm because the old arm scores 0.0000. The dashed line is the pre-registered ALIVE threshold (0.02); the shaded strips below it are the WEAK (0.005–0.02) and DEAD (< 0.005) bands. Source: `runs/eval/night_restore_verdict.md`, bands fixed in `docs/prereg-night-label-restore.md`.
 
-**The retrained system inherits the rule and pays for it.** The five Phase 3 VIS detectors trained on the restored labels and see at night: 0.2535 seed-mean ship AP on the night run. The frozen rule still drops VIS on every night frame, so the fused night output equals IR alone, 0.0687, and falls 0.1847 [−0.2039, −0.1655] below VIS alone. Under glare it falls 0.0872 below; under fog and low-light, where the retrained VIS detector does fail at night, the veto is still right (Table 3b). The rule was correct for the detector it was written against and is wrong for the detector it ships with. Nothing in the image changed; what changed is the claim the rule makes about the detector.
+**The retrained system inherits the rule and pays for it.** The five Phase 3 VIS detectors trained on the restored labels see at night (0.2535 seed-mean ship AP on the night run), but the frozen rule still drops VIS on every night frame, at the costs in Table 3b. The rule was correct for the detector it was written against and is wrong for the detector it ships with. Nothing in the image changed; what changed is the claim the rule makes about the detector.
 
-**Removing the night arm is not the fix.** Three pre-registered attempts, run before Phase 3 on an earlier night-trained VIS checkpoint, tried to re-price the arm, and none was adopted.
-* V1 removed the arm: +0.1785 on clean night. It was INCONCLUSIVE, because two VIS-degraded night cells fell below IR alone.
-* V2 replaced darkness with a VIS health test: INCONCLUSIVE, with five night cells below max(VIS, IR).
-* V3 widened the trigger and broke day safety: one cell's day veto rose from 0.8 to 19.9 percent. It was declared VOID.
-
-The measured lesson from that sequence is that the variable which should gate VIS at night is VIS health, not darkness. Under the crippled detector the two coincided. The one health instrument that separated them (AUROC 0.9921) was selected on the only night run, so no held-out night exists to confirm it. The axis was closed before the V3 number was known, and this paper reports the night cost of the frozen rule as a defect of the shipped system, not a tuned repair.
-
-A related repair, adding a VIS-independent confirmation to the veil mechanism, halves the worst night gap from −0.0296 to −0.0141 without touching day.
+**Removing the night arm is not the fix.** Three pre-registered attempts, run before Phase 3 on an earlier night-trained VIS checkpoint, tried to re-price the arm, and none was adopted (Appendix G.2): removing the arm left two VIS-degraded night cells below IR alone, replacing darkness with a VIS health test left five night cells below max(VIS, IR), and widening the trigger broke day safety. The variable that should gate VIS at night is VIS health, not darkness, but the one health instrument that separated them (AUROC 0.9921) was selected on the only night run, so no held-out night exists to confirm it. We report the night cost of the frozen rule as a defect of the shipped system, not a tuned repair.
 
 ### 6.7 Is the IR night switch safe when IR is corrupted?
 
-The night vote trusts IR, which was uncorrupted in every benchmark cell, so we attacked the frozen rule `ir_p05 > 41.5` with six IR hazards at three severities (Appendix F, Table 6). A false night on a clear day vetoes a working VIS stream. The raw rule misreads up to 94.8 percent of clear days as night under IR fog and 19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and an authority bound took the false-night rate on 19 IR-corruption arms to 0 percent at zero benchmark cost; that figure is in-sample (§9), and the both-degraded worst-case false-veto rate fell from 24 percent to 1.3 percent. An abstain signal was demoted to an advisory flag after it prevented zero bad vetoes and lost 2,095 correct ones.
+The night vote trusts IR, which was uncorrupted in every benchmark cell, so we attacked the frozen rule `ir_p05 > 41.5` with six IR hazards at three severities (Appendix I, Table 6). A false night on a clear day vetoes a working VIS stream. The raw rule misreads up to 94.8 percent of clear days as night under IR fog and 19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and an authority bound took the false-night rate on 19 IR-corruption arms to 0 percent at zero benchmark cost; that figure is in-sample (§9), and the both-degraded worst-case false-veto rate fell from 24 percent to 1.3 percent. An abstain signal was demoted to an advisory flag after it prevented zero bad vetoes and lost 2,095 correct ones.
 
 ### 6.8 Levers that are inert or negative
 
-**Table L. Fusion and post-processing levers tested and not adopted. Paired deltas in ship AP (local AP), on the frames each row names.** Rows marked † were recorded on the macro over ship and buoy and are re-scored here on ship (`docs/eval/class_set_audit_2026-10-08.md`); their intervals are moving-block, L = 20. Rows marked ‡ stay on the macro.
-
-| Lever | Result | Verdict |
-|---|---|---|
-| σ-weighted WBF † | ≤ 0.0005 on every cell | inert |
-| σ in fusion score (α 0.1) | TEST +0.0010, CI spans zero; TUNE −0.0101 [−0.0114, −0.0086] | hurts on TUNE, unresolved on TEST |
-| Per-frame registration alignment, then merge | TEST −0.0010, spans zero (TUNE +0.0121) | does not generalize |
-| Isotonic score calibration | TUNE/TEST −0.0044 / −0.0034 | hurts |
-| VIS score re-ranking, leave-one-run-out, 1,200 day frames; inputs confidence, two transforms of it, and σ † | +0.0063 [+0.0030, +0.0094] out of fold, 3/3 held-out runs (in-sample +0.0219); without σ +0.0014 [−0.0020, +0.0044], 1/3 runs; σ's paired increment +0.0050 [+0.0038, +0.0064] | clears 0.0060 by 0.0003 on one checkpoint; σ's increment FAILS its pre-registered replication (2/5 seeds at 0.0060, 3/5 at 0.0047) |
-| VIS score re-ranking, day-only 9,284 frames ‡ | best λ = 0, delta 0.0000 | null on the macro; includes pohang04, so not re-scorable on ship |
-| Temporal support † | lift 1.00× | dead |
-| Test-time-augmentation view merging † | ≈1.0× lift once confidence-matched | inert |
-| Two-checkpoint VIS ensembling † | WBF merge +0.0009 to +0.0069 (IoU 0.55: +0.0069 [+0.0011, +0.0131], best of six arms); concatenation −0.018 to −0.102 | merging does not hurt; concatenation does |
-| Within-stream WBF dedup † | −0.0030 to −0.0068 | hurts at merge IoU ≥ 0.80; unresolved below |
-| VIS soft-NMS σ = 0.5 ‡ | night worst cell −0.0000, negative on 4/4 draws | rejected by pre-registered every-cell rule |
-| Capability-ratio alternatives (×4, ×16, ×64) | win clean, lose ≥ 1 cell | rejected by no-cell-may-lose rule |
-| Two-sided veto (also veto IR) | worst gap −0.0810 on every night cell, IR uncorrupted | unsafe |
-| Per-stream top-k truncation † | k ≥ 100: ≤ 0.0001; k = 50: up to −0.0006 (IR, lowlight/day); point deltas | irrelevant |
+Table L (Appendix J) lists the fusion and post-processing levers that were tested and not adopted, as paired ship-AP deltas on the frames each row names. Most are inert or negative; three results from it bear on the argument of this paper.
 
 The one fusion lever with a positive held-out delta is the cross-modal support multiplier at IoU 0.30 (TEST +0.0033 [+0.0010, +0.0067]; a frame-level interval, which spans zero once widened by the factor of §5.4). Merging does not pay across modalities, within a stream or across augmentation views; the test-time-augmentation case is the cleanest, because its views are pixel-exact registered and merging still barely moves. The one exception on ship AP is merging two VIS checkpoints at IoU 0.55, +0.0069 [+0.0011, +0.0131], the best of six arms; the macro read it as a loss, because the merge costs buoys. The value of a redundancy axis is its independence, not its abundance: confidence lifts true-positive rate 4.80×, σ 3.00×, cross-modal agreement at IoU 0.30 2.08×, and temporal persistence 1.00×, because persistent false positives are the most stable objects in a fixed scene.
 
 The headroom lies elsewhere. Oracle re-ranking of the VIS detections on the 1,200 paired day frames would raise ship AP from 0.3686 to 0.4653 (+0.0968), and on 9,284 day-only VIS frames from 0.3512 to 0.4624 (+0.1112; that substrate includes pohang04 and is read from its existing record); the learned out-of-fold re-ranker of Table L recovers +0.0063 of the first on that checkpoint (+0.0025 to +0.0101 on the five Phase 3 detectors). Small objects carry 89.2 percent of ship ground truth with the lowest ship AP; cross-modal union adds only +0.01–0.02 recall over VIS alone. Resolution and ranking, not fusion, are the levers. Resolution is out of scope for a detector held fixed; ranking is not, but the learned re-ranker recovers little of the headroom, and σ's share of it fails its pre-registered replication (below).
 
 **The σ increment does not replicate at the floor.** Before any of their re-ranker numbers existed, we pre-registered a replication of σ's re-ranker increment on the five Phase 3 VIS detectors (`docs/prereg-sigma-rerank-replication-2026-10-09.md`). It used the same 4-versus-3-feature arm at λ 0.30, ship AP, out of fold on the 1,200 day frames, with block intervals. The outcomes were REPLICATES if at least four of five seeds clear 0.0060 with an interval above zero, REPLICATES AT SHIP FLOOR if four clear 0.0047, and FAILS otherwise. The pipeline first reproduced the original +0.004960 exactly. The increment is +0.0045, +0.0052, +0.0065, +0.0038 and +0.0062 on seeds 0–4, every interval above zero, mean +0.0053. Two seeds clear 0.0060 and three clear 0.0047, so the outcome is FAILS. σ adds a consistent but small within-detector ranking gain, not one this paper can call beyond its floor. The full re-ranker against no re-ranking has an interval above zero on only two of the five (`docs/eval/sigma_rerank_replication_2026-10-09.md`).
-
-The soft-NMS rejection deserves one more sentence. The first pass had no magnitude floor, so a night regression of −1.03e-5 failed the bar exactly as a regression of 1e-2 would have. The project declined to invent an equivalence margin after seeing that it would flip the verdict, and instead measured the noise floor of §5.3. The draw-averaged re-test still failed on four of four draws, and the rejection stands.
 
 ## 7. Held-out evaluation: the single pohang04 look
 
@@ -391,7 +321,7 @@ pohang04 (26,188 VIS images, no IR labels) had never been scored by any fusion s
 
 The endpoint is the fused score of the shipped `crossmodal26m` system against the existing VIS labels (26,188 files, 156,652 boxes, 286 empty; hash `c06611a684f4`). No thermal labels exist for pohang04 and none were drawn. All five seed pairs from the Phase 3 retrain are scored, VIS seed k with IR seed k, and the headline is the mean over seeds; no constant is re-tuned after seeing results. All eleven benchmark cells are scored with fresh corruption-draw seeds, but only the clean/clean cell carries the verdict; the other ten are descriptive. Day and night are classified by solar elevation from the GPS timestamp; pohang04 contributes only to day cells.
 
-The look is mechanically single-shot. The scoring script refuses to run unless the repository is at a clean FREEZE commit, all 316 files in the hash manifest (10 checkpoints, 10 reference caches, 190 pohang04 caches, 76 frame-statistic files, and substrate and calibration files) verify, the labels hash correctly, and the development reference reproduces exactly (0.3894193201201913). It writes a `LOOK_TAKEN` marker before scoring begins, so a crash mid-look still counts as the look having been taken. The exposure is logged in the project's ledger.
+The look is mechanically single-shot: the scoring script refuses to run unless the repository is at a clean FREEZE commit, a 316-file hash manifest verifies and the development reference reproduces exactly, and it writes a `LOOK_TAKEN` marker before scoring begins, so a crash mid-look still counts as the look having been taken (Appendix K.1). The exposure is logged in the project's ledger.
 
 Under this pre-registration no retrained-versus-deployed comparison is reported (the five-seed design cannot power it), and no Gaussian versus MC-Dropout versus ensemble comparison is reported on pohang04 (the VIS MC and ensemble arms were trained on 9,841 pohang04 frames).
 
@@ -410,23 +340,7 @@ Under this pre-registration no retrained-versus-deployed comparison is reported 
 
 One clean run does not retroactively create a test set for the development decisions of §6, and the limitation in §9 stands.
 
-**Table 7. pohang04, all eleven cells (descriptive except clean/clean). Seed-mean fused ship AP, local AP, block-bootstrap 95% interval; corrupted cells average four fresh draws (VIS 941–944, IR 951–954).** Source: `docs/eval/holdout_p04_look.md`.
-
-| Cell (VIS / IR) | AP | 95% interval |
-|---|---:|---|
-| clean / clean (verdict) | 0.2682 | [0.2576, 0.2793] |
-| clean / glare_s2 | 0.2668 | [0.2569, 0.2777] |
-| clean / blur_s2 | 0.2671 | [0.2569, 0.2777] |
-| clean / noise_s2 | 0.2692 | [0.2590, 0.2798] |
-| clean / fog_s2 | 0.2691 | [0.2585, 0.2802] |
-| rain_s2 / clean | 0.1850 | [0.1744, 0.1956] |
-| fog / clean | 0.0580 | [0.0529, 0.0634] |
-| blur_s3 / clean | 0.0418 | [0.0390, 0.0448] |
-| blur_s3 / glare_s2 | 0.0407 | [0.0379, 0.0437] |
-| lowlight / glare_s2 | 0.0121 | [0.0108, 0.0139] |
-| noise_s2 / clean | 0.0114 | [0.0095, 0.0134] |
-
-The ten descriptive cells carry no pass or fail language. They show only what the development cells already showed: the fused output tracks the VIS stream. IR-side corruption leaves it within ±0.0014 of clean, and VIS-side corruption moves it by up to 0.2568.
+The ten descriptive cells (Table 7, Appendix K.2) carry no pass or fail language. They show only what the development cells already showed: the fused output tracks the VIS stream. IR-side corruption leaves it within ±0.0014 of clean, and VIS-side corruption moves it by up to 0.2568.
 
 The look ran once, for 18.6 hours, at freeze commit `85a07c1`. It is logged in the exposure ledger, and a tracked marker makes any re-run refuse.
 
@@ -437,12 +351,6 @@ The look ran once, for 18.6 hours, at freeze commit `85a07c1`. It is logged in t
 **Fusion at this registration quality is aggregation.** With a 3–6 px median residual and within-run drift, 0.05 percent of VIS boxes have an IR partner at the adopted threshold. The system does not measure sensor agreement; it concatenates. Stage 1 closed the obvious repair: relaxing correspondence and letting σ arbitrate the merges is non-inferior on one of four conditions. Any claim about cross-modal agreement is out of reach of this system, and the design assumption that decision-level fusion tolerates misalignment was wrong as stated; decision-level fusion avoids the residual by almost never merging.
 
 **A veto is a claim about the detector.** This project met the lesson twice, and the second time it could not repair it. The veil veto that helped a small VIS detector on fog became a −0.0632 regression on a larger one whose fog AP was 41 times higher; reordering the rule to `night AND (dark OR veil)` fixed that. The night arm then met the same failure from the other side. It was written while VIS scored 0.0000 at night because of a label artifact. Once the retrained detector could see at night, the frozen rule threw away the better stream, at a cost of 0.1847 AP. No image statistic can detect this, because what changed is not in the image. Two practical consequences follow. First, a sensor-selection rule must be re-priced whenever the detector changes, including when it is only retrained on corrected labels. Second, the variable such a rule should read is the health of the stream it drops, not a property of the scene that happened to coincide with it.
-
-**Redundancy is worth what it is independent of.** Temporal persistence and view agreement carry no signal beyond confidence; cross-modal agreement carries some; σ carries more. Any future fusion term should be screened for lift against confidence before it is priced in a benchmark.
-
-**Synthetic ladders cannot find reference contamination.** The Mahalanobis scorer trusted real night because the night run was in its fit set, while distrusting synthetic low-light that looked the same. No severity sweep exposes a statistic that is wrong about the reference population; only a falsification test with the population changed does.
-
-**Checkpoint selection is noisier than seeds.** A best-epoch maximum over a noisy curve rewards noise, and it inverted the ranking of uncertainty methods and the ranking of machines. Comparisons of uncertainty methods should be carried by calibration metrics, where separations are large relative to this noise, and every headline number should report the epoch-mean alongside.
 
 **Small deltas on video need a floor and a block.** Without a magnitude floor a gate degenerates into a sign test on 1e-5; without block bootstrapping intervals are half their true width. Applying both corrections retroactively moved 20 of 74 findings to indeterminate. The findings that survived are the large ones, which is the pattern one should expect and want.
 
@@ -463,7 +371,7 @@ The look ran once, for 18.6 hours, at freeze commit `85a07c1`. It is logged in t
 9. **The 1.95 interval factor is a lower bound**, measured on VIS uncertainty-arm deltas.
 10. **R-D1** was scored on the wrong metric before being re-scored on the registered one, α was never tuned, Table 3a and Table L were re-scored on ship AP after the fact, and the within-detector σ gain is unresolved in size (§6.4, §6.8).
 
-The full list of 24 items is in Appendix G.
+The full list of 24 items is in Appendix L.
 
 ## 10. Conclusion
 
@@ -533,9 +441,24 @@ Zhao, J., Wang, Y., Zhang, Y., Wang, H., and Guo, Y. (2024). Uncertainty-aware c
 
 ---
 
-## Appendix A. Dataset details (full text of §3.2–§3.5)
+## Appendix A. Comparison axes (full text of §2.4)
 
-### A.1 Verified counts
+Table R positions this work against the nearest prior systems. Every cell for another work comes from a direct read of its full text on 2026-10-08 (Gaussian YOLOv3 and UA-CMDet from their arXiv versions, the others from the published versions); "speed not reported" means the paper gives no figure.
+
+**Table R. Positioning.**
+
+| Work | Domain | Sensors | Uncertainty target | Inference-time adaptation | Calibration evaluated | Registration assumption | Compute |
+|---|---|---|---|---|---|---|---|
+| Gaussian YOLOv3 (Choi et al., 2019) | road (KITTI, BDD) | RGB | box coordinates, one Gaussian per coordinate | per box: score × (1 − mean predicted uncertainty) | no calibration metric; IoU plotted against predicted uncertainty | n/a | single pass; above 42 fps on a GTX 1080 Ti |
+| UA-CMDet (Sun et al., 2022) | drone (DroneVehicle) | RGB + IR | per-object training-loss weights from a rule (cross-modal ground-truth IoU, RGB illumination); not predicted | per frame: RGB scores × illumination weight, then NMS over RGB, IR and fusion branches | no (mAP only) | distortion correction and a per-pair affine alignment; residual misalignment is down-weighted in training | two-stage oriented detector (RoI Transformer, ResNet-50-FPN); uncertainty module removed after training; speed not reported |
+| Zhao et al. (2024), DICTA | drone (DroneVehicle), surveillance (M3FD) | VIS + IR | per-label training-loss weights estimated from each branch's predictions; not predicted at inference | input-dependent attention over fused backbone features | no (mAP only) | datasets distributed as aligned pairs | two-stream backbone with RoI Transformer, Faster R-CNN or RetinaNet heads; speed not reported |
+| RDSC-YOLOv4 (Liu et al., 2021) | maritime, surface vehicle (SeaShips, SeaBuoys) | RGB | none | none | no | n/a | single pass; 68 FPS on an RTX 2080 Ti |
+| YOLOv7-Sea (Zhao et al., 2023) | maritime, drone (SeaDronesSee) | RGB | none | test-time augmentation over five scales | no | n/a | five passes per image; speed not reported |
+| This work | maritime | VIS + LWIR | box coordinates (σ²), frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9926 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor | nearest-timestamp pairing, 3–6 px median residual | two single-pass detectors; 57.0 FPS per detector, detector time only (§6.1) |
+
+## Appendix B. Dataset details (full text of §3.2–§3.6)
+
+### B.1 Verified counts
 
 All counts below were re-derived from disk on 2026-09-10 and supersede earlier estimates in the project record.
 
@@ -547,13 +470,13 @@ All counts below were re-derived from disk on 2026-09-10 and supersede earlier e
 
 Per-run image counts (VIS / IR): pohang00 21,768 / 10,918; pohang01 24,473 / 11,995; pohang02 27,795 / 6,175; pohang03 27,085 / 1,922; pohang04 26,188 / 0. Paired rows per run: pohang00 10,786; pohang01 11,990; pohang02 3,739; pohang03 1,873; pohang04 0. Pairing is defined by the dataset's own timestamp table, not by frame ordinal: 16,544 of the 28,388 pairs have different VIS and IR indices, with per-run offsets ranging from −155 to +1.
 
-### A.2 Preprocessing
+### B.2 Preprocessing
 
 Visible frames are letterboxed, not stretched, from 2048×1080 to 640×338 inside a 640×640 canvas (scale 0.3125, 151 px of pad value 114 top and bottom, area interpolation). Stretching would distort VIS (1.9:1 native) and IR (1.25:1) by different factors and hurt cross-modal overlap. Forty-seven percent of every stored VIS frame is therefore pad, a fact that matters in §3.5. Full-resolution originals are archived and hard-linked in a native-resolution twin used for main-backbone training.
 
 Infrared frames are delivered as 8-bit grayscale by per-frame min–max normalization (each frame's own minimum to 0 and maximum to 255) and letterboxed from 640×512 with 64 px of pad top and bottom. This choice has consequences we disclose: thermal crossover can be visually masked because a near-isothermal vessel is stretched to full local contrast, there is no cross-frame radiometric comparability, and the raw 16-bit data cannot be recovered from the product. The 16-bit dynamic range is modest (median span 702 counts, about 7.72 effective bits), but 51 percent of frames are more than 1.5× range-inflated by outlier hot pixels. A percentile-clip re-export was built, tested and rejected: it gained 1.75 percent mAP50-95 but lost 1.6 points of recall.
 
-### A.3 Splits
+### B.3 Splits
 
 The first split delivered with the tooling interleaved frames (train N, validation N+1), which leaks near-duplicate frames at 10 Hz. It was replaced by contiguous per-run blocks, and then, when the server-side validation set came out 77 percent buoy against a 5 percent global share, by an interleaved K-block split: each run's shared timeline is cut into K equal blocks in a cycle of ten (block index 4 to validation, 9 to test, others to train, giving 80/10/10 by construction), with guard bands at every boundary and K raised until leakage, balance and coverage gates all pass. The same ordinals are used for both modalities so that VIS–IR pairs and stereo pairs never straddle a split. Table S gives the resulting sizes.
 
@@ -566,7 +489,7 @@ The first split delivered with the tooling interleaved frames (train N, validati
 
 Per-run VIS (train/val/test): pohang00 16,376/1,672/1,912; pohang01 18,826/2,068/1,629; pohang02 20,424/2,690/2,864; pohang03 20,962/2,579/2,649; pohang04 19,687/2,343/2,391. Per-run IR: pohang00 8,229/836/950; pohang01 8,800/1,034/1,111; pohang02 4,844/247/330; pohang03 1,406/117/127. Both audits pass. Production VIS training uses a stride-2 subset of 48,136 train frames; IR trains on all 23,279.
 
-### A.4 The night-box filter and its reversal
+### B.4 The night-box filter and its reversal
 
 This is the dataset event that most shaped the project. On 2026-07-15 a train-only filter removed every box in any pohang01 frame whose content-median luminance was below 100 on a 0–255 scale, on the reasoning that a box in a black frame is a modality-copied annotation rather than something the visible camera can see. The filter emptied 17,502 of 96,275 train label files and dropped 132,688 boxes (126,948 ship, 5,740 buoy). Validation and test were never touched.
 
@@ -585,19 +508,39 @@ A pre-registered restore (2026-09-02) put all 132,688 boxes back and re-dropped 
 
 The result is in §6.6. Two further provenance facts belong here. First, a widely quoted post-restore hash `b92739202127` is a tree-scope hash over all 127,309 VIS label files, not the train-scope hash; the train-scope value is `8ed69b5974ed`. Second, on 2026-09-03 at 21:19, 7,591 pohang01 train label files were rewritten back to pre-filter content with no project script running; the cause is unexplained. An append-only hash ledger now records label state so that any recurrence has a bounded window, and it separately found 8,237 orphan label files belonging to no split list.
 
-## Appendix B. Metric contracts, identity checks and power (full text of §5.6 and §5.8)
+### B.5 Holdout and contamination
 
-### B.1 Metric contracts
+pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**, and we state exactly what has and has not touched it. Before the Phase 3 pre-registration, its VIS frames were in the standard training lists: the earlier VIS detectors, and the VIS ensemble and MC-Dropout arms, trained on 9,841 pohang04 frames. 2,343 of its frames were also pooled into an earlier VIS validation list, and two VIS-only probes scored that list on 2026-09-02: day-only re-ranking and oracle re-ranking (§6.8). What never touched pohang04 is the fusion system: no fusion score was ever computed on it, since it has no thermal frames in any list. The ten Phase 3 checkpoints never saw it, and neither did the Mahalanobis references built from them. The held-out claim of §7 rests on those facts and no wider one.
+
+Phase 3 lists were built by filtering the existing lists to remove pohang04 rows, preserving every surviving frame's stride identity: VIS train 48,136 to 38,295, val 11,352 to 9,009, test 11,445 to 9,054. IR lists needed no change. Removing an all-day run shifts composition: validation night share rises from 18.2 percent to 23.0 percent, so Phase 3 numbers are not comparable to earlier pooled validation numbers.
+
+A contamination audit found that the Mahalanobis reference list used to fit the earlier OOD scorer contained 819 of 4,000 frames (20.5 percent) from pohang04. For Phase 3 the references were rebuilt from the retrained checkpoints, VIS from a clean list of 3,181 frames and IR from its unchanged 4,000-frame list. All ten reference caches contain zero pohang04 frames (verified per seed). The paired evaluation lists that feed every benchmark cell (2,232 frames) contain no pohang04 frames.
+
+## Appendix C. The Gaussian head on an end-to-end detector (from §4.2)
+
+**Gaussian head.** A fresh log-variance branch (`cv4`) is bolted in place onto the live detection head of a loaded model; there is no fork of the training library. Variance is parameterized as log σ² over left-top-right-bottom distances in stride units and converted to pixels at inference, riding through post-processing as extra channels. Training adds a fourth loss term with beta-NLL weighting (Seitzer et al., 2022) and a warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 reports that this parity is not yet demonstrated. Porting to YOLO26's end-to-end head forced three changes: σ rides the one-to-one branch only, because inference decodes from it; post-processing is overridden to gather σ with the boxes' top-k index; and the NLL target is left unclamped because at reg_max = 1 the stock clamp collapses every target to a constant. One ablation, training σ on undetached features, cannot be run on end-to-end heads because the library detaches the branch upstream.
+
+## Appendix D. Protocol details (from §5.3, §5.5, §5.6 and §5.8)
+
+### D.1 Noise floor
+
+Deltas between systems are always paired on the same frames and the same corruption draw. Pairing tightens the standard deviation of a delta relative to unpaired resampling by 3–16× on the nine informative cells (11–12× on most; the two zero-information cells have paired sd 0.0000, which is where the quoted 52× comes from) (`runs/eval/delta_noise_floor.md` §1). The combined draw-plus-bootstrap two-sigma floor on a paired delta is 0.0014–0.0031 AP on most cells (full range 0.0000–0.0031). The buoy class carries 74–75 percent of macro-metric variance while making up 5.3 percent of day ground-truth boxes, and two of eleven cells carry essentially no buoy-variance information. These floors were measured on the macro over ship and buoy, while the Phase 3, Stage 1 and held-out verdicts are on ship AP, so the floor was re-measured on ship AP with the same arm, cells, draws and resamples (`docs/eval/delta_noise_floor_ship_2026-10-08.md`). The ship floor is 0.0008–0.0024 on the nine informative cells (full range 0.0000–0.0024), and its maximum, the value that sets the magnitude floor in §5.4, is 0.0024 against the macro's 0.0031. The level sd of ship AP is up to twice the macro's (`runs/eval/metric_noise_floor.md` §2), but that does not carry over to a paired delta: where buoy AP is constant, the macro delta and its noise are both exactly half the ship delta's, and where buoy AP moves, the noisy buoy delta (600 day boxes) raises the macro floor above the ship floor. A delta below the floor is reported as "not resolved," never as "no effect."
+
+### D.2 Class set
+
+**Class set.** Ship is the primary class. It is the only class both detectors emit, since the IR detector is single-class (§4.2), and the Phase 3 pre-registration fixed fused ship AP (class 0) as its quantity before any Phase 3 number existed (`docs/prereg-phase3-retrain-2026-09-10.md`). Tables 1b, 3b, 4b, 5 and 7 and Figures 6 and 7 report ship AP. Table 1 reports the macro over ship and buoy. Table 4 reports ship AP, its registered metric, with the recorded macro beside it as Table 4c (§6.4). Table 2 reports both classes for each stream. Table 3a and Table L (§6.8) report ship AP, except two Table L rows that stay on the macro and say so: day-only re-ranking, whose substrate includes pohang04 and cannot be re-scored, and VIS soft-NMS, whose registration scored the macro and whose failing cell is at night, where the two are identical because no night frame has a buoy. Table L rows recorded on the macro were re-scored on ship from cached detections, each after its unchanged macro path reproduced the record (`docs/eval/class_set_audit_2026-10-08.md`). The constants re-price in §6.3 is reported on the macro, which its registration scored. The macro is not a safe stand-in for ship AP, for three reasons. A VIS veto deletes every buoy, because the surviving IR stream cannot supply one, so a macro delta can move by half a class for a reason unrelated to ship detection. Buoys carry 74–75 percent of the macro's variance on 5.3 percent of the day boxes (§5.3). And a single-class stream scored on the macro reads exactly half its ship AP (Table 2). R-D1 shows the cost: its macro read NULL where its registered ship AP reads POSITIVE (§6.4).
+
+### D.3 Metric contracts
 
 Six claims about the uncertainty metrics were tested and hold: D-ECE, here the confidence-only form of the detection calibration error of Küppers et al. (2020), conditions on confidence only; AUSE (Ilg et al., 2018) and AURC (Geifman et al., 2019) are ranking-only (a rank-reversing control moves AUSE from 0.0630 to 0.3569); NLL and interval-ECE are computed on true positives only and are published with their true-positive share and recall denominators; AURC is a grid mean, whose gap to the trapezoidal integral (0.0215) is published alongside. One defect was found and is disclosed rather than repaired: WBF can emit fused confidences above 1.0 (maximum 1.7532, on 0.0641 percent of detections) because two overlapping same-stream boxes count as confirmation. This traces to WBF mechanics, not to cross-modal support.
 
-### B.2 Identity checks and power
+### D.4 Identity checks and power
 
 A one-frame shift in cache pairing moves gated fusion by −0.000968, below the noise floor and therefore undetectable by any statistical test; it is catchable only by a content identity check, which the evaluation code now performs on every cache load. The split fingerprint was found to be label-blind (deleting a box leaves it unchanged) and was supplemented with a label fingerprint. Before spending Phase 3 compute we computed minimum detectable effects: with five seeds, VIS resolves 0.01291 and IR 0.01010, neither reaching the 0.0060 floor, so the pre-registration cut the retrained-versus-deployed comparison in advance and it is not reported.
 
-## Appendix C. Backbone benchmark (full text of §6.1)
+## Appendix E. Backbone benchmark (full text of §6.1)
 
-### C.1 Tables 1 and 1b
+### E.1 Tables 1 and 1b
 
 Ninety-three training runs, 31 YOLO variants with three seeds each from six families (YOLOv8, Jocher et al., 2023; YOLOv9, C.-Y. Wang et al., 2024; YOLOv10, A. Wang et al., 2024; YOLO11, Jocher and Qiu, 2024; YOLO12, Tian et al., 2025; YOLO26, Jocher et al., 2026), were trained on the restored labels of §3.5 and stopped by one rule: 20 epochs without a new best mAP50-95. The grid first trained 25 epochs on the training server. Each run was then continued from its 25-epoch weights with the early stopper seeded to keep counting from the base run's best epoch, so a run that had already spent 15 of its 20 epochs stopped after five more without a new best. Each run is scored at its best epoch, the earliest maximum, which is the checkpoint the stopper keeps.
 
@@ -647,7 +590,7 @@ Ninety-three training runs, 31 YOLO variants with three seeds each from six fami
 
 **The selection of yolo26m stands.** yolo26m was chosen before this benchmark, on the Phase 1 grid (Table 1b), under a rule fixed in advance: the top mAP50-95 tier, then a DFL head, then the simplest fork, then throughput. Table 1 puts yolo26m inside the leading tier again, and no YOLO26 variant has a DFL head, so the rule again falls to throughput. There yolo26m runs at 57.0 FPS per detector against 30.7 for yolo26x, 28.5 versus 15.3 two-stream, a factor of 1.86. Its cost against the nominal leader is 0.0040, equal at four decimals to yolo26x's own seed sd and below yolo26m's. yolo26l, now second, was not timed; that it is slower than yolo26m is expected from its size but not measured. Throughput is fp16 with the clock pinned at 1500 MHz, detector `predict()` only. The two-stream figures are derived, not measured: they halve the single-detector time and exclude the σ head, the image statistics and the decision layer. They rank backbones; they are not the system's end-to-end throughput.
 
-Disclosures for Table 1. The 25-epoch grid ran on one A100 MIG 3g.40gb slice. Ten continuations ran there before access was lost and 68 on the laptop of Appendix H (RTX 4080, 12 GB). One run (yolo26x seed 1) needed none, because its 25-epoch run had already spent its patience; the remaining 14 are the † rows. All logged runs used Ultralytics 8.4.90. On the laptop the batch was planned per family to fit memory (16, 8 or 4) with a nominal batch of 64, so the effective batch stays 64; one run (yolov9c seed 1) dropped from 16 to 8 mid-continuation after the driver spilled memory to system RAM. Loader workers were 6 on the laptop against 2 on the server. yolov8s seed 2 diverged in the 25-epoch grid and is replaced by seed 3. One server log (yolo12x seed 0) lacks its final continuation row; that run stopped exactly 20 epochs after its best, so the missing row holds no new best. For every logged run, a replay of the stopper over its logged history stops on the run's recorded length.
+Disclosures for Table 1. The 25-epoch grid ran on one A100 MIG 3g.40gb slice. Ten continuations ran there before access was lost and 68 on the laptop of Appendix M (RTX 4080, 12 GB). One run (yolo26x seed 1) needed none, because its 25-epoch run had already spent its patience; the remaining 14 are the † rows. All logged runs used Ultralytics 8.4.90. On the laptop the batch was planned per family to fit memory (16, 8 or 4) with a nominal batch of 64, so the effective batch stays 64; one run (yolov9c seed 1) dropped from 16 to 8 mid-continuation after the driver spilled memory to system RAM. Loader workers were 6 on the laptop against 2 on the server. yolov8s seed 2 diverged in the 25-epoch grid and is replaced by seed 3. One server log (yolo12x seed 0) lacks its final continuation row; that run stopped exactly 20 epochs after its best, so the missing row holds no new best. For every logged run, a replay of the stopper over its logged history stops on the run's recorded length.
 
 **Table 1b. Phase 1 backbone benchmark, the selection record, mAP50-95 seed mean ± sd.** Main campaign, local AP, ship class; stride-2 VIS split, pre-restore filtered labels (§3.5), 100 epochs with patience 20 (no run reached 100). Labels, train split, classes, AP convention and epoch budget all differ from Table 1, so no value is comparable across the two tables.
 
@@ -669,7 +612,28 @@ Disclosures for Table 1b. One row (yolo26m seed 0) was trained under library 8.4
 
 A 44-of-93-run IR architecture ladder was stopped early on the basis of an ANOVA (F(12,26) = 1.037, p = 0.447) that was misread as evidence of equivalence. The minimum detectable spread at that design was 0.02067 against an observed spread of 0.01193, and the Tukey HSD interval on the largest gap is [−0.00314, +0.02700]. The correct statement is that the ladder could not resolve architecture differences, not that the architectures are equivalent. The stop stands on other grounds: the architecture was frozen before the queue was created, and the ladder trained two classes while the deployed IR configuration is single-class with a P2 neck that was never in the ladder.
 
-## Appendix D. Calibration: basis, amendment and checkpoint selection (from §6.2)
+## Appendix F. Calibration details (from §6.2)
+
+### F.1 Table 2: sources, checkpoints and ties
+
+**Table 2. Per-stream uncertainty calibration, three arms, day slice (1,200 of the 2,232 paired validation frames), no fusion. Local AP. Lower is better on every column except the two AP columns; best arm per stream and column in bold.** Source: `docs/eval/uq_day_night_slice_u2_nanpolicy_2026-09-09.md`, pre-registered in `docs/prereg-uq-day-night-slice.md` with Stage B in `docs/prereg-uq-day-night-slice-u2-stageb.md`. Checkpoints trained on restored labels, one per arm: σ head `gauss_vis_seed0_nightfull` / `gauss_ir_seed0_ft`, MC-Dropout `mc_vis_nightfull` / `mc_ir_seed0_ft_refit`, ensemble of five `ens_vis_nightfull_seed0-4` / `ens_ir_seed0_ft`. AUSE and AURC rank boxes by uncertainty, and MC-Dropout and ensemble uncertainties tie wherever members agree (only 57–68 percent of ensemble day boxes have a unique value); across orderings of the ties these two columns move by up to 6×10⁻⁴ (IR ensemble AUSE 0.0769–0.0777, VIS ensemble 0.0948–0.0951), which changes no ordering in the table. The σ head has no ties. AP is local AP50-95 per class. The IR detector is single-class (§4.2) and has no buoy AP; the source file's macro over both classes reads exactly half of IR's ship AP, because the 596 buoy boxes in the IR day labels score zero (`docs/eval/table2_per_class_2026-10-08.md`, which reproduces the source's macro on every row). The arm ordering is the same on either.
+
+### F.2 Scope and caveats
+
+**Scope and caveats.**
+* These are development-data numbers only. The VIS MC-Dropout and ensemble arms trained on 9,841 pohang04 frames (§3.6), so no three-arm number may appear on the held-out run.
+* None of these checkpoints is a Phase 3 checkpoint, and none of the three arms was ever used as a fusion input. R-D1 (§6.4) tests the σ head only.
+* The pre-registered estimand for MC-Dropout and the ensemble is **disagreement ranking**, not predictive likelihood. The disagreement statistic omits the within-member variance term and produces σ = 0 when members agree, which is why their NLL is undefined and the NLL column carries no arm ranking.
+* The ensemble's five members form one replicate, not five.
+* Night is SUSPECT on both streams. The same band on the negative-control stream means the night miscalibration is not label-driven, at least for these restored-label checkpoints.
+
+### F.3 Signal lift screen
+
+![lift_screen](../docs/figures/fig_lift_screen.png)
+
+**Figure 3. Which per-box signals predict a true positive.** Lift = P(TP | signal fires) / P(TP | it does not), VIS boxes on the clean day frames of the paired set, full-scale pre-restore yolo26m caches. A signal at lift 1.0 carries no information, and no weight placed on it can change an AP ranking. Filled: true positive at IoU 0.50; hollow: at IoU 0.75. Temporal support is a box at IoU ≥ 0.30 in one of the two preceding frames. Source: `runs/eval/signal_lift_26m.md`.
+
+### F.4 Day-only basis, amendment and checkpoint selection
 
 **Why day-only is primary.** The substrate is 46.2 percent night from a single run. The pre-registration measured whether night reorders the arms: it compared each metric's between-arm separation on day frames with how unevenly night shifts the arms (ratio r). On VIS, D-ECE, AUSE and AURC fall in the SUSPECT band (r = 0.30–0.60) and interval-ECE is CLEAN (r = 0.05). On IR, AURC is SUSPECT and the rest are CLEAN. Under the registered rule a SUSPECT verdict makes day-only the primary basis, with the pooled and night rows retained as secondary (in the source file). IR is the negative control, since its labels were never filtered, and it lands in the same band as VIS.
 
@@ -681,7 +645,11 @@ We do not rank uncertainty methods on mAP. On the best-epoch checkpoint conventi
 
 **Figure 4. The best-epoch convention rewards the noisiest run.** Validation mAP50-95 (Ultralytics, training-time logs) per fine-tune epoch for two VIS runs sharing machine, seed and recipe: an ensemble member (control) and MC-Dropout. Rings mark the epoch `best.pt` keeps; dashed lines are the 10-epoch means. MC-Dropout reads +0.0096 better by best epoch and −0.0084 worse by epoch mean. Sources: `runs/ensemble/ens_vis_seed0_ft_control/results.csv`, `runs/mc_dropout/mc_vis_seed0_ft_refit/results.csv`; decision record `docs/D31-checkpoint-selection-2026-09-01.md`.
 
-## Appendix E. Gate rewrite history (from §6.3)
+**Checkpoint selection is noisier than seeds.** A best-epoch maximum over a noisy curve rewards noise, and it inverted the ranking of uncertainty methods and the ranking of machines. Comparisons of uncertainty methods should be carried by calibration metrics, where separations are large relative to this noise, and every headline number should report the epoch-mean alongside.
+
+## Appendix G. Gate history and night-arm re-pricing (from §6.3 and §6.6)
+
+### G.1 Gate rewrite history
 
 The decision layer in §4.2 is the sixth rewrite. Table 3a and Figure 5 record the worst-cell gap, in ship AP, to the better single stream at each stage; each rewrite was forced by a measured failure of the previous one. **Every number in Table 3a and the paragraph after it was measured on pre-restore checkpoints whose VIS detector scored 0.0000 at night: the yolo26s detectors for stages a–d, and the full-scale yolo26m detectors from stage e on. The paragraph names which.** Table 3b re-measures the shipped rule on the five Phase 3 systems.
 
@@ -706,7 +674,54 @@ Three findings from the rewrite history carry general lessons. First, the origin
 
 **Figure 5. Worst-cell gap of gated fusion to max(VIS, IR) across the six gate rewrites (Table 3a), pre-restore checkpoints (yolo26s for a–d, yolo26m from e), development paired frames, ship AP (local AP).** Each rewrite was forced by the failure of the one before it; stages a–c share their worst cell, lowlight/day. Stage e is the detector swap to yolo26m, which turned the fog veto into a −0.0632 regression without any change to the images.
 
-## Appendix F. IR night-switch safety (full text of §6.7)
+**Synthetic ladders cannot find reference contamination.** The Mahalanobis scorer trusted real night because the night run was in its fit set, while distrusting synthetic low-light that looked the same. No severity sweep exposes a statistic that is wrong about the reference population; only a falsification test with the population changed does.
+
+### G.2 Night-arm re-pricing
+
+**Removing the night arm is not the fix.** Three pre-registered attempts, run before Phase 3 on an earlier night-trained VIS checkpoint, tried to re-price the arm, and none was adopted.
+* V1 removed the arm: +0.1785 on clean night. It was INCONCLUSIVE, because two VIS-degraded night cells fell below IR alone.
+* V2 replaced darkness with a VIS health test: INCONCLUSIVE, with five night cells below max(VIS, IR).
+* V3 widened the trigger and broke day safety: one cell's day veto rose from 0.8 to 19.9 percent. It was declared VOID.
+
+The measured lesson from that sequence is that the variable which should gate VIS at night is VIS health, not darkness. Under the crippled detector the two coincided. The one health instrument that separated them (AUROC 0.9921) was selected on the only night run, so no held-out night exists to confirm it. The axis was closed before the V3 number was known, and this paper reports the night cost of the frozen rule as a defect of the shipped system, not a tuned repair.
+
+A related repair, adding a VIS-independent confirmation to the veil mechanism, halves the worst night gap from −0.0296 to −0.0141 without touching day.
+
+## Appendix H. Uncertainty-mechanism details (from §6.4 and §6.5)
+
+### H.1 R-D1 as recorded, on the macro
+
+**Table 4c. R-D1 as recorded: real minus shuffled σ, gated-fusion mAP50-95, the macro over ship and buoy (§5.5). Secondary.** Sources: `runs/eval/uq_mechanism_ablation.md` (`crossmodal`), `docs/eval/uq_mechanism_ablation_26m_2026-09-27.md` (`crossmodal26m`).
+
+| Path | Condition | `crossmodal` | `crossmodal26m` |
+|---|---|---|---|
+| coordinate (S1 − S3) | clean | −0.000566 [−0.000893, −0.000041] | −0.000578 [−0.000879, −0.000036] |
+| | fog | +0.000000 [0, 0] | −0.000009 [−0.000039, +0.000090] |
+| | lowlight | −0.000001 [−0.000004, +0.000008] | −0.000001 [−0.000005, +0.000010] |
+| | glare | +0.000406 [−0.000123, +0.000764] | +0.000397 [−0.000124, +0.000761] |
+| score (S5 − S7) | clean | −0.004420 [−0.011030, +0.005829] | −0.004232 [−0.010648, +0.005676] |
+| | fog | +0.003960 [+0.002691, +0.005183] | **+0.006156** [+0.003934, +0.007107] |
+| | lowlight | +0.001995 [+0.000944, +0.002684] | +0.001722 [+0.000592, +0.002397] |
+| | glare | +0.000514 [−0.004569, +0.004948] | +0.000724 [−0.004205, +0.005273] |
+| **passing at 0.0060** | coordinate / score | **0 / 0 of 4** | **0 / 1 of 4** |
+
+Two macro results that earlier drafts reported as pointing the wrong way do not survive on ship AP. On clean, shuffled σ beat real σ on the coordinate path (−0.000566); on ship AP the CI spans zero. On clean, real-σ score re-ranking was worse than a constant (S5 − S6 = −0.013157 [−0.022630, −0.000678] under `crossmodal`, −0.014141 [−0.023552, −0.001021] under `crossmodal26m`); on ship AP, S5 − S6 is positive on all eight cells, so that result was buoy re-ranking. One flaw in the original rule is self-identified. Under `crossmodal` the coordinate-path bar should have been three of three informative conditions, since fog there is structurally incapable of a coordinate-path effect. The flaw biases against a positive verdict, and the `crossmodal26m` re-run, in which day fog keeps both streams, removes it and returns the same coordinate-path verdict.
+
+### H.2 Score-path decomposition
+
+**The gain is re-ranking within a stream, not fusion.** We decomposed the score-path deltas under both presets by emptying the IR stream, descriptively and after the verdict (`scripts/diag_rd1_fog_score_path.py`; `docs/eval/uq_mechanism_ablation_ship_2026-10-08.md` §4).
+* By day, VIS re-ranking alone, with IR detections removed, gives +0.0160 on clean and +0.0153 on glare under both presets, and +0.0167 on fog under `crossmodal26m`. Adding the IR stream moves these by −0.0040 to +0.0035, with no consistent sign: −0.0008 and −0.0010 on clean and glare under `crossmodal`; +0.0035, −0.0040 and +0.0019 on clean, fog and glare under `crossmodal26m`.
+* Under `crossmodal` VIS is vetoed on every fog frame, so fog's day part (+0.0063) is IR re-ranking IR boxes.
+* At night VIS is vetoed on every frame, so the night part (+0.0083 to +0.0104) is IR re-ranking IR boxes, on the same uncorrupted frames in every condition.
+* Lowlight fails by day. There, real σ does not re-rank VIS boxes (+0.0006, CI spans zero), and lowlight's pooled delta (+0.0040, +0.0034) is the night IR part.
+
+### H.3 Stage 1 in full
+
+The coordinate-path null of R-D1 was measured at a merge threshold (0.85) where almost nothing merges. Two prior negative results on correspondence (a per-frame registration refinement that raised the partner rate 80× to 4.02 percent but lowered held-out AP by 0.0025; relaxing the threshold to 0.55, which cost −0.0138) were each measured with σ inert. Phase 3 Stage 1 crossed the two: threshold {0.85, 0.55} × σ-weighting {off, live}. Cells A (shipped), B (shipped threshold, σ on; bit-identical to A) and C (relaxed, σ off; C − A = −0.0138) were known. Cell D (relaxed and σ live) was the experiment. D had to be non-inferior to A within 0.0060 on at least three of four conditions on TUNE.
+
+One of four: verdict S1-NULL, robust at every floor from 0.0014 to 0.0100. The lone pass is not a rescue; low-light passes because relaxing correspondence barely costs anything there (C − A = −0.0013), not because live σ recovered anything. σ was confirmed live in the plumbing (it changed the fused output on 753–836 of 836 clean frames), yet the interaction terms B − A and D − C sit inside [−0.0002, +0.0004] everywhere with every CI spanning zero. TEST numbers were computed and are reported for completeness: two of four non-inferior, with fog favouring the rejected relaxed setting by +0.0028. As pre-declared, they were not used to override the TUNE verdict. The correspondence question is closed; no threshold below 0.55 will be tried under this project, and the fusion is documented as union aggregation, not consensus.
+
+## Appendix I. IR night-switch safety (full text of §6.7)
 
 The night vote trusts the IR stream. IR was uncorrupted in every benchmark cell, so we tested the frozen rule `ir_p05 > 41.5` against six IR hazards at three severities. A false night on a clear day vetoes a working VIS stream and is the dangerous direction.
 
@@ -723,7 +738,60 @@ The night vote trusts the IR stream. IR was uncorrupted in every benchmark cell,
 
 The raw rule is unsafe under IR fog and glare. The two-vote requirement, the IR self-check, the multivariate health score (which detects IR glare at 64–75 percent against 12–34 percent for a single axis) and the authority bound took the false-night rate on 19 IR-corruption arms from 94.8 percent to 0 percent at zero benchmark cost. That 0 percent is in-sample: the night threshold and the health model were fitted on data that includes the evaluated night run (§4.2, §9). With that caveat, the hardening left all eight cells bit-identical before and after and took the both-degraded worst-case false-veto rate from 24 percent to 8.7 percent to 1.3 percent. The remaining 1.3 percent is a missed-detection problem, not a switch-logic problem. An abstain signal derived from system-level reliability was implemented and demoted to an advisory flag: releasing the veto when both sensors are flagged prevented zero bad vetoes and lost 2,095 correct ones over 76 both-flagged pairs, and under a corrected risk–coverage metric the abstain ordering does not beat random on zero of four conditions.
 
-## Appendix G. Limitations in full (from §9)
+## Appendix J. Levers tested and not adopted (from §6.8)
+
+### J.1 Table L
+
+**Table L. Fusion and post-processing levers tested and not adopted. Paired deltas in ship AP (local AP), on the frames each row names.** Rows marked † were recorded on the macro over ship and buoy and are re-scored here on ship (`docs/eval/class_set_audit_2026-10-08.md`); their intervals are moving-block, L = 20. Rows marked ‡ stay on the macro.
+
+| Lever | Result | Verdict |
+|---|---|---|
+| σ-weighted WBF † | ≤ 0.0005 on every cell | inert |
+| σ in fusion score (α 0.1) | TEST +0.0010, CI spans zero; TUNE −0.0101 [−0.0114, −0.0086] | hurts on TUNE, unresolved on TEST |
+| Per-frame registration alignment, then merge | TEST −0.0010, spans zero (TUNE +0.0121) | does not generalize |
+| Isotonic score calibration | TUNE/TEST −0.0044 / −0.0034 | hurts |
+| VIS score re-ranking, leave-one-run-out, 1,200 day frames; inputs confidence, two transforms of it, and σ † | +0.0063 [+0.0030, +0.0094] out of fold, 3/3 held-out runs (in-sample +0.0219); without σ +0.0014 [−0.0020, +0.0044], 1/3 runs; σ's paired increment +0.0050 [+0.0038, +0.0064] | clears 0.0060 by 0.0003 on one checkpoint; σ's increment FAILS its pre-registered replication (2/5 seeds at 0.0060, 3/5 at 0.0047) |
+| VIS score re-ranking, day-only 9,284 frames ‡ | best λ = 0, delta 0.0000 | null on the macro; includes pohang04, so not re-scorable on ship |
+| Temporal support † | lift 1.00× | dead |
+| Test-time-augmentation view merging † | ≈1.0× lift once confidence-matched | inert |
+| Two-checkpoint VIS ensembling † | WBF merge +0.0009 to +0.0069 (IoU 0.55: +0.0069 [+0.0011, +0.0131], best of six arms); concatenation −0.018 to −0.102 | merging does not hurt; concatenation does |
+| Within-stream WBF dedup † | −0.0030 to −0.0068 | hurts at merge IoU ≥ 0.80; unresolved below |
+| VIS soft-NMS σ = 0.5 ‡ | night worst cell −0.0000, negative on 4/4 draws | rejected by pre-registered every-cell rule |
+| Capability-ratio alternatives (×4, ×16, ×64) | win clean, lose ≥ 1 cell | rejected by no-cell-may-lose rule |
+| Two-sided veto (also veto IR) | worst gap −0.0810 on every night cell, IR uncorrupted | unsafe |
+| Per-stream top-k truncation † | k ≥ 100: ≤ 0.0001; k = 50: up to −0.0006 (IR, lowlight/day); point deltas | irrelevant |
+
+### J.2 Notes
+
+The soft-NMS rejection deserves one more sentence. The first pass had no magnitude floor, so a night regression of −1.03e-5 failed the bar exactly as a regression of 1e-2 would have. The project declined to invent an equivalence margin after seeing that it would flip the verdict, and instead measured the noise floor of §5.3. The draw-averaged re-test still failed on four of four draws, and the rejection stands.
+
+**Redundancy is worth what it is independent of.** Temporal persistence and view agreement carry no signal beyond confidence; cross-modal agreement carries some; σ carries more. Any future fusion term should be screened for lift against confidence before it is priced in a benchmark.
+
+## Appendix K. Held-out look details (from §7)
+
+### K.1 Single-shot mechanics
+
+The look is mechanically single-shot. The scoring script refuses to run unless the repository is at a clean FREEZE commit, all 316 files in the hash manifest (10 checkpoints, 10 reference caches, 190 pohang04 caches, 76 frame-statistic files, and substrate and calibration files) verify, the labels hash correctly, and the development reference reproduces exactly (0.3894193201201913). It writes a `LOOK_TAKEN` marker before scoring begins, so a crash mid-look still counts as the look having been taken. The exposure is logged in the project's ledger.
+
+### K.2 All eleven cells
+
+**Table 7. pohang04, all eleven cells (descriptive except clean/clean). Seed-mean fused ship AP, local AP, block-bootstrap 95% interval; corrupted cells average four fresh draws (VIS 941–944, IR 951–954).** Source: `docs/eval/holdout_p04_look.md`.
+
+| Cell (VIS / IR) | AP | 95% interval |
+|---|---:|---|
+| clean / clean (verdict) | 0.2682 | [0.2576, 0.2793] |
+| clean / glare_s2 | 0.2668 | [0.2569, 0.2777] |
+| clean / blur_s2 | 0.2671 | [0.2569, 0.2777] |
+| clean / noise_s2 | 0.2692 | [0.2590, 0.2798] |
+| clean / fog_s2 | 0.2691 | [0.2585, 0.2802] |
+| rain_s2 / clean | 0.1850 | [0.1744, 0.1956] |
+| fog / clean | 0.0580 | [0.0529, 0.0634] |
+| blur_s3 / clean | 0.0418 | [0.0390, 0.0448] |
+| blur_s3 / glare_s2 | 0.0407 | [0.0379, 0.0437] |
+| lowlight / glare_s2 | 0.0121 | [0.0108, 0.0139] |
+| noise_s2 / clean | 0.0114 | [0.0095, 0.0134] |
+
+## Appendix L. Limitations in full (from §9)
 
 1. **One held-out run.** No untouched test set existed before pohang04. pohang02 and pohang03 were declared TEST after the fact and fail a selection-bias test. pohang04 is now spent, and its single look is inconclusive (§7.2). Nested leave-one-run-out validation was never possible.
 2. **The shipped night rule is wrong for the shipped detector.** On the Phase 3 systems it discards a working VIS stream at night, at a cost of 0.1847 AP on clean night and 0.0872 on glared night. It is correct on fogged and low-light night (§6.3, §6.6). It is reported, not repaired: the rule is frozen, the re-pricing axis was closed after three registrations, and no held-out night exists to validate a replacement.
@@ -750,7 +818,7 @@ The raw rule is unsafe under IR fog and glare. The two-vote requirement, the IR 
 23. **Post-hoc class-set re-scoring.** Table 3a and Table L summarise records written before the class set was fixed. Rows recorded on the ship-and-buoy macro were re-scored on ship AP from cached detections on 2026-10-08/09, each after its macro path reproduced the record. Two Table L rows cannot be re-scored and stay on the macro, and the constants re-price is reported on the macro it registered (`docs/eval/class_set_audit_2026-10-08.md`). Three Table L verdicts changed on re-scoring. The two positives, learned re-ranking and two-checkpoint merging, are development-only, single-checkpoint and unregistered.
 24. **The within-detector σ gain is unresolved in size.** σ's increment in a learned VIS re-ranker is positive, with its interval above zero, on all six detectors tested, but it clears the 0.0060 floor on only two of the five pre-registered Phase 3 replications (§6.8). Its λ and feature set were chosen on the macro for one checkpoint. The replication varies the detector, not the frames: all six use the same 1,200 day frames, and no untouched data remains to test it.
 
-## Appendix H. Reproducibility and implementation notes
+## Appendix M. Reproducibility and implementation notes
 
 **Machines.** All Phase 3 training ran on one laptop (RTX 4080, 12 GB, Windows) with a CUDA-probed system interpreter; the repository's own virtual environment carries CPU-only torch, and frame statistics must run under it because its numeric libraries reproduce the development statistic files bit-exactly (the GPU interpreter's float32 sums differ by up to 4.4e-7). Phase 1 ran on an A100 MIG 3g.40gb slice (40,320 MiB, 60 SMs) with Jupyter-only access; it is about 4.5 percent faster than the laptop at steady state, and two earlier contrary measurements were retracted as artifacts. Windows pages rather than raising out-of-memory on an over-large batch (a silent 17× slowdown), so batch ceilings were probed by measured throughput: IR 14, VIS 12 by the probe, and 12 was kept for both in Stage 2 for pre-registration consistency even after a production run measured batch 16 as 16 percent faster.
 

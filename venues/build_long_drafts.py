@@ -133,154 +133,385 @@ def condensed(text, **letters):
 
 
 # ---------------------------------------------------------------- TMLR
+def rework(head, replace=None, moved=()):
+    """Split a subsection's paragraphs. `replace` maps a paragraph start to handwritten text, a function of the
+    original paragraph, or None to drop it; `moved` lists starts whose original paragraph goes to an appendix.
+    A start in both is replaced in the main body and moved in full. Every start must match exactly once.
+    Returns (kept text, {start: original paragraph})."""
+    replace = replace or {}
+    keys = set(replace) | set(moved)
+    kept, mv, seen = [], {}, []
+    for p in split_paras(strip_rule(body(head))):
+        hits = [k for k in keys if p.lstrip().startswith(k)]
+        assert len(hits) <= 1, (head, hits)
+        k = hits[0] if hits else None
+        if k is None:
+            kept.append(p)
+            continue
+        seen.append(k)
+        if k in moved:
+            mv[k] = p
+        if k in replace:
+            r = replace[k]
+            if r is not None:
+                kept.append(r(p) if callable(r) else r)
+    assert sorted(seen) == sorted(keys), (head, sorted(keys - set(seen)))
+    return "\n\n".join(kept), mv
+
+
+def pick(mv, *starts):
+    return "\n\n".join(mv[s] for s in starts)
+
+
+def replace_line(text, start, new):
+    lines = text.split("\n")
+    idx = [i for i, ln in enumerate(lines) if ln.startswith(start)]
+    assert len(idx) == 1, (start, len(idx))
+    lines[idx[0]] = new
+    return "\n".join(lines)
+
+
+T_ABSTRACT = (
+    "We pre-registered a test of whether predicted uncertainty should decide how a two-stream visible–infrared "
+    "maritime detector fuses its streams. On the Pohang Canal dataset with PoLaRIS boxes, independent YOLO26 "
+    "detectors with single-pass Gaussian variance heads feed a decision layer, and the registered comparison is "
+    "real predicted σ against the same σ shuffled onto the wrong boxes, on ship AP, with a 0.0060 floor and "
+    "block-bootstrap intervals. As a coordinate weight σ passes on zero of four conditions; as a score re-ranker it "
+    "passes on three, so it is informative. It is not useful: the signal lies within each detector's own boxes, the "
+    "σ-scored system is below the system with no σ on six of eight cells, and a learned within-detector variant "
+    "failed its pre-registered replication on five retrained detectors (positive on all five, beyond the floor on "
+    "two). The recorded runs had scored a ship-and-buoy macro instead of the registered metric, and the macro read "
+    "NULL on both paths; we argue that the scored quantity belongs in the registration. The mechanism that shipped "
+    "instead, an image-statistic veto with union aggregation, beats the visible stream by day on five retrained "
+    "systems (+0.0059 to +0.0107 AP) but discards a working visible stream at night (−0.1847) once a label artifact "
+    "behind its night arm was corrected. Paired noise floors, dependence-aware intervals and magnitude floors moved "
+    "20 of 74 earlier findings to indeterminate, and one logged look at an untouched run returns a gap of +0.0216 "
+    "that excludes neither zero nor 0.05.")
+T_C1 = (
+    "1. **A pre-registered test with a split answer.** As a coordinate weight in the fusion, real σ does not beat "
+    "the same σ shuffled onto the wrong boxes on any of four conditions at a 0.0060 AP floor (R-D1), and letting σ "
+    "arbitrate relaxed cross-modal correspondences does not rescue it (Stage 1, S1-NULL). As a score re-ranker, real "
+    "σ beats shuffled σ on three of four conditions on the registered metric, ship AP, so the uncertainty is "
+    "informative. It is not useful: the re-ranking is within each detector's own boxes, and the σ-scored system is "
+    "below the shipped system without σ on six of eight cells (§6.4). Learned jointly with confidence, σ's "
+    "within-detector gain is positive on all five retrained detectors but fails its pre-registered replication at "
+    "the floor (§6.8).")
+T_2_4 = (
+    "Table R (Appendix A) positions this work against Gaussian YOLOv3, UA-CMDet, Zhao et al. (2024), RDSC-YOLOv4 "
+    "and YOLOv7-Sea on uncertainty target, inference-time adaptation, calibration, registration and compute; every "
+    "cell for another work comes from a direct read of its full text. Of the six systems it lists, this work is the "
+    "only one that evaluates calibration. The two VIS–IR systems use uncertainty only as training-loss weights, "
+    "removed at inference, and the maritime detectors output none.")
+T_3_6 = (
+    "pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**. Earlier "
+    "VIS detectors, including the VIS ensemble and MC-Dropout arms, trained on 9,841 of its frames, and two VIS-only "
+    "probes scored a validation list that included 2,343 of them (§6.8). No fusion score was ever computed on it, "
+    "and the ten Phase 3 checkpoints and the Mahalanobis references built from them never saw it; the held-out claim "
+    "of §7 rests on those facts and no wider one. Removing pohang04 from the Phase 3 lists raises the validation "
+    "night share from 18.2 percent to 23.0 percent, so Phase 3 numbers are not comparable to earlier pooled "
+    "validation numbers. List sizes and a contamination audit of the earlier Mahalanobis references are in "
+    "Appendix B.5.")
+T_4_2_GAUSS = (
+    "**Gaussian head.** A fresh log-variance branch is attached to the live detection head of a loaded model, with "
+    "no fork of the training library, and trained with a fourth loss term, beta-NLL (Seitzer et al., 2022), after a "
+    "warm-up during which the NLL weight is zero. The σ branch reads detached features and the NLL sees a detached "
+    "mean, so the deterministic detector is intended to train identically to the baseline by construction; §9 "
+    "reports that this parity is not yet demonstrated. The port to YOLO26's end-to-end head is in Appendix C.")
+T_5_3 = (
+    "Deltas between systems are always paired on the same frames and the same corruption draw, which tightens the "
+    "standard deviation of a delta by 3–16× on the nine informative cells. The combined draw-plus-bootstrap "
+    "two-sigma floor on a paired delta is 0.0014–0.0031 AP on the macro over ship and buoy and 0.0008–0.0024 on ship "
+    "AP, re-measured with the same arm, cells, draws and resamples; the maximum sets the magnitude floor in §5.4. "
+    "Buoys carry 74–75 percent of the macro's variance while making up 5.3 percent of day ground-truth boxes. A delta "
+    "below the floor is reported as \"not resolved,\" never as \"no effect.\" Sources and the two zero-information "
+    "cells are in Appendix D.1.")
+T_5_5_CLASS = (
+    "**Class set.** Ship is the primary class. It is the only class both detectors emit, since the IR detector is "
+    "single-class (§4.2), and the Phase 3 pre-registration fixed fused ship AP as its quantity before any Phase 3 "
+    "number existed. Tables report ship AP except Table 1 and Table 4c (the macro over ship and buoy), Table 2 (both "
+    "classes per stream) and two rows of Table L, each of which says so; the constants re-price of Appendix G is on "
+    "the macro its registration scored. Rows recorded on the macro were re-scored on ship from cached detections, "
+    "each after its unchanged macro path reproduced the record. The macro is not a safe stand-in for ship AP: a VIS "
+    "veto deletes every buoy, because the surviving IR stream cannot supply one; buoys carry 74–75 percent of the "
+    "macro's variance (§5.3); and a single-class stream scored on the macro reads exactly half its ship AP. R-D1 "
+    "shows the cost: its macro read NULL where its registered ship AP reads POSITIVE (§6.4). The full accounting is "
+    "in Appendix D.2.")
+T_6_2_CAP = (
+    "**Table 2. Per-stream uncertainty calibration, three arms, day slice (1,200 of the 2,232 paired validation "
+    "frames), no fusion. Lower is better on every column except the two AP columns, which are local AP50-95 per "
+    "class; best arm per stream and column in bold.** One checkpoint per arm, trained on restored labels. The IR "
+    "detector is single-class (§4.2) and has no buoy AP. Ties in the MC-Dropout and ensemble uncertainties move AUSE "
+    "and AURC by up to 6×10⁻⁴ and change no ordering. Sources, checkpoints and the tie analysis are in Appendix F.1.")
+T_6_2_SCOPE = (
+    "**Scope.** These are development-data numbers from single checkpoints that are neither Phase 3 checkpoints nor "
+    "fusion inputs; R-D1 (§6.4) tests the σ head only. The VIS MC-Dropout and ensemble arms trained on 9,841 "
+    "pohang04 frames (§3.6), so no three-arm number may appear on the held-out run. For those two arms the registered "
+    "estimand is disagreement ranking, not predictive likelihood, so their NLL is undefined. Night is SUSPECT on both "
+    "streams (Appendix F.2).")
+T_6_2_TAIL = (
+    "Figure 3 (Appendix F.3) shows the full lift screen. Day-only is the primary basis because the registered screen "
+    "placed night in its SUSPECT band on both streams; that rationale, one registered rule amended after it fired, "
+    "and why the arms are not ranked on mAP (Figure 4) are in Appendix F.4.")
+T_6_3_INTRO = (
+    "The decision layer of §4.2 is the sixth rewrite of the gate; each rewrite was forced by a measured failure of "
+    "the previous one. The history (Table 3a, Figure 5), the pre-restore measurements behind it and its three general "
+    "lessons are in Appendix G.1; two of the lessons recur in §8. Here we re-measure the shipped rule on the five "
+    "Phase 3 systems.")
+T_FIG6 = (
+    "**Figure 6. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean.** By day "
+    "the fused output sits just above VIS alone on every cell. At night VIS is vetoed on every frame, so the fused "
+    "output equals IR alone: right where VIS fails (fog, low light), wrong where it still works (clean, glare). "
+    "Sources: `docs/eval/p3_night_check_2026-09-27.json`, `docs/eval/p3_corrupt_cells_2026-09-27.json`.")
+T_6_4_DECOMP = (
+    "**The gain is re-ranking within a stream, not fusion.** We decomposed the score-path deltas by emptying the IR "
+    "stream, descriptively and after the verdict (Appendix H.2). By day, VIS re-ranking alone gives +0.0160 on clean "
+    "and +0.0153 on glare under both presets, and adding the IR stream moves these by −0.0040 to +0.0035, with no "
+    "consistent sign. Wherever VIS is vetoed, on every night frame and on fog under `crossmodal`, the delta is IR "
+    "re-ranking IR boxes. Lowlight fails by day because real σ does not re-rank VIS boxes there (+0.0006, CI spans "
+    "zero).")
+T_6_5_PRE = (
+    "The coordinate-path null of R-D1 was measured at a merge threshold (0.85) where almost nothing merges, and two "
+    "earlier negative results on correspondence were each measured with σ inert (Appendix H.3). Phase 3 Stage 1 "
+    "crossed the two: threshold {0.85, 0.55} × σ-weighting {off, live}. Cells A (shipped), B (shipped threshold, σ "
+    "live) and C (relaxed, σ off) were known. Cell D, relaxed with σ live, was the experiment: it had to be "
+    "non-inferior to A within 0.0060 on at least three of four conditions on TUNE.")
+T_6_5_POST = (
+    "One of four: verdict S1-NULL, robust at every floor from 0.0014 to 0.0100. Low-light passes because relaxing "
+    "correspondence barely costs anything there (C − A = −0.0013), not because live σ recovered anything: σ changed "
+    "the fused output on 753–836 of 836 clean frames, yet the interaction terms B − A and D − C sit inside "
+    "[−0.0002, +0.0004] everywhere, with every CI spanning zero. TEST, pre-declared not to override TUNE, gives two "
+    "of four. The correspondence question is closed, and the fusion is documented as union aggregation, not "
+    "consensus.")
+T_6_6_INHERIT = (
+    "**The retrained system inherits the rule and pays for it.** The five Phase 3 VIS detectors trained on the "
+    "restored labels see at night (0.2535 seed-mean ship AP on the night run), but the frozen rule still drops VIS on "
+    "every night frame, at the costs in Table 3b. The rule was correct for the detector it was written against and "
+    "is wrong for the detector it ships with. Nothing in the image changed; what changed is the claim the rule makes "
+    "about the detector.")
+T_6_6_ARM = (
+    "**Removing the night arm is not the fix.** Three pre-registered attempts, run before Phase 3 on an earlier "
+    "night-trained VIS checkpoint, tried to re-price the arm, and none was adopted (Appendix G.2): removing the arm "
+    "left two VIS-degraded night cells below IR alone, replacing darkness with a VIS health test left five night "
+    "cells below max(VIS, IR), and widening the trigger broke day safety. The variable that should gate VIS at night "
+    "is VIS health, not darkness, but the one health instrument that separated them (AUROC 0.9921) was selected on "
+    "the only night run, so no held-out night exists to confirm it. We report the night cost of the frozen rule as a "
+    "defect of the shipped system, not a tuned repair.")
+T_6_7 = (
+    "The night vote trusts IR, which was uncorrupted in every benchmark cell, so we attacked the frozen rule "
+    "`ir_p05 > 41.5` with six IR hazards at three severities (Appendix I, Table 6). A false night on a clear day "
+    "vetoes a working VIS stream. The raw rule misreads up to 94.8 percent of clear days as night under IR fog and "
+    "19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and an authority bound "
+    "took the false-night rate on 19 IR-corruption arms to 0 percent at zero benchmark cost; that figure is "
+    "in-sample (§9), and the both-degraded worst-case false-veto rate fell from 24 percent to 1.3 percent. An "
+    "abstain signal was demoted to an advisory flag after it prevented zero bad vetoes and lost 2,095 correct ones.")
+T_6_8_LEAD = (
+    "Table L (Appendix J) lists the fusion and post-processing levers that were tested and not adopted, as paired "
+    "ship-AP deltas on the frames each row names. Most are inert or negative; three results from it bear on the "
+    "argument of this paper.")
+T_7_1_LOOK = (
+    "The look is mechanically single-shot: the scoring script refuses to run unless the repository is at a clean "
+    "FREEZE commit, a 316-file hash manifest verifies and the development reference reproduces exactly, and it "
+    "writes a `LOOK_TAKEN` marker before scoring begins, so a crash mid-look still counts as the look having been "
+    "taken (Appendix K.1). The exposure is logged in the project's ledger.")
+T_7_2_DESC = (
+    "The ten descriptive cells (Table 7, Appendix K.2) carry no pass or fail language. They show only what the "
+    "development cells already showed: the fused output tracks the VIS stream. IR-side corruption leaves it within "
+    "±0.0014 of clean, and VIS-side corruption moves it by up to 0.2568.")
+T_LIM = [
+    "1. **One held-out run.** No untouched test set existed before pohang04; pohang02 and pohang03 were declared "
+    "TEST after the fact and fail a selection-bias test. pohang04 is now spent, and its look is inconclusive (§7.2).",
+    "2. **The shipped night rule is wrong for the shipped detector** (§6.3, §6.6). It is reported, not repaired.",
+    "3. **Three checkpoint generations** (yolo26s, pre-restore yolo26m, Phase 3), each named, never pooled.",
+    "4. **In-sample constants.** The IR night threshold, the IR health model and the capability prior were "
+    "fitted on frames that the evaluation also scores.",
+    "5. **Pohang only**, adverse conditions simulated, and night a single run with no between-run interval.",
+    "6. **pohang04 has VIS ground truth only**, and only the fused output was scored there.",
+    "7. **Registration residual** of 3–6 px median with drift up to 10 px; no time-varying homography.",
+    "8. **Parity of the σ-attached detector** with its baseline is claimed neither as bit-identity nor as "
+    "non-inferiority.",
+    "9. **The 1.95 interval factor is a lower bound**, measured on VIS uncertainty-arm deltas.",
+    "10. **R-D1** was scored on the wrong metric before being re-scored on the registered one, α was never tuned, "
+    "Table 3a and Table L were re-scored on ship AP after the fact, and the within-detector σ gain is "
+    "unresolved in size (§6.4, §6.8).",
+    "",
+    "The full list of 24 items is in Appendix L.",
+]
+T_CONCL = (
+    "A pre-registered test asked whether predicted uncertainty should decide how two sensors' detections are "
+    "fused. It should not: σ carries information about a detector's own boxes and none about which sensor to "
+    "believe, and spending it at the registered strength costs accuracy. Two methodological points generalize "
+    "beyond this system. A shuffled control establishes that a signal exists; only the comparison against no "
+    "signal establishes that using it helps, and a registration should name both. And the scored quantity is "
+    "part of the registration: scoring a macro that included a class one stream cannot detect reversed one of "
+    "two verdicts. The sensor-selection rule that shipped instead shows the cost of not re-pricing a decision "
+    "rule when the detector beneath it changes.")
+TABLE_4C = "| Path | Condition | `crossmodal` | `crossmodal26m` |\n|---|---|---|---|\n| coordinate (S1 − S3) | clean | −0.000566"
+
+
 def build_tmlr():
-    L = dict(A="A", B="B", C="C")
+    """Main body cut toward 15 typeset pages; appendices A–M follow the order of the sections they come from."""
+    L = dict(A="B", B="D", C="E")
     title = D2.split("\n", 1)[0]  # Draft 2's title line
     note = ("> Venue draft for TMLR, derived from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09) by "
             "`venues/build_long_drafts.py`. TMLR has no hard page limit, but a main body over 12 pages gets a "
-            "longer review; condensed subsections keep their headings and move their full text to the "
-            "appendices. Every number is from Draft 2. See `venues/README.md`.")
-    abstract = (
-        "We pre-registered a test of whether predicted uncertainty should decide how a two-stream "
-        "visible–infrared maritime detector fuses its streams, and we report the answer together with the "
-        "evaluation machinery that produced it. On the Pohang Canal dataset with PoLaRIS boxes, independent "
-        "YOLO26 detectors with single-pass Gaussian variance heads feed a decision layer. The registered "
-        "comparison is real predicted σ against the same σ shuffled onto the wrong boxes, on ship AP, with a "
-        "0.0060 floor and block-bootstrap intervals. As a coordinate weight σ passes on zero of four conditions; "
-        "as a score re-ranker it passes on three, so it is informative. It is not useful: the signal lies within "
-        "each detector's own boxes, the σ-scored system is below the system with no σ on six of eight cells, and "
-        "a learned within-detector variant failed its pre-registered replication on five retrained detectors "
-        "(positive on all five, beyond the floor on two). The recorded runs had scored a ship-and-buoy macro "
-        "instead of the registered metric, and the macro read NULL on both paths; we report the deviation and "
-        "argue that the scored quantity belongs in the registration. The mechanism that shipped instead, an "
-        "image-statistic veto with union aggregation, beats the visible stream by day on five retrained systems "
-        "(+0.0059 to +0.0107 AP) but discards a working visible stream at night (−0.1847) once a label artifact "
-        "behind its night arm was corrected. The evaluation protocol (paired noise floors, dependence-aware "
-        "intervals that widen frame-level ones 1.9–1.99×, magnitude floors, a declared class set and one logged "
-        "look at an untouched run) moved 20 of 74 earlier findings to indeterminate, and the held-out look "
-        "returns a gap of +0.0216 that excludes neither zero nor 0.05.")
+            "longer review. The main body is cut toward 15 typeset pages: condensed subsections keep their headings, "
+            "and their full text, four tables and one figure move to appendices A–M, in the order of the sections "
+            "they come from. Every number is from Draft 2. See `venues/README.md`.")
     out = [title, "", "**Anonymous authors** (TMLR review is double-blind; restore the author block for the camera-ready).",
-           "", note, "", "---", "", "## Abstract", "", abstract, "", "---", ""]
-    appendix = []
+           "", note, "", "---", "", "## Abstract", "", T_ABSTRACT, "", "---", ""]
+    app = {}  # appendix letter -> list of blocks
 
     def keep(h):
-        out.append(section(h, strip_rule(body(h))))
+        out.append(section(h, strip_rule(body(h))) if strip_rule(body(h)) else h + "\n")
 
-    def cond(h, text, app_head):
-        out.append(section(h, text))
-        appendix.append(section(app_head, strip_rule(body(h))))
+    def put(letter, *blocks):
+        app.setdefault(letter, []).extend(b.rstrip("\n") + "\n" for b in blocks if b)
 
-    out.append(section("## 1. Introduction", strip_rule(body("## 1. Introduction"))))
+    intro = replace_line(strip_rule(body("## 1. Introduction")), "1. **A pre-registered test with a split answer.**", T_C1)
+    out.append(section("## 1. Introduction", intro))
     for h in ["## 2. Related work", "### 2.1 Uncertainty in single-stage detectors",
-              "### 2.2 Visible–infrared fusion with uncertainty", "### 2.3 Maritime detectors and datasets",
-              "### 2.4 Comparison axes"]:
-        keep(h) if body(h).strip() else out.append(h + "\n")
+              "### 2.2 Visible–infrared fusion with uncertainty", "### 2.3 Maritime detectors and datasets"]:
+        keep(h)
+    out.append(section("### 2.4 Comparison axes", T_2_4))
+    put("A", "## Appendix A. Comparison axes (full text of §2.4)\n", strip_rule(body("### 2.4 Comparison axes")))
+
     out.append("## 3. Dataset\n")
     keep("### 3.1 Pohang Canal and PoLaRIS")
-    appendix.append("## Appendix A. Dataset details (full text of §3.2–§3.5)\n")
-    cond("### 3.2 Verified counts", condensed(C_3_2, **L), "### A.1 Verified counts")
-    cond("### 3.3 Preprocessing", condensed(C_3_3, **L), "### A.2 Preprocessing")
-    cond("### 3.4 Splits", condensed(C_3_4, **L), "### A.3 Splits")
-    cond("### 3.5 The night-box filter and its reversal", condensed(C_3_5, **L),
-         "### A.4 The night-box filter and its reversal")
-    keep("### 3.6 Holdout and contamination")
+    put("B", "## Appendix B. Dataset details (full text of §3.2–§3.6)\n")
+    for h, c, a in [("### 3.2 Verified counts", C_3_2, "### B.1 Verified counts"),
+                    ("### 3.3 Preprocessing", C_3_3, "### B.2 Preprocessing"),
+                    ("### 3.4 Splits", C_3_4, "### B.3 Splits"),
+                    ("### 3.5 The night-box filter and its reversal", C_3_5, "### B.4 The night-box filter and its reversal")]:
+        out.append(section(h, condensed(c, **L)))
+        put("B", section(a, strip_rule(body(h))))
+    out.append(section("### 3.6 Holdout and contamination", T_3_6))
+    put("B", section("### B.5 Holdout and contamination", strip_rule(body("### 3.6 Holdout and contamination"))))
+
     out.append(section("## 4. Method", strip_rule(body("## 4. Method"))))
     keep("### 4.1 As designed")
-    keep("### 4.2 As shipped (preset `crossmodal26m`)")
+    kept, mv = rework("### 4.2 As shipped (preset `crossmodal26m`)",
+                      replace={"**Gaussian head.**": T_4_2_GAUSS}, moved=["**Gaussian head.**"])
+    out.append(section("### 4.2 As shipped (preset `crossmodal26m`)", kept))
+    put("C", "## Appendix C. The Gaussian head on an end-to-end detector (from §4.2)\n", pick(mv, "**Gaussian head.**"))
+
     out.append("## 5. Experimental protocol and statistics\n")
-    for h in ["### 5.1 Benchmark cells and substrates", "### 5.2 Tune and test discipline", "### 5.3 Noise floor",
-              "### 5.4 Dependence-aware intervals", "### 5.5 AP convention"]:
-        keep(h)
-    appendix.append("## Appendix B. Metric contracts, identity checks and power (full text of §5.6 and §5.8)\n")
-    cond("### 5.6 Metric contracts", condensed(C_5_6, **L), "### B.1 Metric contracts")
+    keep("### 5.1 Benchmark cells and substrates")
+    keep("### 5.2 Tune and test discipline")
+    out.append(section("### 5.3 Noise floor", T_5_3))
+    keep("### 5.4 Dependence-aware intervals")
+    kept, mv = rework("### 5.5 AP convention", replace={"**Class set.**": T_5_5_CLASS}, moved=["**Class set.**"])
+    out.append(section("### 5.5 AP convention", kept))
+    put("D", "## Appendix D. Protocol details (from §5.3, §5.5, §5.6 and §5.8)\n",
+        section("### D.1 Noise floor", strip_rule(body("### 5.3 Noise floor"))),
+        section("### D.2 Class set", pick(mv, "**Class set.**")))
+    out.append(section("### 5.6 Metric contracts", condensed(C_5_6, **L)))
+    put("D", section("### D.3 Metric contracts", strip_rule(body("### 5.6 Metric contracts"))))
     keep("### 5.7 Pre-registrations and decision rules")
-    cond("### 5.8 Identity checks and power", condensed(C_5_8, **L), "### B.2 Identity checks and power")
+    out.append(section("### 5.8 Identity checks and power", condensed(C_5_8, **L)))
+    put("D", section("### D.4 Identity checks and power", strip_rule(body("### 5.8 Identity checks and power"))))
+
     out.append("## 6. Results\n")
-    appendix.append("## Appendix C. Backbone benchmark (full text of §6.1)\n")
-    cond("### 6.1 Backbone benchmark is a negative result", condensed(C_6_1, **L), "### C.1 Tables 1 and 1b")
+    out.append(section("### 6.1 Backbone benchmark is a negative result", condensed(C_6_1, **L)))
+    put("E", "## Appendix E. Backbone benchmark (full text of §6.1)\n",
+        section("### E.1 Tables 1 and 1b", strip_rule(body("### 6.1 Backbone benchmark is a negative result"))))
 
-    # 6.2: move the day-only rationale, the amendment and the checkpoint-selection paragraph + Figure 4
-    kept, moved = move("### 6.2 Per-modality uncertainty calibration",
-                       ["**Why day-only is primary.**", "One registered rule was amended",
-                        "We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 4."])
-    kept += ("\n\nDay-only is the primary basis because the registered screen placed night in its SUSPECT band on "
-             "both streams. That rationale, one registered rule amended after it fired, and why the arms are not "
-             "ranked on mAP (Figure 4) are in Appendix D.")
-    out.append(section("### 6.2 Per-modality uncertainty calibration", kept))
-    appendix.append(section("## Appendix D. Calibration: basis, amendment and checkpoint selection (from §6.2)", moved))
+    s62 = ["**Table 2.", "**Scope and caveats.**", "![lift_screen]", "**Figure 3.", "**Why day-only is primary.**",
+           "One registered rule was amended", "We do not rank uncertainty methods", "![checkpoint_selection]",
+           "**Figure 4."]
+    kept, mv = rework("### 6.2 Per-modality uncertainty calibration",
+                      replace={"**Table 2.": T_6_2_CAP, "**Scope and caveats.**": T_6_2_SCOPE}, moved=s62)
+    out.append(section("### 6.2 Per-modality uncertainty calibration", kept + "\n\n" + T_6_2_TAIL))
 
-    # 6.3: the gate history goes to Appendix E; Table 3b stays
-    kept, moved = move("### 6.3 Fusion robustness of the sensor-selection baseline",
-                       ["The decision layer in §4.2 is the sixth rewrite.", "**Table 3a.", "| Stage (date)",
-                        "Ship AP; each gap is against", "Under the shipped preset on the pre-restore",
-                        "Three findings from the rewrite history", "![gate_history]", "**Figure 5."])
-    intro = ("The decision layer of §4.2 is the sixth rewrite of the gate; each rewrite was forced by a measured "
-             "failure of the previous one. The history (Table 3a, Figure 5), the pre-restore measurements behind "
-             "it and its three general lessons are in Appendix E; two of the lessons recur in §8. Here we "
-             "re-measure the shipped rule on the five Phase 3 systems.")
-    out.append(section("### 6.3 Fusion robustness of the sensor-selection baseline", intro + "\n\n" + kept))
-    appendix.append(section("## Appendix E. Gate rewrite history (from §6.3)", moved))
+    s63 = ["The decision layer in §4.2 is the sixth rewrite.", "**Table 3a.", "| Stage (date)",
+           "Ship AP; each gap is against", "Under the shipped preset on the pre-restore",
+           "Three findings from the rewrite history", "![gate_history]", "**Figure 5."]
+    kept, mv63 = rework("### 6.3 Fusion robustness of the sensor-selection baseline",
+                        replace={"**Figure 6.": T_FIG6}, moved=s63)
+    out.append(section("### 6.3 Fusion robustness of the sensor-selection baseline", T_6_3_INTRO + "\n\n" + kept))
 
-    keep("### 6.4 Uncertainty is informative but does not improve the fusion (R-D1)")
-    keep("### 6.5 Relaxing correspondence does not rescue the coordinate path (Stage 1)")
-    keep("### 6.6 Night visible blindness was a label artifact")
-    c67 = ("The night vote trusts IR, which was uncorrupted in every benchmark cell, so we attacked the frozen rule "
-           "`ir_p05 > 41.5` with six IR hazards at three severities (Appendix F, Table 6). A false night on a clear "
-           "day vetoes a working VIS stream. The raw rule misreads up to 94.8 percent of clear days as night under "
-           "IR fog and 19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and "
-           "an authority bound took the false-night rate on 19 IR-corruption arms to 0 percent at zero benchmark "
-           "cost; that figure is in-sample (§9), and the both-degraded worst-case false-veto rate fell from 24 "
-           "percent to 1.3 percent. An abstain signal was demoted to an advisory flag after it prevented zero bad "
-           "vetoes and lost 2,095 correct ones.")
-    cond("### 6.7 Is the IR night switch safe when IR is corrupted?", c67,
-         "## Appendix F. IR night-switch safety (full text of §6.7)")
-    keep("### 6.8 Levers that are inert or negative")
+    s64 = ["**Table 4c.", TABLE_4C, "Two macro results", "**The gain is re-ranking"]
+    kept, mv64 = rework("### 6.4 Uncertainty is informative but does not improve the fusion (R-D1)",
+                        replace={"**The gain is re-ranking": T_6_4_DECOMP, "**Table 4c.": None, TABLE_4C: None,
+                                 "Two macro results": None,
+                                 "**Why the macro hid it.**": lambda p: p + " The recorded macro table (Table 4c) "
+                                 "and two macro results that do not survive on ship AP are in Appendix H.1."},
+                        moved=s64)
+    out.append(section("### 6.4 Uncertainty is informative but does not improve the fusion (R-D1)", kept))
+
+    s65 = ["The coordinate-path null of R-D1", "One of four: verdict"]
+    kept, mv65 = rework("### 6.5 Relaxing correspondence does not rescue the coordinate path (Stage 1)",
+                        replace={s65[0]: T_6_5_PRE, s65[1]: T_6_5_POST}, moved=s65)
+    out.append(section("### 6.5 Relaxing correspondence does not rescue the coordinate path (Stage 1)", kept))
+
+    s66 = ["**Removing the night arm", "The measured lesson from", "A related repair"]
+    kept, mv66 = rework("### 6.6 Night visible blindness was a label artifact",
+                        replace={"**The retrained system inherits": T_6_6_INHERIT, s66[0]: T_6_6_ARM,
+                                 s66[1]: None, s66[2]: None}, moved=s66)
+    out.append(section("### 6.6 Night visible blindness was a label artifact", kept))
+
+    out.append(section("### 6.7 Is the IR night switch safe when IR is corrupted?", T_6_7))
+
+    s68 = ["**Table L.", "| Lever | Result", "The soft-NMS rejection"]
+    kept, mv68 = rework("### 6.8 Levers that are inert or negative",
+                        replace={k: None for k in s68}, moved=s68)
+    out.append(section("### 6.8 Levers that are inert or negative", T_6_8_LEAD + "\n\n" + kept))
+
     out.append(section("## 7. Held-out evaluation: the single pohang04 look",
                        strip_rule(body("## 7. Held-out evaluation: the single pohang04 look"))))
-    keep("### 7.1 Protocol (fixed before the look)")
-    keep("### 7.2 Result")
-    keep("## 8. Discussion")
-    lim = [
-        "1. **One held-out run.** No untouched test set existed before pohang04; pohang02 and pohang03 were declared "
-        "TEST after the fact and fail a selection-bias test. pohang04 is now spent, and its look is inconclusive (§7.2).",
-        "2. **The shipped night rule is wrong for the shipped detector** (§6.3, §6.6). It is reported, not repaired.",
-        "3. **Three checkpoint generations** (yolo26s, pre-restore yolo26m, Phase 3), each named, never pooled.",
-        "4. **In-sample constants.** The IR night threshold, the IR health model and the capability prior were "
-        "fitted on frames that the evaluation also scores.",
-        "5. **Pohang only**, adverse conditions simulated, and night a single run with no between-run interval.",
-        "6. **pohang04 has VIS ground truth only**, and only the fused output was scored there.",
-        "7. **Registration residual** of 3–6 px median with drift up to 10 px; no time-varying homography.",
-        "8. **Parity of the σ-attached detector** with its baseline is claimed neither as bit-identity nor as "
-        "non-inferiority.",
-        "9. **The 1.95 interval factor is a lower bound**, measured on VIS uncertainty-arm deltas.",
-        "10. **R-D1** was scored on the wrong metric before being re-scored on the registered one, α was never tuned, "
-        "Table 3a and Table L were re-scored on ship AP after the fact, and the within-detector σ gain is "
-        "unresolved in size (§6.4, §6.8).",
-        "",
-        "The full list of 24 items is in Appendix G.",
-    ]
-    out.append(section("## 9. Limitations", "\n".join(lim)))
-    concl = (
-        "A pre-registered test asked whether predicted uncertainty should decide how two sensors' detections are "
-        "fused. It should not: σ carries information about a detector's own boxes and none about which sensor to "
-        "believe, and spending it at the registered strength costs accuracy. Two methodological points generalize "
-        "beyond this system. A shuffled control establishes that a signal exists; only the comparison against no "
-        "signal establishes that using it helps, and a registration should name both. And the scored quantity is "
-        "part of the registration: scoring a macro that included a class one stream cannot detect reversed one of "
-        "two verdicts. The sensor-selection rule that shipped instead shows the cost of not re-pricing a decision "
-        "rule when the detector beneath it changes.")
-    out.append(section("## 10. Conclusion", concl))
-    appendix.append(section("## Appendix G. Limitations in full (from §9)", strip_rule(body("## 9. Limitations"))))
-    appendix.append(section("## Appendix H. Reproducibility and implementation notes",
-                            strip_rule(body("## 10. Reproducibility and implementation notes"))))
+    kept, mv71 = rework("### 7.1 Protocol (fixed before the look)",
+                        replace={"The look is mechanically": T_7_1_LOOK}, moved=["The look is mechanically"])
+    out.append(section("### 7.1 Protocol (fixed before the look)", kept))
+    s72 = ["**Table 7.", "| Cell (VIS / IR)"]
+    kept, mv72 = rework("### 7.2 Result", replace={s72[0]: None, s72[1]: None, "The ten descriptive cells": T_7_2_DESC},
+                        moved=s72)
+    out.append(section("### 7.2 Result", kept))
+
+    s8 = ["**Redundancy is worth", "**Synthetic ladders", "**Checkpoint selection is noisier"]
+    kept, mv8 = rework("## 8. Discussion", replace={k: None for k in s8}, moved=s8)
+    out.append(section("## 8. Discussion", kept))
+    out.append(section("## 9. Limitations", "\n".join(T_LIM)))
+    out.append(section("## 10. Conclusion", T_CONCL))
     out.append("## References\n\n<!-- REFS -->\n\n---\n")
+
+    put("F", "## Appendix F. Calibration details (from §6.2)\n",
+        section("### F.1 Table 2: sources, checkpoints and ties", pick(mv, "**Table 2.")),
+        section("### F.2 Scope and caveats", pick(mv, "**Scope and caveats.**")),
+        section("### F.3 Signal lift screen", pick(mv, "![lift_screen]", "**Figure 3.")),
+        section("### F.4 Day-only basis, amendment and checkpoint selection",
+                pick(mv, "**Why day-only is primary.**", "One registered rule was amended",
+                     "We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 4.",)
+                + "\n\n" + mv8["**Checkpoint selection is noisier"]))
+    put("G", "## Appendix G. Gate history and night-arm re-pricing (from §6.3 and §6.6)\n",
+        section("### G.1 Gate rewrite history", pick(mv63, *s63) + "\n\n" + mv8["**Synthetic ladders"]),
+        section("### G.2 Night-arm re-pricing", pick(mv66, *s66)))
+    put("H", "## Appendix H. Uncertainty-mechanism details (from §6.4 and §6.5)\n",
+        section("### H.1 R-D1 as recorded, on the macro", pick(mv64, "**Table 4c.", TABLE_4C, "Two macro results")),
+        section("### H.2 Score-path decomposition", pick(mv64, "**The gain is re-ranking")),
+        section("### H.3 Stage 1 in full", pick(mv65, *s65)))
+    put("I", section("## Appendix I. IR night-switch safety (full text of §6.7)",
+                     strip_rule(body("### 6.7 Is the IR night switch safe when IR is corrupted?"))))
+    put("J", "## Appendix J. Levers tested and not adopted (from §6.8)\n",
+        section("### J.1 Table L", pick(mv68, "**Table L.", "| Lever | Result")),
+        section("### J.2 Notes", pick(mv68, "The soft-NMS rejection") + "\n\n" + mv8["**Redundancy is worth"]))
+    put("K", "## Appendix K. Held-out look details (from §7)\n",
+        section("### K.1 Single-shot mechanics", pick(mv71, "The look is mechanically")),
+        section("### K.2 All eleven cells", pick(mv72, *s72)))
+    put("L", section("## Appendix L. Limitations in full (from §9)", strip_rule(body("## 9. Limitations"))))
+    put("M", section("## Appendix M. Reproducibility and implementation notes",
+                     strip_rule(body("## 10. Reproducibility and implementation notes"))))
+    assert sorted(app) == list("ABCDEFGHIJKLM"), sorted(app)
+    appendix = [blk for k in sorted(app) for blk in app[k]]
     text = "\n".join(out) + "\n" + "\n".join(appendix)
+    # relative pointers whose target moved to an appendix
+    for old, new in [("are not a ranking (next paragraph)", "are not a ranking (Appendix F.4)")]:
+        assert text.count(old) == 1, old
+        text = text.replace(old, new)
     # double-blind: the public repository link identifies the author
     text = text.replace("(github.com/Laksh-saroha/uqfusion, branch `fusion-uq-phase3`)",
                         "(an anonymized repository, linked for review)")
     assert not re.search(r"Saroha|Laksh-saroha|Thapar|Mandia", text, re.I)
     p = VEN / "PAPER_TMLR.md"
-    p.write_text(fix_paths(text, "Appendix H"), encoding="utf-8")
+    p.write_text(fix_paths(text, "Appendix M"), encoding="utf-8")
     return p
 
 
