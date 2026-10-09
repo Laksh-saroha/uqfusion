@@ -246,3 +246,4 @@ E1–E13 are applied to `PAPER_DRAFT2.md`, with these differences from §5:
 * The best σ-free arm anywhere in the sweep is +0.0018 (λ 0.20, chosen after the fact). No σ-free arm wins all three held-out runs, and every 4-feature monotone arm with λ 0.1–0.5 does.
 * λ 0.30 was fixed by the macro sweep for the 4-feature arm, and the σ-free comparator uses the same λ. The comparison is descriptive and was not pre-registered.
 * **Bearing on R-D1.** R-D1's fixed multiplicative σ re-ranking (α = 1) costs AP against no σ on 6/8 cells. Learned jointly with confidence, σ adds +0.0050 to within-detector ranking. Both are within-stream. Neither is fusion.
+* **Registered replication (2026-10-09): FAILS.** On the five Phase 3 VIS detectors the increment is positive on 5/5 but clears 0.0060 on 2/5 and 0.0047 on 3/5 (`docs/eval/sigma_rerank_replication_2026-10-09.md`).
