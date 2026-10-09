@@ -123,8 +123,9 @@ C_6_1 = ("Ninety-three training runs, 31 YOLO variants with three seeds each fro
          "top three, yolo26x (0.2666 ± 0.0040), yolo26l (0.2664 ± 0.0070) and yolo26m (0.2626 ± 0.0109), differ by "
          "less than the larger seed sd of every pair: a YOLO26 m/l/x tier with no resolved order. yolo26m was "
          "chosen earlier, on the Phase 1 grid, under a rule fixed in advance; it stays inside the tier and runs at "
-         "57.0 FPS per detector against 30.7 for yolo26x (detector `predict()` only). The full table (Table 1), "
-         "the Phase 1 selection record (Table 1b), the disclosures and the IR architecture ladder are in "
+         "57.0 FPS per detector against 30.7 for yolo26x (fp32, detector `predict()` only). The full table "
+         "(Table 1), the Phase 1 selection record (Table 1b), the throughput of every variant (Figure 2), the "
+         "disclosures and the IR architecture ladder are in "
          "Appendix {C}.")
 
 
@@ -249,16 +250,16 @@ T_6_2_SCOPE = (
     "estimand is disagreement ranking, not predictive likelihood, so their NLL is undefined. Night is SUSPECT on both "
     "streams (Appendix F.2).")
 T_6_2_TAIL = (
-    "Figure 3 (Appendix F.3) shows the full lift screen. Day-only is the primary basis because the registered screen "
+    "Figure 4 (Appendix F.3) shows the full lift screen. Day-only is the primary basis because the registered screen "
     "placed night in its SUSPECT band on both streams; that rationale, one registered rule amended after it fired, "
-    "and why the arms are not ranked on mAP (Figure 4) are in Appendix F.4.")
+    "and why the arms are not ranked on mAP (Figure 5) are in Appendix F.4.")
 T_6_3_INTRO = (
     "The decision layer of §4.2 is the sixth rewrite of the gate; each rewrite was forced by a measured failure of "
-    "the previous one. The history (Table 3a, Figure 5), the pre-restore measurements behind it and its three general "
+    "the previous one. The history (Table 3a, Figure 6), the pre-restore measurements behind it and its three general "
     "lessons are in Appendix G.1; two of the lessons recur in §8. Here we re-measure the shipped rule on the five "
     "Phase 3 systems.")
 T_FIG6 = (
-    "**Figure 6. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean.** By day "
+    "**Figure 7. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean.** By day "
     "the fused output sits just above VIS alone on every cell. At night VIS is vetoed on every frame, so the fused "
     "output equals IR alone: right where VIS fails (fog, low light), wrong where it still works (clean, glare). "
     "Sources: `docs/eval/p3_night_check_2026-09-27.json`, `docs/eval/p3_corrupt_cells_2026-09-27.json`.")
@@ -285,7 +286,7 @@ T_6_5_POST = (
 T_6_6_INHERIT = (
     "**The retrained system inherits the rule and pays for it.** The five Phase 3 VIS detectors trained on the "
     "restored labels see at night (0.2535 seed-mean ship AP on the night run), but the frozen rule still drops VIS on "
-    "every night frame, at the costs in Table 3b. The rule was correct for the detector it was written against and "
+    "every night frame (Figure 9), at the costs in Table 3b. The rule was correct for the detector it was written against and "
     "is wrong for the detector it ships with. Nothing in the image changed; what changed is the claim the rule makes "
     "about the detector.")
 T_6_6_ARM = (
@@ -415,18 +416,18 @@ def build_tmlr():
     put("E", "## Appendix E. Backbone benchmark (full text of §6.1)\n",
         section("### E.1 Tables 1 and 1b", strip_rule(body("### 6.1 Backbone benchmark is a negative result"))))
 
-    s62 = ["**Table 2.", "**Scope and caveats.**", "![lift_screen]", "**Figure 3.", "**Why day-only is primary.**",
+    s62 = ["**Table 2.", "**Scope and caveats.**", "![lift_screen]", "**Figure 4.", "**Why day-only is primary.**",
            "One registered rule was amended", "We do not rank uncertainty methods", "![checkpoint_selection]",
-           "**Figure 4."]
+           "**Figure 5."]
     kept, mv = rework("### 6.2 Per-modality uncertainty calibration",
                       replace={"**Table 2.": T_6_2_CAP, "**Scope and caveats.**": T_6_2_SCOPE}, moved=s62)
     out.append(section("### 6.2 Per-modality uncertainty calibration", kept + "\n\n" + T_6_2_TAIL))
 
     s63 = ["The decision layer in §4.2 is the sixth rewrite.", "**Table 3a.", "| Stage (date)",
            "Ship AP; each gap is against", "Under the shipped preset on the pre-restore",
-           "Three findings from the rewrite history", "![gate_history]", "**Figure 5."]
+           "Three findings from the rewrite history", "![gate_history]", "**Figure 6."]
     kept, mv63 = rework("### 6.3 Fusion robustness of the sensor-selection baseline",
-                        replace={"**Figure 6.": T_FIG6}, moved=s63)
+                        replace={"**Figure 7.": T_FIG6}, moved=s63)
     out.append(section("### 6.3 Fusion robustness of the sensor-selection baseline", T_6_3_INTRO + "\n\n" + kept))
 
     s64 = ["**Table 4c.", TABLE_4C, "Two macro results", "**The gain is re-ranking"]
@@ -476,10 +477,10 @@ def build_tmlr():
     put("F", "## Appendix F. Calibration details (from §6.2)\n",
         section("### F.1 Table 2: sources, checkpoints and ties", pick(mv, "**Table 2.")),
         section("### F.2 Scope and caveats", pick(mv, "**Scope and caveats.**")),
-        section("### F.3 Signal lift screen", pick(mv, "![lift_screen]", "**Figure 3.")),
+        section("### F.3 Signal lift screen", pick(mv, "![lift_screen]", "**Figure 4.")),
         section("### F.4 Day-only basis, amendment and checkpoint selection",
                 pick(mv, "**Why day-only is primary.**", "One registered rule was amended",
-                     "We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 4.",)
+                     "We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 5.",)
                 + "\n\n" + mv8["**Checkpoint selection is noisier"]))
     put("G", "## Appendix G. Gate history and night-arm re-pricing (from §6.3 and §6.6)\n",
         section("### G.1 Gate rewrite history", pick(mv63, *s63) + "\n\n" + mv8["**Synthetic ladders"]),
@@ -584,8 +585,8 @@ def build_joe():
     out.append(section("### 6.1 Backbone benchmark is a negative result", condensed(C_6_1, **dict(L, C="A.2"))))
     appendix.append(section("### A.2 Tables 1 and 1b", strip_rule(body("### 6.1 Backbone benchmark is a negative result"))))
     kept, moved = move("### 6.2 Per-modality uncertainty calibration",
-                       ["We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 4."])
-    kept += ("\n\nWhy the arms are not ranked on mAP, including the checkpoint-selection analysis of Figure 4, is in "
+                       ["We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 5."])
+    kept += ("\n\nWhy the arms are not ranked on mAP, including the checkpoint-selection analysis of Figure 5, is in "
              "Appendix B.")
     out.append(section("### 6.2 Per-modality uncertainty calibration", kept))
     appendix.append(section("## Appendix B. Checkpoint selection (from §6.2)", moved))

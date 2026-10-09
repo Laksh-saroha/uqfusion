@@ -446,8 +446,64 @@ def fig6() -> None:
     save(fig, "fig_checkpoint_selection")
 
 
-FIGS = {  # paper order: Figure 1 ... Figure 7
-    "decision_layer": fig1, "uq_calibration": fig3, "lift_screen": fig5,
+# --------------------------------------------------------------------------------------------
+# Figure 2: batch-1 throughput of the 31 Phase 1 variants, one size ladder per family.
+# Source: phase1_benchmark/fps.csv (fp32 rows, GPU clock pinned 1500 MHz, 500 timed frames).
+# One neutral hue for every family (the family is written under its block) and ink for
+# YOLO26, so no entity colour of the other figures is reused for a family.
+# --------------------------------------------------------------------------------------------
+
+FAMILIES = (("yolov8", "YOLOv8"), ("yolov9", "YOLOv9"), ("yolov10", "YOLOv10"), ("yolo11", "YOLO11"),
+            ("yolo12", "YOLO12"), ("yolo26", "YOLO26"))
+SCALES = "ntsmbclex"
+
+
+def fig1b() -> None:
+    rows = [r for r in csv.DictReader(open(ROOT / "phase1_benchmark/fps.csv", encoding="utf-8"))
+            if r["half"] == "False"]
+    clocks = {r["gpu_clock_mhz"] for r in rows}
+    assert clocks == {"1500"}, f"fps.csv is not clock-pinned: {clocks}"
+    by: dict[str, list[float]] = {}
+    for r in rows:
+        by.setdefault(r["variant"], []).append(float(r["fps"]))
+    fam_of = lambda v: max((f for f, _ in FAMILIES if v.startswith(f)), key=len)    # noqa: E731
+    fig, ax = plt.subplots(figsize=(DOUBLE, 2.45))
+    x, gap = 0.0, 1.3
+    for fam, label in FAMILIES:
+        members = sorted((v for v in by if fam_of(v) == fam), key=lambda v: SCALES.index(v[len(fam):]))
+        xs = [x + i for i in range(len(members))]
+        mu = [mean(by[v]) for v in members]
+        sd = [(sum((f - m) ** 2 for f in by[v]) / (len(by[v]) - 1)) ** 0.5 if len(by[v]) > 1 else 0.0
+              for v, m in zip(members, mu)]
+        col = INK if fam == "yolo26" else MUTED
+        ax.plot(xs, mu, color=col, lw=1.3, zorder=2)
+        ax.errorbar(xs, mu, yerr=sd, fmt="none", ecolor=col, elinewidth=0.9, capsize=1.8, zorder=3)
+        ax.scatter(xs, mu, s=22, color=col, edgecolor="white", linewidth=0.8, zorder=4)
+        for xi, v in zip(xs, members):
+            ax.text(xi, -6.5, v[len(fam):], ha="center", va="top", fontsize=7, color=INK2)
+        ax.text(mean(xs), -15.5, label, ha="center", va="top", fontsize=7.5, color=INK,
+                fontweight="bold" if fam == "yolo26" else "normal")
+        if fam == "yolo26":
+            for xi, v, m, s in zip(xs, members, mu, sd):
+                if v == "yolo26m":
+                    ax.scatter([xi], [m], s=95, facecolor="none", edgecolor=INK, linewidth=1.2, zorder=5)
+                    ax.plot([xi, xi], [m + 3.6, 67.5], color=INK2, lw=0.6, zorder=1)
+                    ax.text(xi, 68.5, f"yolo26m, selected: {m:.1f}", ha="center", va="bottom", fontsize=7,
+                            color=INK)
+                elif v in ("yolo26l", "yolo26x"):
+                    ax.text(xi + 0.27, m, f"{m:.1f}", ha="left", va="center", fontsize=6.6, color=INK2)
+        x = xs[-1] + gap
+    ax.set_xlim(-0.6, x - gap + 0.6)
+    ax.set_ylim(0, 85)
+    ax.set_xticks([])
+    ax.grid(axis="x", visible=False)
+    ax.set_ylabel("frames per second (fp32)")
+    ax.spines["bottom"].set_visible(False)
+    save(fig, "fig_throughput")
+
+
+FIGS = {  # paper order: Figure 1 ... Figure 8
+    "decision_layer": fig1, "throughput": fig1b, "uq_calibration": fig3, "lift_screen": fig5,
     "checkpoint_selection": fig6, "gate_history": fig2, "phase3_cells": fig3b,
     "night_restore": fig4,
 }

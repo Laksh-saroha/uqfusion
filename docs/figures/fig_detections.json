@@ -1,0 +1,144 @@
+{
+ "system": "Phase 3 VIS seed 0 + IR seed 0",
+ "preset": "crossmodal26m",
+ "fog": {
+  "draw": 941,
+  "severity": 2,
+  "stream": "VIS only"
+ },
+ "conf_display": 0.25,
+ "rule": {
+  "pick_seed": 0,
+  "min_ships": 3,
+  "min_median_ship_height_px": 15.0,
+  "crop": [
+   320,
+   170
+  ]
+ },
+ "panels": [
+  {
+   "row": "clean/day",
+   "frame_index": 725,
+   "run": "pohang00",
+   "vis": "pohang00_L_012753.png",
+   "ir": "pohang00_012753.png",
+   "crop_xy": [
+    50,
+    256
+   ],
+   "veto_vis": false,
+   "gt_ships": 4,
+   "shown": {
+    "vis": 4,
+    "ir": 3,
+    "fused_from_vis": 4,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.96,
+     0.92,
+     0.97,
+     0.91
+    ],
+    "ir": [
+     0.72,
+     0.75,
+     0.38
+    ]
+   }
+  },
+  {
+   "row": "fog/day",
+   "frame_index": 725,
+   "run": "pohang00",
+   "vis": "pohang00_L_012753.png",
+   "ir": "pohang00_012753.png",
+   "crop_xy": [
+    50,
+    256
+   ],
+   "veto_vis": false,
+   "gt_ships": 4,
+   "shown": {
+    "vis": 3,
+    "ir": 3,
+    "fused_from_vis": 3,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.88,
+     0.83,
+     0.76
+    ],
+    "ir": [
+     0.72,
+     0.75,
+     0.38
+    ]
+   }
+  },
+  {
+   "row": "clean/night",
+   "frame_index": 1701,
+   "run": "pohang01",
+   "vis": "pohang01_L_014744.png",
+   "ir": "pohang01_014745.png",
+   "crop_xy": [
+    174,
+    250
+   ],
+   "veto_vis": true,
+   "gt_ships": 5,
+   "shown": {
+    "vis": 3,
+    "ir": 4,
+    "fused_from_vis": 0,
+    "fused_from_ir": 4
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.69,
+     0.92,
+     0.9
+    ],
+    "ir": [
+     0.59,
+     0.63,
+     0.53,
+     0.57
+    ]
+   }
+  },
+  {
+   "row": "fog/night",
+   "frame_index": 1701,
+   "run": "pohang01",
+   "vis": "pohang01_L_014744.png",
+   "ir": "pohang01_014745.png",
+   "crop_xy": [
+    174,
+    250
+   ],
+   "veto_vis": true,
+   "gt_ships": 5,
+   "shown": {
+    "vis": 0,
+    "ir": 4,
+    "fused_from_vis": 0,
+    "fused_from_ir": 4
+   },
+   "best_iou_to_gt": {
+    "vis": [],
+    "ir": [
+     0.59,
+     0.63,
+     0.53,
+     0.57
+    ]
+   }
+  }
+ ]
+}

@@ -22,6 +22,7 @@ MD = (VEN / "PAPER_TMLR.md").read_text(encoding="utf-8").replace("\r\n", "\n")
 FIG_WIDTH = {  # fraction of \linewidth, from each figure's aspect ratio
     "fig_decision_layer": 1.0, "fig_uq_calibration": 0.9, "fig_lift_screen": 0.75, "fig_phase3_cells": 0.7,
     "fig_night_restore": 0.6, "fig_checkpoint_selection": 0.65, "fig_gate_history": 0.65,
+    "fig_throughput": 1.0, "fig_detections": 1.0,
 }
 TABLE_NOTES = ("†", "Ship AP; each gap is against")  # paragraphs that annotate the table just above them
 
