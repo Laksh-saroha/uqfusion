@@ -285,3 +285,14 @@ from the detector" are different claims and only the first is true.
   `scripts/build_cache_multi.py`, which runs the corruption once per draw for all seeds. It was
   verified bit-identical to `build_cache.py` (fog s2, draw 941, 5 seeds × 40 frames, max |diff| 0).
   **No pohang04 frame is scored.** Adopts nothing. Logged before the run.
+
+* **2026-10-09 — σ re-ranker replication, Phase 3 VIS seeds 0–4, development, registered**
+  (`docs/prereg-sigma-rerank-replication-2026-10-09.md`; `scripts/fit_rerank.py --ci-vs`).
+  Out-of-fold VIS re-ranker, 4 features vs the same 3 without `sigma_mean_norm`, monotone,
+  λ 0.30, ship AP, the 1,200 paired day frames, caches `runs/cache_p3/seed{0..4}/`. First use of
+  the re-ranker on any Phase 3 cache. **No pohang04 frame is scored.** Adopts nothing.
+
+  *Fixed before the number:* a seed passes at floor F if σ's paired increment is ≥ F and its
+  block interval (L = 20) is above zero. ≥ 4/5 seeds at 0.0060 → REPLICATES; else ≥ 4/5 at
+  0.0047 → REPLICATES AT SHIP FLOOR; else FAILS, and the title reverts to the 2026-10-08
+  framing. Logged before the run.
