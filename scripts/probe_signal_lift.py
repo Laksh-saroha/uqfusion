@@ -73,6 +73,8 @@ def main() -> int:
     ap.add_argument("--cache-dir", default="runs/cache_m")
     ap.add_argument("--out", default="runs/eval/signal_lift_26m.md")
     ap.add_argument("--conditions", nargs="+", default=["clean", "fog", "glare", "lowlight"])
+    ap.add_argument("--cls", type=int, default=None,
+                    help="screen only VIS boxes of this class (0 = ship); default all boxes")
     args = ap.parse_args()
     t0 = time.time()
 
@@ -91,6 +93,9 @@ def main() -> int:
         # NL thresholds run 0.50..0.95 in ten steps, so index 5 is IoU 0.75.
         tp75 = np.concatenate([parts[i]["tp"][:, 5] for i in keep])
         conf = np.concatenate([np.asarray(vis[i]["conf"], dtype=float) for i in keep])
+        cmask = (np.ones(len(conf), bool) if args.cls is None else
+                 np.concatenate([np.asarray(parts[i]["cls"]) == args.cls for i in keep]))
+        tp50, tp75, conf = tp50[cmask], tp75[cmask], conf[cmask]
 
         sig = {}
         for k in (1, 2, 5):
@@ -122,7 +127,7 @@ def main() -> int:
         sig["cross-modal OR temporal"] = [c | t for c, t in zip(cm, tm)]
 
         for name, flags in sig.items():
-            f = np.concatenate([flags[i] for i in keep])
+            f = np.concatenate([flags[i] for i in keep])[cmask]
             if f.all() or not f.any():
                 continue
             for tag, tp in (("50", tp50), ("75", tp75)):
@@ -145,6 +150,10 @@ def main() -> int:
          "`lift@75` uses TP at IoU 0.75 — a signal can predict **presence** without "
          "predicting **localisation**, and AP@50-95 pays for the second. "
          "`corr(conf)` catches a signal that merely re-reads confidence.", ""]
+    if args.cls is not None:
+        L += [f"**Class {args.cls} boxes only (`--cls {args.cls}`).** Signals are computed "
+              f"on every box exactly as in the default run; only the boxes screened are "
+              f"restricted.", ""]
     for cond in args.conditions:
         L += [f"## `{cond}`", "",
               "| signal | fires | P(TP\\|fired) | P(TP\\|not) | **lift@50** | lift@75 | corr(conf) |",

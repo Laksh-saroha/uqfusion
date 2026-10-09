@@ -149,20 +149,61 @@ def pooled(parts, sel):
             np.concatenate(frame), ngt)
 
 
-def ap_from_scores(parts, sel, scores_by_frame) -> float:
+def ap_from_scores(parts, sel, scores_by_frame, cls_only: int | None = None) -> float:
     """mAP@50-95 when frame i's detections are ranked by `scores_by_frame[i]`
     instead of by confidence. Boxes and TP flags are untouched, so this isolates
-    the ORDERING -- which is the only thing any re-scoring lever can change."""
+    the ORDERING -- which is the only thing any re-scoring lever can change.
+
+    `cls_only` = K scores class K's AP alone instead of the macro over classes
+    (0 when class K has no GT in `sel`). None, the default, is the macro."""
     tp, _conf, cls, frame, ngt = pooled(parts, sel)
     if not ngt or not len(cls):
         return 0.0
     s = np.concatenate([np.asarray(scores_by_frame[i], float) for i in sel
                         if len(parts[i]["conf"])])
+    if cls_only is not None:
+        if cls_only not in ngt:
+            return 0.0
+        ngt = {cls_only: ngt[cls_only]}
     rows = []
     for c in sorted(ngt):
         m = cls == c
         rows.append(_ap_from_sorted(tp[m][np.argsort(-s[m])], ngt[c]))
     return float(np.stack(rows).mean())
+
+
+def metric(r: dict, cls: int | None, key: str = "ap50_95") -> float:
+    """Read one `ap_from_parts` result: the macro (`map50_95` / `map50`) when `cls`
+    is None, else class `cls`'s own AP (0.0 if that class has no GT in the subset).
+    The `--cls` flag of each probe routes every AP it prints through here."""
+    if cls is None:
+        return r["map50_95" if key == "ap50_95" else "map50"]
+    e = r["per_class"].get(cls)
+    return float(e[key]) if e and not e.get("excluded") else 0.0
+
+
+def paired_ci(parts_a, parts_b, sel, n_boot: int, cls: int | None = None,
+              block_len: int | None = None, image_paths=None) -> dict:
+    """Paired (A - B) interval. Default: the frame-level `bootstrap_delta` the
+    probes have always used. `block_len` = L switches to the moving-block
+    bootstrap (`blockboot.block_bootstrap_delta`), which needs `image_paths`."""
+    if block_len:
+        from uqfusion.eval.blockboot import block_bootstrap_delta
+        return block_bootstrap_delta(parts_a, parts_b, image_paths, block_len, sel=sel,
+                                     n_boot=n_boot, seed=0, cls=cls)
+    from uqfusion.eval.apmetrics import bootstrap_delta
+    return bootstrap_delta(parts_a, parts_b, sel=sel, n_boot=n_boot, seed=0, cls=cls)
+
+
+def cls_note(cls: int | None, block_len: int | None) -> str:
+    """One header line saying what a non-default run scored."""
+    bits = []
+    if cls is not None:
+        bits.append(f"**Metric: class {cls} AP only (`--cls {cls}`)**; every `mAP50`/"
+                    f"`mAP50-95` column below is that class's AP50/AP50-95, not the macro")
+    if block_len:
+        bits.append(f"**intervals: moving-block bootstrap, L = {block_len}**")
+    return ("; ".join(bits) + ".") if bits else ""
 
 
 def oracle_curves(parts, sel) -> tuple[np.ndarray, np.ndarray, dict, dict]:

@@ -25,12 +25,19 @@ are read-only here; no cache is built.
 
 Usage:
     python scripts/reprice_constants_draw_avg.py
+    python scripts/reprice_constants_draw_avg.py --cls 0 --json OUT.json
+
+`--cls K` scores per-class AP of class K (`per_class[K]["ap50_95"]`) everywhere the
+default reads the macro `map50_95`; margins, bootstrap and verdicts follow the same
+rule on that metric. Without it the output is unchanged. `--json` additionally
+dumps every per-draw delta and bootstrap sd at full precision.
 """
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import sys
 import time
 from pathlib import Path
@@ -74,6 +81,18 @@ ARMS = [
 ]
 
 
+#: None = the macro `map50_95` (the recorded default); an int = that class's AP.
+CLS: int | None = None
+
+
+def score(r: dict) -> float:
+    """The scored quantity of one `ap_weighted` result: macro, or class `CLS`."""
+    if CLS is None:
+        return r["map50_95"]
+    e = r["per_class"].get(CLS)
+    return float(e["ap50_95"]) if e and not e.get("excluded") else 0.0
+
+
 def cell_name(vc, ic) -> str:
     return f"{vc}/{ic or 'clean'}"
 
@@ -99,8 +118,8 @@ def verify_replace_equivalence(cache_dir: Path) -> None:
     assert d <= 1e-12, f"cap_ir replace mismatch {d:.3e}"
     pb = frame_parts(run_systems(real, "clean")["fused_gated"], real.gts)
     pa = frame_parts(run_systems(built, "clean")["fused_gated"], built.gts)
-    a = ap_weighted(presort(pa))["map50_95"]
-    b = ap_weighted(presort(pb))["map50_95"]
+    a = score(ap_weighted(presort(pa)))
+    b = score(ap_weighted(presort(pb)))
     assert abs(a - b) <= 1e-12, f"replace arm AP mismatch {abs(a - b):.3e}"
     print(f"[verify] replace == load  (cap_ir {d:.1e}, AP {abs(a - b):.1e})",
           flush=True)
@@ -122,14 +141,14 @@ def measure(cache_dir: Path, n_boot: int, want_boot: bool) -> dict:
         ship_parts = frame_parts(run_systems(base[ic], vc)["fused_gated"],
                                  base[ic].gts)
         pre_s = {k: presort(ship_parts, sel=s) for k, s in sel.items()}
-        ship = {k: ap_weighted(p)["map50_95"] for k, p in pre_s.items()}
+        ship = {k: score(ap_weighted(p)) for k, p in pre_s.items()}
         for axis, label, ov in ARMS:
             arm_ctx = apply_arm(base[ic], ov)
             parts = frame_parts(run_systems(arm_ctx, vc)["fused_gated"],
                                 arm_ctx.gts)
             rec = {}
             for k, s in sel.items():
-                rec[k] = ap_weighted(presort(parts, sel=s))["map50_95"] - ship[k]
+                rec[k] = score(ap_weighted(presort(parts, sel=s))) - ship[k]
             if want_boot:
                 pre_a = presort(parts, sel=sel["day"])
                 pre_b = pre_s["day"]
@@ -139,8 +158,8 @@ def measure(cache_dir: Path, n_boot: int, want_boot: bool) -> dict:
                 d = np.empty(n_boot)
                 for t in range(n_boot):
                     w = rng.multinomial(n, p)          # ONE resample, both arms
-                    d[t] = (ap_weighted(pre_a, w)["map50_95"]
-                            - ap_weighted(pre_b, w)["map50_95"])
+                    d[t] = (score(ap_weighted(pre_a, w))
+                            - score(ap_weighted(pre_b, w)))
                 rec["boot_sd"] = float(np.std(d, ddof=1))
             out[(axis, label, vc, ic)] = rec
         print(f"  [cell] {cell_name(vc, ic)}", flush=True)
@@ -152,7 +171,13 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--out", default="runs/eval/reprice_constants.md")
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP instead of the macro (0 = ship)")
+    ap.add_argument("--json", default=None,
+                    help="also write every per-draw value at full precision here")
     args = ap.parse_args()
+    global CLS
+    CLS = args.cls
     t0 = time.time()
 
     verify_replace_equivalence(DRAWS[0][1])
@@ -223,12 +248,26 @@ def main() -> int:
 
     uninf = [cell_name(vc, ic) for vc, ic in CELLS if not informative[(vc, ic)]]
 
+    if args.json:
+        Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.json).write_text(json.dumps({
+            "cls": CLS, "draws": [lbl for lbl, cd in DRAWS if cd.is_dir()],
+            "per_draw": [{f"{a}={l}|{cell_name(vc, ic)}": v
+                          for (a, l, vc, ic), v in d.items()} for d in per_draw],
+            "verdicts": {f"{a}={l}": {"better": nb, "worse": nw, "test": t}
+                         for (a, l), (nb, nw, t) in verdicts.items()},
+            "final": {a: ("MIS-PRICED" if m else "STANDS") for a, m in by_axis.items()},
+            "uninformative": uninf,
+        }, indent=1), encoding="utf-8")
+
     secs = [
         "Implements `docs/prereg-reprice-inherited-constants.md`, committed at "
         "`6b49ca0` **before this script existed**. Preset `crossmodal26m`, 4 "
         "corruption draws, single-axis arms built by `dataclasses.replace` and "
         "verified against genuinely loaded contexts to 1e-12.  \n"
-        "Shipped values: `cap_ir_scale` 4.0, `iou_thr` 0.85, veil repair ON.",
+        "Shipped values: `cap_ir_scale` 4.0, `iou_thr` 0.85, veil repair ON."
+        + ("" if CLS is None else
+           f"  \n**Metric: class {CLS} AP (`--cls {CLS}`), not the macro.**"),
 
         "## 0. Verdict\n\n" + md_table(["constant", "verdict"], final_rows)
         + "\n\n**STANDS** means *not shown wrong* — never *optimal*. Rule 5 of the "

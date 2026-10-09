@@ -72,8 +72,22 @@ def main() -> int:
                              "tests that explanation; it is NOT a re-tune and must not be selected on.")
     parser.add_argument("--conditions", default=",".join(CONDITIONS))
     parser.add_argument("--out", default="runs/eval/sigma_wbf.md")
+    parser.add_argument("--cls", type=int, default=None,
+                        help="score this class's AP instead of the macro (0 = ship). The "
+                             "capability prior is still the macro, as configured")
+    parser.add_argument("--block-len", type=int, default=None,
+                        help="also give each pooled day/night delta a moving-block CI")
     args = parser.parse_args()
     load_config(args.config)
+    K = args.cls
+
+    def score(recs, g):
+        """Macro by default; class K's AP50-95 with --cls K."""
+        r = map50_95(recs, g)
+        if K is None:
+            return r["map50_95"]
+        e = r["per_class"].get(K)
+        return float(e["ap50_95"]) if e else 0.0
 
     cache_dir, bright_dir = Path(args.cache_dir), Path(args.bright_dir)
     rc = json.loads(Path(args.constants).read_text(encoding="utf-8"))
@@ -131,9 +145,11 @@ def main() -> int:
         before = evaluate_systems(**common)
         after = evaluate_systems(sigma_weighted=True, **common)
         results[cond] = {"before": before, "after": after}
-        d = after["gated_fusion"]["map50_95"] - before["gated_fusion"]["map50_95"]
-        print(f"[sigma] {cond:9s} gated {before['gated_fusion']['map50_95']:.4f} -> "
-              f"{after['gated_fusion']['map50_95']:.4f}  ({d:+.4f})")
+        bg = (before["gated_fusion"]["map50_95"] if K is None
+              else score(before["fused_gated"], gts))
+        ag = (after["gated_fusion"]["map50_95"] if K is None
+              else score(after["fused_gated"], gts))
+        print(f"[sigma] {cond:9s} gated {bg:.4f} -> {ag:.4f}  ({ag - bg:+.4f})")
 
     lines = ["# sigma-weighted WBF — TODO A1", "",
              "Cluster coordinates averaged by `score x model_weight / sigma^2` (per coordinate) "
@@ -141,6 +157,9 @@ def main() -> int:
              "rescale — is byte-identical to stock WBF; `scripts/smoke_sigma_wbf.py` asserts the "
              "sigma path reproduces stock WBF to 6.3e-08 under constant sigma, so this A/B "
              "isolates sigma variation.", "",
+             *([f"**Metric: class {K} AP only (`--cls {K}`)**; every AP column below is that "
+                f"class's AP50-95, not the macro. The capability prior is unchanged.", ""]
+               if K is not None else []),
              f"Config: D-6 ladder constants, capability prior VIS {cap_vis:.4f} / IR {cap_ir:.4f}, "
              f"`{stat}` photometric gate (`mu_b`={bc['mu_b']:.3f}), veto at `r_bright < {args.veto}`, "
              f"WBF `iou_thr` {args.iou_thr}, `alpha` {args.alpha}.", "",
@@ -151,16 +170,27 @@ def main() -> int:
                      f"{q[4] / max(q[0], 1e-9):.1f}x |")
 
     lines += ["", "## Day vs night, pooled", "",
-              "| condition | split | frames | stock WBF | **sigma-weighted** | delta |",
-              "|---|---|---|---|---|---|"]
+              "| condition | split | frames | stock WBF | **sigma-weighted** | delta |"
+              + (" block CI |" if args.block_len else ""),
+              "|---|---|---|---|---|---|" + ("---|" if args.block_len else "")]
     night = runs_arr == NIGHT_RUN
     for cond in conditions:
         rr = results[cond]
         for label, sel in (("day (00+02+03)", np.flatnonzero(~night)), ("night (01)", np.flatnonzero(night))):
             g = [gts[i] for i in sel]
-            b = map50_95([rr["before"]["fused_gated"][i] for i in sel], g)["map50_95"]
-            a = map50_95([rr["after"]["fused_gated"][i] for i in sel], g)["map50_95"]
-            lines.append(f"| {cond} | {label} | {len(sel)} | {b:.4f} | **{a:.4f}** | {a - b:+.4f} |")
+            b = score([rr["before"]["fused_gated"][i] for i in sel], g)
+            a = score([rr["after"]["fused_gated"][i] for i in sel], g)
+            ci = ""
+            if args.block_len:
+                from uqfusion.eval.apmetrics import frame_parts
+                from uqfusion.eval.blockboot import block_bootstrap_delta
+                bb = block_bootstrap_delta(frame_parts(rr["after"]["fused_gated"], gts),
+                                           frame_parts(rr["before"]["fused_gated"], gts),
+                                           [x["image_path"] for x in vis_clean_recs],
+                                           args.block_len, sel=sel, n_boot=1000, seed=0, cls=K)
+                ci = f" [{bb['ci_lo']:+.6f}, {bb['ci_hi']:+.6f}] (delta {bb['delta']:+.6f}) |"
+            lines.append(f"| {cond} | {label} | {len(sel)} | {b:.4f} | **{a:.4f}** | {a - b:+.4f} |"
+                         + ci)
 
     lines += ["", "## Per run — clean condition", "",
               "| run | frames | stock WBF | **sigma-weighted** | delta |", "|---|---|---|---|---|"]
@@ -170,15 +200,17 @@ def main() -> int:
         if not len(sel):
             continue
         g = [gts[i] for i in sel]
-        b = map50_95([r["before"]["fused_gated"][i] for i in sel], g)["map50_95"]
-        a = map50_95([r["after"]["fused_gated"][i] for i in sel], g)["map50_95"]
+        b = score([r["before"]["fused_gated"][i] for i in sel], g)
+        a = score([r["after"]["fused_gated"][i] for i in sel], g)
         lines.append(f"| {name} | {len(sel)} | {b:.4f} | **{a:.4f}** | {a - b:+.4f} |")
 
     lines += ["", "## Pooled over all 2,232 paired frames", "",
               "| condition | stock WBF | **sigma-weighted** | delta |", "|---|---|---|---|"]
     for cond in conditions:
-        b = results[cond]["before"]["gated_fusion"]["map50_95"]
-        a = results[cond]["after"]["gated_fusion"]["map50_95"]
+        b = (results[cond]["before"]["gated_fusion"]["map50_95"] if K is None
+             else score(results[cond]["before"]["fused_gated"], gts))
+        a = (results[cond]["after"]["gated_fusion"]["map50_95"] if K is None
+             else score(results[cond]["after"]["fused_gated"], gts))
         lines.append(f"| {cond} | {b:.4f} | **{a:.4f}** | {a - b:+.4f} |")
 
     out = Path(args.out)

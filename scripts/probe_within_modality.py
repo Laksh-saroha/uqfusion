@@ -39,8 +39,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _ideas_common import (ROOT, ap_of, day_night, fmt, gts_for, load_records,  # noqa: E402
-                           loro_folds, md_table, sgn, subsample, write_md)
+from _ideas_common import (ROOT, ap_of, cls_note, day_night, fmt, gts_for,  # noqa: E402
+                           load_records, loro_folds, md_table, metric, paired_ci, sgn,
+                           subsample, write_md)
 
 sys.path.insert(0, str(ROOT / "src"))
 from uqfusion.eval.apmetrics import bootstrap_delta, frame_parts  # noqa: E402
@@ -103,7 +104,12 @@ def main() -> int:
     ap.add_argument("--out", default="runs/eval/within_modality.md")
     ap.add_argument("--n-boot", type=int, default=500)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP instead of the macro (0 = ship)")
+    ap.add_argument("--block-len", type=int, default=None,
+                    help="moving-block bootstrap with this block length instead of iid")
     args = ap.parse_args()
+    K = args.cls
     t0 = time.time()
 
     p = Path(args.vis_cache) if args.vis_cache else Path(args.cache_dir) / "gauss_vis_paired_clean.pkl"
@@ -116,8 +122,10 @@ def main() -> int:
     base = ap_of(vis, gts, sel=day)
     secs = [f"Source: `{p}`  \nWeights: `{meta.get('weights')}`  \n{len(day)} day frames.  \n"
             f"Baseline (shipped: no within-modality merge) mAP50-95 "
-            f"**{fmt(base['map50_95'])}**, mAP50 {fmt(base['map50'])}, "
+            f"**{fmt(metric(base, K))}**, mAP50 {fmt(metric(base, K, 'ap50'))}, "
             f"{np.mean([len(vis[i]['conf']) for i in day]):.1f} boxes/frame."]
+    if cls_note(K, args.block_len):
+        secs.append(cls_note(K, args.block_len))
 
     # ---- 1. the duplicate census -----------------------------------------
     rows = []
@@ -160,14 +168,16 @@ def main() -> int:
         parts = frame_parts(out, gts)
         a = ap_of(out, gts, sel=day)
         if args.n_boot:
-            bs = bootstrap_delta(parts, base_parts, sel=day, n_boot=args.n_boot, seed=0)
+            bs = paired_ci(parts, base_parts, day, args.n_boot, K, args.block_len,
+                           [r["image_path"] for r in vis])
             lo, hi = bs["ci_lo"], bs["ci_hi"]
         else:
             lo = hi = float("nan")
         # leave-one-run-out spread, so a gain that lives in one run is visible
-        per_run = [ap_of(out, gts, sel=te)["map50_95"] - ap_of(vis, gts, sel=te)["map50_95"]
+        per_run = [metric(ap_of(out, gts, sel=te), K) - metric(ap_of(vis, gts, sel=te), K)
                    for _h, _tr, te in loro_folds(runs, day)]
-        rows.append([name, fmt(a["map50"]), fmt(a["map50_95"]), sgn(a["map50_95"] - base["map50_95"]),
+        rows.append([name, fmt(metric(a, K, "ap50")), fmt(metric(a, K)),
+                     sgn(metric(a, K) - metric(base, K)),
                      f"[{sgn(lo, 4)}, {sgn(hi, 4)}]" if np.isfinite(lo) else "--",
                      sgn(min(per_run)) + " / " + sgn(max(per_run)) if per_run else "--",
                      f"{np.mean([len(o['conf']) for o in [out[i] for i in day]]):.1f}"])

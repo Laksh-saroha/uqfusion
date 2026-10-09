@@ -252,9 +252,11 @@ def fig3() -> None:
 # (compiled in PAPER_CONTEXT_COMPILED.md Part 6); no machine-readable file holds the history.
 # --------------------------------------------------------------------------------------------
 
-STAGES = [  # stage, date, worst cell, gap, hollow = later found within CI
-    ("a", "08-19", "fog/night", -0.0021, True),
-    ("b", "08-20", "fog/night", 0.0, False),
+STAGES = [  # stage, date, worst cell, ship-AP gap to max(VIS, IR), hollow = within CI
+    # a, b: the 08-19/20 records ranked cells against ir_only (fog/night); against max(VIS, IR)
+    # their worst cell is lowlight/day (x_fusion_ci.md §4, final_system.md §2; class_set_audit).
+    ("a", "08-19", "lowlight/day", -0.0180, False),
+    ("b", "08-20", "lowlight/day", -0.0180, False),
     ("c", "09-01", "lowlight/day", -0.0180, False),
     ("d", "09-01", "", 0.0, False),
     ("e", "09-01", "fog/clean", -0.0632, False),
@@ -271,9 +273,17 @@ def fig2() -> None:
         ax.scatter([x], [gap], s=30, zorder=3, color="white" if hollow else VIS, edgecolor=VIS,
                    linewidth=1.4)
         if gap < 0:
-            text = f"{signed(gap)}\n{cell}" + ("\n(within CI)" if hollow else "")
-            ax.text(x, gap - 0.004, text, ha="center", va="top", fontsize=6.2, color=INK2,
-                    linespacing=1.15)
+            # a run of stages sharing one worst cell and gap is labelled once, at its centre
+            same = lambda i: 0 <= i < len(STAGES) and STAGES[i][2:4] == (cell, gap)
+            if same(x - 1):
+                continue
+            end = x
+            while same(end + 1):
+                end += 1
+            span = f" ({STAGES[x][0]}–{STAGES[end][0]})" if end > x else ""
+            text = f"{signed(gap)}\n{cell}{span}" + ("\n(within CI)" if hollow else "")
+            ax.text((x + end) / 2, gap - 0.004, text, ha="center", va="top", fontsize=6.2,
+                    color=INK2, linespacing=1.15)
         else:
             ax.text(x, gap + 0.004, f"tie\n{cell}" if cell else "0", ha="center", va="bottom",
                     fontsize=6.2, color=INK2, linespacing=1.15)

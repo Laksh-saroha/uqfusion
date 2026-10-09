@@ -70,7 +70,18 @@ def main() -> int:
     ap.add_argument("--out", default="runs/eval/x_topk_truncation.md")
     ap.add_argument("--conditions", nargs="+", default=None,
                     help="restrict the condition sweep (pre-flight uses --conditions clean)")
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP instead of the macro (0 = ship)")
+    ap.add_argument("--block-len", type=int, default=None,
+                    help="moving-block bootstrap with this block length instead of iid")
     args = ap.parse_args()
+    K = args.cls
+
+    def m_(r):
+        if K is None:
+            return r["map50_95"]
+        e = r["per_class"].get(K)
+        return float(e["ap50_95"]) if e and not e.get("excluded") else 0.0
 
     t0 = time.time()
     # Recorded under the 2026-08-19 adopted system; pinned so re-runs keep
@@ -101,16 +112,22 @@ def main() -> int:
                             ctx.gts)
             for sname, sel in splits.items():
                 rows.append({"who": who, "k": k, "condition": cond, "split": sname,
-                             "map": ap_from_parts(p, sel)["map50_95"]})
+                             "map": m_(ap_from_parts(p, sel))})
             if cond in ("clean", "fog"):
                 for sname, sel in splits.items():
-                    boots[(who, k, cond, sname)] = bootstrap_delta(
-                        p, base_parts[cond], sel, n_boot=args.n_boot)
+                    if args.block_len:
+                        from uqfusion.eval.blockboot import block_bootstrap_delta
+                        boots[(who, k, cond, sname)] = block_bootstrap_delta(
+                            p, base_parts[cond], [r["image_path"] for r in ctx.vis_by_cond[cond]],
+                            args.block_len, sel=sel, n_boot=args.n_boot, cls=K)
+                    else:
+                        boots[(who, k, cond, sname)] = bootstrap_delta(
+                            p, base_parts[cond], sel, n_boot=args.n_boot, cls=K)
         print(f"[topk] {who:5s} k={k:4d} " + "  ".join(
             f"{r['condition'][:4]}/{r['split'][:1]}={r['map']:.4f}"
             for r in rows if r["who"] == who and r["k"] == k), flush=True)
 
-    base = {(c, s): ap_from_parts(base_parts[c], sel)["map50_95"]
+    base = {(c, s): m_(ap_from_parts(base_parts[c], sel))
             for c in ctx.conditions for s, sel in splits.items()}
 
     L = ["# Per-modality top-k truncation", "",
@@ -119,6 +136,9 @@ def main() -> int:
          f"per frame) at conf 0.001. A rank cutoff, unlike the `skip_box_thr` score cutoff "
          f"already rejected in §8, does not require the two score scales to be comparable.",
          "",
+         *([f"**Metric: class {K} AP only (`--cls {K}`)**, not the macro"
+            + (f"; intervals: moving-block bootstrap, L = {args.block_len}" if args.block_len else "")
+            + ".", ""] if K is not None else []),
          "## 1. Adopted system (no truncation)", "",
          "| condition | " + " | ".join(splits) + " |",
          "|---|" + "---:|" * len(splits)]
