@@ -113,13 +113,17 @@ Against the system with no σ, however, the score path is below on every cell he
 | lowlight / night | 0.0005 | 0.0687 | 0.0687 | +0.0682 [+0.0610, +0.0755] |
 | glare / night | 0.1559 | 0.0687 | 0.0687 | **−0.0872** [−0.1047, −0.0697] |
 
-By day the veto never fires, and union aggregation beats VIS alone on all four cells. At night the rule is right where the retrained VIS detector fails (fog and low light) and wrong where it still works (clean and glare). The rule gates on darkness, but what should decide is VIS health. Under the old detector, which scored zero at night, the two coincided.
+By day the veto never fires, and union aggregation beats VIS alone on all four cells. At night the rule is right where the retrained VIS detector fails (fog and low light) and wrong where it still works (clean and glare). The rule gates on darkness, but what should decide is VIS health (Figure 4 shows both on single frames). Under the old detector, which scored zero at night, the two coincided.
 
 Three pre-registered attempts to re-price the night arm, made before the retrain, failed or were voided, and no held-out night run exists to validate a replacement. The rule is reported as frozen and wrong for the detector it ships with.
 
 ![phase3_cells](../docs/figures/fig_phase3_cells.png)
 
 **Figure 3. The shipped rule on the five retrained systems (Table 2).** By day the fused output sits just above VIS. At night it equals IR alone: right where VIS fails, wrong where it works.
+
+![detections](../docs/figures/fig_detections.png)
+
+**Figure 4. The shipped rule on one day frame and one night frame, clean and fogged** (retrained system seed 0; fog on VIS only, IR clean in every row; ship class, boxes at confidence ≥ 0.25; IR warped into the VIS view by the per-frame homography; frames drawn at random on ground truth alone, never on a detection). By day both streams are kept, but IR boxes enter the merge with their scores scaled by IR's small capability weight, below the display threshold. At night the IR vote drops VIS on both frames: right on the fogged frame, where VIS finds nothing, and regardless of the ships VIS found on the clean one. One frame shows the mechanism; Table 2 gives the cost.
 
 **Is trusting IR's night vote safe?** IR was uncorrupted in every benchmark cell, so we attacked the vote with six IR hazards at three severities. A false night on a clear day vetoes a working VIS stream. The raw rule misread 94.8 percent of clear days as night under severe IR fog, and 19–27 percent under IR glare.
 
@@ -137,7 +141,7 @@ pohang04 was scored once, under a pre-registered rule: a held-out gap is declare
 * **Frozen night rule.** The shipped night rule is wrong for the shipped detector, and it is reported, not repaired.
 * **Two checkpoint generations, not pooled.** The R-D1 results are on pre-restore checkpoints.
 * **Unvalidated fixed strength.** α was fixed and never tuned, so whether another strength beats the system without σ is untested.
-* **Detector-only throughput.** 57.0 FPS is one detector's prediction step; the two-stream figure is derived, not measured.
+* **Detector-only throughput.** 57.0 FPS is one detector's fp32 prediction step on a laptop GPU, with the clock pinned at 1500 MHz because an unpinned sweep ranked some larger models faster than smaller ones; the two-stream figure is derived, not measured.
 
 ## 7. Conclusion
 

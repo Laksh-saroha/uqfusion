@@ -4,7 +4,7 @@ There are four drafts of the same paper, each shaped for one venue. All four der
 
 | file | venue | review | length target | this draft | emphasis |
 |---|---|---|---|---|---|
-| `PAPER_MACVI.md` | MaCVi, the Maritime Computer Vision workshop | double-blind (assumed) | 8 pages, CVF two-column, references extra (assumed) | 2.8k words, 2 tables, 3 figures | maritime: sensor failures at sea, the veto that broke, the IR night switch, one held-out run |
+| `PAPER_MACVI.md` | MaCVi, the Maritime Computer Vision workshop | double-blind (assumed) | 8 pages, CVF two-column, references extra (assumed) | 3.0k words, 2 tables, 4 figures | maritime: sensor failures at sea, the veto that broke, the IR night switch, one held-out run |
 | `PAPER_PBVS.md` | PBVS, Perception Beyond the Visible Spectrum (a CVPR workshop) | double-blind (assumed) | 8 pages, CVF two-column, references extra (assumed) | 2.5k words, 3 tables, 3 figures | VIS–IR: misregistration makes fusion concatenation, σ cannot arbitrate between bands, positioning against UA-CMDet, the IR night vote |
 | `PAPER_TMLR.md` | Transactions on Machine Learning Research | double-blind | no hard limit; a main body over 12 pages gets a longer review | 10.3k-word main body (5 tables, 5 figures), 8.4k in appendices A–M; compiled `tmlr/main.pdf` is 41 pages, references start on page 20 | pre-registration, informative versus useful, the metric as part of the registration, the failed replication, the evaluation protocol |
 | `PAPER_JOE.md` | IEEE Journal of Oceanic Engineering | single-blind (IEEE norm) | no fixed maximum; double-spaced review copy | 16.6k-word main body, 4.1k in appendices A–C | maritime engineering: the sensing problem, design lessons for vessel perception, the full evaluation |
@@ -55,7 +55,7 @@ Sources: [WACV 2027 workshops](https://wacv.thecvf.com/Conferences/2027/Workshop
 
 1. **Confirm each venue's current call:** deadline, page limit, template, and anonymity rules. The MaCVi 2027 venue is unknown.
 2. **Port to the venue's LaTeX template.** TMLR is ported and compiled (`tmlr/main.pdf`). The other three are Markdown drafts, and their page counts are estimates until typeset.
-3. **Workshop length.** Both workshop drafts sit below a typical 8-page budget. Room exists for the gate-history figure (MaCVi) or the Stage 1 detail (PBVS).
+3. **Workshop length.** Both workshop drafts sit below a typical 8-page budget. MaCVi now carries the detection examples (its Figure 4), and room remains for the gate-history figure (MaCVi) or the Stage 1 detail (PBVS).
 4. **TMLR length.** Typeset, the main body runs about 19 pages (references start on page 20 of 41; the detection examples of Figure 9 added one), above the 15 aimed for and well past TMLR's 12-page mark for a normal review. If it needs to shrink, the next cuts are §7.1's protocol detail to Appendix K, §4.2's decision layer to its figure plus one paragraph, and §6.4's "Independent probes" paragraph (it repeats §6.8).
 5. **Dual submission.** Check each venue's dual-submission and prior-publication rules before sending more than one version anywhere. Workshop proceedings often count as prior publication for journals.
 6. **Anonymization.** The TMLR, MaCVi and PBVS drafts carry no author block and no repository link. Restore both for the camera-ready.

@@ -123,7 +123,8 @@ C_6_1 = ("Ninety-three training runs, 31 YOLO variants with three seeds each fro
          "top three, yolo26x (0.2666 ± 0.0040), yolo26l (0.2664 ± 0.0070) and yolo26m (0.2626 ± 0.0109), differ by "
          "less than the larger seed sd of every pair: a YOLO26 m/l/x tier with no resolved order. yolo26m was "
          "chosen earlier, on the Phase 1 grid, under a rule fixed in advance; it stays inside the tier and runs at "
-         "57.0 FPS per detector against 30.7 for yolo26x (fp32, detector `predict()` only). The full table "
+         "57.0 FPS per detector against 30.7 for yolo26x (fp32, GPU clock pinned at 1500 MHz so that timings are "
+         "consistent, detector `predict()` only). The full table "
          "(Table 1), the Phase 1 selection record (Table 1b), the throughput of every variant (Figure 2), the "
          "disclosures and the IR architecture ladder are in "
          "Appendix {C}.")
