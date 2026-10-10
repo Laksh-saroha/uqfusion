@@ -296,3 +296,94 @@ from the detector" are different claims and only the first is true.
   block interval (L = 20) is above zero. ≥ 4/5 seeds at 0.0060 → REPLICATES; else ≥ 4/5 at
   0.0047 → REPLICATES AT SHIP FLOOR; else FAILS, and the title reverts to the 2026-10-08
   framing. Logged before the run.
+
+* **2026-10-10 — pohang04 corrupted cells re-scored under corruption v2: a SECOND EXPOSURE of
+  pohang04, disclosed** (`docs/prereg-p04-v2-rescore-2026-10-10.md`,
+  `scripts/holdout_p04_v2_rescore.py`; decided by Laksh 2026-10-10). The v1 corruptions behind the
+  ten descriptive cells of the 2026-09-20 look were found broken on 2026-10-09
+  (`docs/eval/corruption_v2/README.md`). Re-scores eight corrupted cells (three IR-glare cells are
+  not modelled by v2) with the look's systems, preset, calibration injection, draws, statistic and
+  bootstrap; only the corruption changes. **The `clean/clean` verdict is not re-scored** and the
+  look markers are not written. **pohang04 is no longer held out**: nothing scored on it from here
+  on may be called a held-out result. Descriptive, adopts nothing. Logged before the run.
+
+* **2026-10-10 — Phase 3 corrupted cells under corruption v2, development, descriptive**
+  (`scripts/build_corruption_v2_dev.py`, `scripts/p3_corrupt_cells.py --cache-root
+  runs/cache_p3dev_v2 --stats-root runs/derived_p3dev_v2`). Same systems, draws, arms, day/night
+  split and **fail criterion** as the 2026-09-27 corrupted-cells and fog-s1 entries; only the
+  corruption changes (v2). The parallel scorer was first shown to reproduce the recorded v1 JSON
+  exactly (max |diff| 0 over all six cells). **No pohang04 frame is scored.** Adopts nothing.
+  Logged before the run.
+
+* **2026-10-10 — R-D1 under corruption v2, development, descriptive robustness check**
+  (`scripts/ablate_uq_mechanism.py --cls 0 --cache-dir runs/cache_m_v2 --bright-dir
+  runs/derived_m_v2/brightness --structure-dir runs/derived_m_v2/structure`, both presets).
+  `runs/cache_m_v2` is `runs/cache_m` with VIS fog, lowlight and glare (s2, seed 1) rebuilt
+  under v2; everything else hard-linked. Cannot change the registered R-D1 verdict, which
+  stays the v1 one. **No pohang04 frame is scored.** Logged before the run.
+
+* **2026-10-10 — corruption v2 revised to revision 3 before any v2 cell was scored.** The
+  revision-2 night lamp lifted the dark floor of every night frame above the veto's `dark`
+  threshold (5th-percentile grey 16 vs 7 for real lights of the same clipped size; 100% vs 0% of
+  frames above 10.5), which would have switched the glare/night veto off for a reason absent from
+  real night frames. Found by comparing the shipped gate's axes on v2 frames with real TRAIN night
+  frames (`scripts/calibrate_lamp_tail.py`), not by any detection score: no v2 AP had been computed
+  on any cell when the change was made (the R-D1 v2 runs were stopped before writing output). The
+  glare spread's tail exponent was then fitted by night (lamp, real TRAIN lights) and by day (sun,
+  the TRAIN sun-entry event, `scripts/calibrate_sun_tail.py`); both give 1.5, and the day refit
+  moves AE_STRENGTH from 0 to 0.375. All v2 caches were rebuilt under the new code stamp; the three
+  entries above apply unchanged to revision 3.
+
+* **2026-10-10 — two v2 development runs that were not logged before they ran, disclosed here.**
+  (a) The v2 sensitivity rows (`scripts/v2_sensitivity.py`, draw 941, one constant moved per row:
+  glare AE 0 / AE 1 / intensity ×0.5 / ×2 / revision-2 Lorentzian, fog AE 0 / AE 1, IR_BETA_RATIO
+  0.3 / 1.0; `docs/eval/corruption_v2/sensitivity.md`). (b) Table 6 under v2
+  (`scripts/ir_hazards_v2.py`; gate statistics and veto rates only, no AP). Both development,
+  descriptive, adopt nothing, score no pohang04 frame; neither moved a constant (every v2 constant
+  was fixed by its TRAIN fit before any of them ran). The omission was found while writing the
+  2026-10-10 handoff.
+
+* **2026-10-10 — the AP cost of the weak-IR fallback under v2, development, descriptive**
+  (`scripts/v2_fallback_cost.py`). Table 6 v2 found the fallback vetoing a low-light VIS stream on
+  up to 96.3% of day frames when IR is fogged or noisy (§8.2 of the corruption README). This prices
+  it: VIS low light s2 (draws as built, 941) against IR fog s1 / s2 / s3 and IR noise s2 / s3 at
+  the IR draw 951, five Phase 3 systems, `crossmodal26m`, ship AP, day and night apart; reported
+  as VIS / IR / fused, veto rate and fused − max(VIS, IR) with the between-seed t-interval. New
+  caches: `runs/cache_p3dev_v2/seed{k}/draw941_951/gauss_ir_paired_{fog_s1,fog_s3,noise_s2,noise_s3}.pkl`.
+  Changes no rule and no constant; a fix would be a new rule and needs its own registration.
+  **No pohang04 frame is scored.** Logged before the run.
+
+* **2026-10-10 — the IR merge veto under corruption v2, development, descriptive**
+  (`scripts/v2_ir_merge_veto.py`). The fallback-cost run above found that with clean VIS and IR fog
+  s3 the union falls below VIS alone by day (−0.0096, no veto firing): a near-dead IR stream's boxes
+  enter the merge. `crossmodal26m` switched the IR merge veto (drop an unhealthy IR from the merge
+  while VIS is healthy) off after it was measured net-harmful on the v1 IR corruptions. This
+  re-measures that one switch on the same v2 cells (VIS clean / low light × IR clean, fog s1–s3,
+  noise s2–s3; draw 941 / 951; five systems; ship AP, day and night), on against off, paired by
+  system. Adopts nothing, changes no preset; a change would need its own registration.
+  **No pohang04 frame is scored.** Logged before the run.
+  *Addendum, same day, before the run:* the IR merge veto check gains a third arm, the shipped
+  preset with the cross-modal support bonus off (`support_gamma` 0), on the same cells, to locate the
+  union's loss under a near-dead IR stream (IR fog s3: the merge veto drops IR on 92% of day frames
+  and fused is still 0.012 below VIS alone). Descriptive; changes no preset.
+
+* **2026-10-10 — two v1-priced decisions re-checked under corruption v2, development, descriptive.**
+  (a) **The veil repair** (`scripts/v2_veil_reprice.py`): `crossmodal26m` makes the veil axis
+  conditional on the night arm, a repair priced on v1 fog (whose 21-px blur is what `veil` detected).
+  Three arms on the five Phase 3 systems, v2 caches, VIS draws 941–944, cells clean / fog / lowlight /
+  glare / fog s1 × day / night, ship AP: shipped; veil unconditional (`veil_requires_night` off, the
+  pre-repair rule); veil axis removed. Deltas paired by system on the draw mean. (b) **Stage 1 under
+  v2** (`scripts/stage1_crossing.py --cache-dir runs/cache_m_v2 --bright-dir runs/derived_m_v2/brightness
+  --structure-dir runs/derived_m_v2/structure`): the registered A/B/C/D crossing re-run with only the
+  VIS fog / lowlight / glare caches changed to v2. Cannot change the registered S1-NULL verdict, which
+  stays the v1 one; reported as a robustness check. Both adopt nothing and change no preset.
+  **No pohang04 frame is scored.** Logged before the runs.
+
+* **2026-10-10 — a candidate repair of the weak-IR fallback, priced on development, descriptive**
+  (`scripts/v2_fallback_fix.py`). The veil re-price found the veil axis inert with clean IR under v2,
+  acting only inside the fallback (`concentrated OR (dark AND veil)`), which is where the low-light hole
+  is. One arm, the veil axis removed (`gini_by_cond` emptied; with clean IR this changed no cell), against
+  the shipped preset, on VIS clean / low light / fog × IR clean, fog s1–s3, noise s2–s3, draw 941 / 951,
+  five systems, ship AP, day and night; paired by system. Fogged VIS is included because protecting a
+  fogged night with damaged IR is what the fallback was built for. Adopts nothing; a change would need its
+  own registration. **No pohang04 frame is scored.** Logged before the run.

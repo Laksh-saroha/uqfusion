@@ -39,10 +39,14 @@ def main() -> int:
     ap.add_argument("--preset", required=True)
     ap.add_argument("--cache-dir", default="runs/cache_m")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--bright-dir", default="runs/derived/brightness",
+                    help="runs/derived_m_v2/brightness for the corruption-v2 re-run")
+    ap.add_argument("--structure-dir", default="runs/derived/structure")
     args = ap.parse_args()
 
     t0 = time.time()
-    ctx = load_context(preset=args.preset, cache_dir=args.cache_dir, verbose=False)
+    ctx = load_context(preset=args.preset, cache_dir=args.cache_dir, bright_dir=args.bright_dir,
+                       structure_dir=args.structure_dir, verbose=False)
     res: dict = {"preset": args.preset, "cache_dir": args.cache_dir, "ap": {}, "delta": {}}
     for cond in ctx.vis_by_cond:
         vis, ir = ctx.vis_by_cond[cond], ctx.ir_clean

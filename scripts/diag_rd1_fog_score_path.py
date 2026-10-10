@@ -115,10 +115,14 @@ def main() -> int:
     ap.add_argument("--cls", type=int, default=None, help="score this class's AP (0 = ship)")
     ap.add_argument("--conds", nargs="+", default=[COND])
     ap.add_argument("--preset", default="crossmodal26m", help="R-D1 ran both presets on runs/cache_m")
+    ap.add_argument("--cache-dir", default="runs/cache_m")
+    ap.add_argument("--bright-dir", default="runs/derived/brightness",
+                    help="runs/derived_m_v2/brightness for the corruption-v2 re-run")
+    ap.add_argument("--structure-dir", default="runs/derived/structure")
     args = ap.parse_args()
     t0 = time.time()
-    ctx = load_context(preset=args.preset, cache_dir="runs/cache_m", conditions=tuple(args.conds),
-                       verbose=False)
+    ctx = load_context(preset=args.preset, cache_dir=args.cache_dir, conditions=tuple(args.conds),
+                       bright_dir=args.bright_dir, structure_dir=args.structure_dir, verbose=False)
     for cond in args.conds:
         decompose(ctx, cond, args.cls, t0)
     return 0

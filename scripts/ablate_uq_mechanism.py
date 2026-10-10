@@ -145,10 +145,14 @@ def main() -> int:
     ap.add_argument("--cls", type=int, default=None,
                     help="score this class's AP (0 = ship) instead of the macro")
     ap.add_argument("--json", default=None, help="also dump the numbers here")
+    ap.add_argument("--bright-dir", default="runs/derived/brightness",
+                    help="runs/derived_m_v2/brightness for the corruption-v2 re-run")
+    ap.add_argument("--structure-dir", default="runs/derived/structure")
     args = ap.parse_args()
 
     t0 = time.time()
-    ctx = load_context(preset=args.preset, cache_dir=args.cache_dir, verbose=False)
+    ctx = load_context(preset=args.preset, cache_dir=args.cache_dir, bright_dir=args.bright_dir,
+                       structure_dir=args.structure_dir, verbose=False)
     conditions = list(ctx.vis_by_cond)
     print(f"[abl] preset {args.preset}  conditions {conditions}")
 

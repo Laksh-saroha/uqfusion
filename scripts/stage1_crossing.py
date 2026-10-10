@@ -143,10 +143,16 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="runs/eval/stage1_crossing_2026-09-14.md")
     ap.add_argument("--boot", type=int, default=N_BOOT)
+    # Corruption v2 robustness re-run (2026-10-10, exposure ledger): point the same crossing at
+    # runs/cache_m_v2 and its statistics. Defaults reproduce the registered run.
+    ap.add_argument("--cache-dir", default=CACHE_DIR)
+    ap.add_argument("--bright-dir", default="runs/derived/brightness")
+    ap.add_argument("--structure-dir", default="runs/derived/structure")
     args = ap.parse_args()
     t0 = time.time()
 
-    ctxs = {thr: load_context(preset=PRESET, cache_dir=CACHE_DIR, iou_thr=thr, verbose=(thr == THR_SHIPPED))
+    ctxs = {thr: load_context(preset=PRESET, cache_dir=args.cache_dir, bright_dir=args.bright_dir,
+                              structure_dir=args.structure_dir, iou_thr=thr, verbose=(thr == THR_SHIPPED))
             for thr in (THR_SHIPPED, THR_RELAXED)}
     c85, c55 = ctxs[THR_SHIPPED], ctxs[THR_RELAXED]
     # §4.1: everything but the threshold is held fixed. Checked, not assumed.
@@ -209,9 +215,15 @@ def main() -> int:
 
     # -------------------------------------------------------------------------- report
     L = []
+    if args.cache_dir != CACHE_DIR:
+        L.append(f"**Robustness re-run, not the registered verdict.** Caches `{args.cache_dir}`, statistics "
+                 f"`{args.bright_dir}` / `{args.structure_dir}`: the registered crossing with only the corrupted "
+                 "VIS caches changed (corruption v2, exposure ledger 2026-10-10). The registered verdict is the "
+                 "one in `runs/eval/stage1_crossing_2026-09-14.md`; the word *Verdict* below is the rule applied "
+                 "to these caches, nothing more.")
     L.append("Executes [`docs/prereg-phase3-retrain-2026-09-10.md`](../../docs/prereg-phase3-retrain-2026-09-10.md) "
              "§4, committed before this ran. The rule is fixed there; this report applies it. "
-             f"Preset `{PRESET}`, caches `{CACHE_DIR}`, ship AP, block bootstrap L={BLOCK_LEN}, "
+             f"Preset `{PRESET}`, caches `{args.cache_dir}`, ship AP, block bootstrap L={BLOCK_LEN}, "
              f"n_boot={args.boot}, seed {SEED}.")
     L.append(f"## Verdict — **{verdict}**\n\n"
              f"D is non-inferior to A (upper 95% CI of AP(A) − AP(D) < {MARGIN}) on "
@@ -279,14 +291,14 @@ def main() -> int:
     L.append("## What this does not settle\n\n"
              "* Development data only (§4.3). This is an exposure and is recorded in the "
              "exposure ledger.\n"
-             f"* One trained model per stream (`{CACHE_DIR}`, pre-Phase-3 checkpoints). Training-"
+             f"* One trained model per stream (`{args.cache_dir}`, pre-Phase-3 checkpoints). Training-"
              "seed variance is not in these intervals.\n"
              "* `runs/cache_m/gauss_vis_train_clean.pkl` is fitted on `maha_fit_vis.txt`, which "
              "holds 819 pohang04 frames (holdout audit). `crossmodal26m` drives weights from the "
              "capability prior alone, and no pohang04 frame is scored here; the reference is "
              "recorded, not claimed inert.")
 
-    ident = system_identity(c85, preset=PRESET, cache_dir=CACHE_DIR, thresholds=[THR_SHIPPED, THR_RELAXED],
+    ident = system_identity(c85, preset=PRESET, cache_dir=args.cache_dir, thresholds=[THR_SHIPPED, THR_RELAXED],
                             block_len=BLOCK_LEN, n_boot=args.boot, seed=SEED, margin=MARGIN)
     write_md(Path(args.out), "Phase 3 Stage 1 — correspondence × mechanism crossing", L, identity=ident)
     Path(args.out).with_suffix(".json").write_text(json.dumps({

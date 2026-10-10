@@ -57,11 +57,41 @@ def ship_ap(parts, sel) -> float:
     return float(e["ap50_95"]) if e else float("nan")
 
 
+def score_one(job):
+    """One (seed, draw) context: ship AP per arm and veto rate per slice, for every condition."""
+    k, v, conds, cache_root, stats_root, verbose = job
+    ctx = load_context(preset=PRESET, cache_dir=f"{cache_root}/seed{k}/{sub(v)}",
+                       bright_dir=f"{stats_root}/brightness/{sub(v)}",
+                       structure_dir=f"{stats_root}/structure/{sub(v)}",
+                       conditions=conds, verbose=verbose)
+    if any("pohang04" in r for r in ctx.runs):
+        raise SystemExit(f"seed {k} draw {v}: a pohang04 frame reached the development context")
+    paths = [r["image_path"] for r in ctx.vis_by_cond[conds[0]]]
+    night = np.isin(ctx.runs, NIGHT_RUNS)
+    sl = {"day": np.flatnonzero(~night), "night": np.flatnonzero(night)}
+    ap_, veto_ = {}, {}
+    for c in conds:
+        out = run_systems(ctx, c)
+        parts = {"vis": frame_parts(ctx.vis_by_cond[c], ctx.gts),
+                 "ir": frame_parts(out["ir_in_vis"], ctx.gts),
+                 "fused": frame_parts(out["fused_gated"], ctx.gts)}
+        vv = np.asarray(out["veto_vis"], dtype=bool)
+        for s, idx in sl.items():
+            for a in ARMS:
+                ap_[(c, s, a)] = ship_ap(parts[a], idx)
+            veto_[(c, s)] = float(vv[idx].mean())
+    return k, v, paths, ap_, veto_
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="docs/eval/p3_corrupt_cells_2026-09-27.md")
     ap.add_argument("--conds", nargs="+", default=list(CONDS),
                     help="VIS conditions; each needs caches and statistics under the draw directories")
+    ap.add_argument("--cache-root", default="runs/cache_p3dev",
+                    help="runs/cache_p3dev_v2 scores the corruption-v2 rebuild (docs/eval/corruption_v2/)")
+    ap.add_argument("--stats-root", default="runs/derived_p3dev")
+    ap.add_argument("--workers", type=int, default=10, help="(seed, draw) contexts scored in parallel")
     args = ap.parse_args()
     conds = tuple(args.conds)
     if Path(args.out).exists():
@@ -72,33 +102,26 @@ def main() -> int:
     ap_ = {c: {s: {a: np.full((len(SEEDS), len(DRAWS)), np.nan) for a in ARMS} for s in ("day", "night")}
            for c in conds}
     veto_ = {c: {s: np.full((len(SEEDS), len(DRAWS)), np.nan) for s in ("day", "night")} for c in conds}
-    ctx0, paths0 = None, None
-    for i, k in enumerate(SEEDS):
-        for j, v in enumerate(DRAWS):
-            ctx = load_context(preset=PRESET, cache_dir=f"runs/cache_p3dev/seed{k}/{sub(v)}",
-                               bright_dir=f"runs/derived_p3dev/brightness/{sub(v)}",
-                               structure_dir=f"runs/derived_p3dev/structure/{sub(v)}",
-                               conditions=conds, verbose=(i == 0 and j == 0))
-            if any("pohang04" in r for r in ctx.runs):
-                raise SystemExit(f"seed {k} draw {v}: a pohang04 frame reached the development context")
-            p = [r["image_path"] for r in ctx.vis_by_cond[conds[0]]]
-            if paths0 is None:
-                paths0, ctx0 = p, ctx
-            elif p != paths0:
-                raise SystemExit(f"seed {k} draw {v}: frame order differs")
-            night = np.isin(ctx.runs, NIGHT_RUNS)
-            sl = {"day": np.flatnonzero(~night), "night": np.flatnonzero(night)}
-            for c in conds:
-                out = run_systems(ctx, c)
-                parts = {"vis": frame_parts(ctx.vis_by_cond[c], ctx.gts),
-                         "ir": frame_parts(out["ir_in_vis"], ctx.gts),
-                         "fused": frame_parts(out["fused_gated"], ctx.gts)}
-                vv = np.asarray(out["veto_vis"], dtype=bool)
-                for s, idx in sl.items():
-                    for a in ARMS:
-                        ap_[c][s][a][i, j] = ship_ap(parts[a], idx)
-                    veto_[c][s][i, j] = float(vv[idx].mean())
-            print(f"[corrupt] seed {k} draw {v} scored ({time.time() - t0:.0f}s)", flush=True)
+    from concurrent.futures import ProcessPoolExecutor
+
+    jobs = [(k, v, conds, args.cache_root, args.stats_root, i == 0 and j == 0)
+            for i, k in enumerate(SEEDS) for j, v in enumerate(DRAWS)]
+    with ProcessPoolExecutor(max(1, args.workers)) as ex:
+        results = list(ex.map(score_one, jobs))
+    paths0 = results[0][2]
+    for k, v, p, a_, ve_ in results:
+        if p != paths0:
+            raise SystemExit(f"seed {k} draw {v}: frame order differs")
+        i, j = SEEDS.index(k), DRAWS.index(v)
+        for (c, s, a), x in a_.items():
+            ap_[c][s][a][i, j] = x
+        for (c, s), x in ve_.items():
+            veto_[c][s][i, j] = x
+    ctx0 = load_context(preset=PRESET, cache_dir=f"{args.cache_root}/seed{SEEDS[0]}/{sub(DRAWS[0])}",
+                        bright_dir=f"{args.stats_root}/brightness/{sub(DRAWS[0])}",
+                        structure_dir=f"{args.stats_root}/structure/{sub(DRAWS[0])}",
+                        conditions=conds, verbose=False)
+    print(f"[corrupt] {len(results)} (seed, draw) contexts scored ({time.time() - t0:.0f}s)", flush=True)
 
     res = {}
     for c in conds:
@@ -138,8 +161,8 @@ def main() -> int:
     L = [
         "Logged in `docs/exposure-ledger-2026-09-09.md` §7 (2026-09-27) before it ran. **No pohang04 frame "
         "is read.** Ship AP (class 0, AP50-95, local convention), preset `crossmodal26m`, five Phase 3 "
-        "systems, VIS conditions " + ", ".join(f"`{c}`" for c in conds) + ", VIS draws 941–944, caches `runs/cache_p3dev/seed{k}/draw{v}_{v+10}/`, statistics "
-        "`runs/derived_p3dev/`. Day and night never pooled. **Adopts nothing.**",
+        "systems, VIS conditions " + ", ".join(f"`{c}`" for c in conds) + ", VIS draws 941–944, caches `" + args.cache_root + "/seed{k}/draw{v}_{v+10}/`, statistics "
+        "`" + args.stats_root + "/`. Day and night never pooled. **Adopts nothing.**",
         "## Per cell\n\nAP is the mean over seeds of the draw-averaged value. Deltas carry the between-seed "
         "95% t-interval (df 4) on draw-averaged per-seed deltas, the decision interval. **Fails** = a delta "
         "≤ −0.0060 with its interval entirely below zero (fixed before the run).\n\n"
@@ -152,12 +175,13 @@ def main() -> int:
         "night fails, −0.1847).",
     ]
     ident = system_identity(ctx0, preset=PRESET, seeds=list(SEEDS), draws=list(DRAWS), conditions=list(conds),
-                            caches="runs/cache_p3dev/seed{k}/draw{v}_{v+10}")
+                            caches=args.cache_root + "/seed{k}/draw{v}_{v+10}")
     write_md(Path(args.out), "Phase 3 corrupted cells — does fused ≥ max(VIS, IR) survive the retrain?",
              L, identity=ident)
     Path(args.out).with_suffix(".json").write_text(json.dumps(
         {"cells": res, "config": {"preset": PRESET, "seeds": list(SEEDS), "draws": list(DRAWS),
-                                  "conditions": list(conds), "floor": FLOOR, "ship_class": SHIP}},
+                                  "conditions": list(conds), "floor": FLOOR, "ship_class": SHIP,
+                                  "cache_root": args.cache_root, "stats_root": args.stats_root}},
         indent=1), encoding="utf-8")
     print(f"[corrupt] done in {time.time() - t0:.0f}s -> {args.out}")
     return 0
