@@ -57,8 +57,12 @@ CTX_FIELDS = (
 
 def _git(*args: str) -> str:
     try:
-        return subprocess.run(("git", *args), cwd=ROOT, capture_output=True,
-                              text=True, timeout=10).stdout.strip()
+        # Explicit UTF-8: with the Windows default (cp1252) a diff carrying any UTF-8 byte
+        # it cannot map (0x81, 0x8d, ...) killed the reader thread, stdout came back empty,
+        # and a dirty tree was stamped git_dirty False (seen 2026-10-09). ASCII-only diffs
+        # decode identically, so dirty_sha256 values stamped before this fix still match.
+        return subprocess.run(("git", *args), cwd=ROOT, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=10).stdout.strip()
     except Exception:
         return ""
 

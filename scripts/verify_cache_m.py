@@ -78,7 +78,7 @@ def main() -> int:
           "absolute difference means the stems may not be shared.", "",
           "| cache | modality | stat | max abs diff |", "|---|---|---|---:|"]
     import cv2                                                      # noqa: E402
-    from uqfusion.eval.corruptions import make_corruption           # noqa: E402
+    from uqfusion.eval.corruptions import corruption_from_meta      # noqa: E402
     sys.path.insert(0, str(ROOT / "scripts"))
     import frame_brightness as fb                                   # noqa: E402
     import frame_structure as fs                                    # noqa: E402
@@ -88,8 +88,7 @@ def main() -> int:
             L.append(f"| {stem} | {mod} | — | *(cache missing)* |")
             continue
         recs, meta = load_cache(p)
-        corr = (make_corruption(meta["corrupt"], meta["severity"], meta["corrupt_seed"])
-                if meta.get("corrupt") else None)
+        corr = corruption_from_meta(meta, [r["image_path"] for r in recs], mod)
         lo, hi = fs.content_rows(mod)
         idx = np.linspace(0, len(recs) - 1, 40).astype(int)          # 40 frames is plenty
         got_s, got_b = [], []

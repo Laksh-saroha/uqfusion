@@ -44,7 +44,7 @@ import numpy as np
 
 from uqfusion.config import load_config
 from uqfusion.eval.cache import load_cache
-from uqfusion.eval.corruptions import make_corruption
+from uqfusion.eval.corruptions import corruption_from_meta
 
 # Native sensor sizes, from the prepared-tree build (handoff §4.5).
 NATIVE = {"vis": (2048, 1080), "ir": (640, 512)}
@@ -111,7 +111,7 @@ def main() -> int:
     lo, hi = content_rows(args.modality)
     transform = None
     if meta.get("corrupt"):
-        transform = make_corruption(meta["corrupt"], meta["severity"], meta["corrupt_seed"])
+        transform = corruption_from_meta(meta, [r["image_path"] for r in recs], args.modality)
         print(f"[bright] replaying corruption {meta['corrupt']} s{meta['severity']} "
               f"seed {meta['corrupt_seed']} — file on disk is clean, cache is not")
 
@@ -140,6 +140,7 @@ def main() -> int:
         "corrupt": meta.get("corrupt"),
         "severity": meta.get("severity"),
         "corrupt_seed": meta.get("corrupt_seed"),
+        **({"corrupt_version": meta["corrupt_version"]} if meta.get("corrupt_version") else {}),
         "n_frames": len(rows),
         "frames": rows,
     }

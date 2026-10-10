@@ -151,6 +151,62 @@ class PlainPredictor:
                 record["dfl_sigma_ltrb"] = (det[:, 10:14] / gain).cpu().numpy()
         return record
 
+    def predict_batch(self, images: list) -> list[dict]:
+        """`__call__` over several frames in ONE forward pass; same record schema, same order.
+
+        Throughput, not a new protocol: preprocessing, selection and scaling are the
+        per-frame steps of `__call__`, applied to each row of the batch. The forward pass
+        is not bit-identical to batch 1 (cuDNN picks different kernels per batch shape);
+        the difference is measured, not assumed -- see `scripts/check_batched_inference.py`.
+        `__call__` itself is untouched, so batch-1 caches still reproduce exactly.
+        """
+        from ultralytics.utils import nms, ops
+
+        im0s = [self._read(im) for im in images]
+        ts = []
+        for im0 in im0s:
+            im = self._letterbox(image=im0)
+            # float + /255 on the CPU exactly as `__call__` does: CUDA divides by a scalar
+            # via its reciprocal, 1 ulp off on ~49% of pixels, and TF32 convolutions turn
+            # that into confidence changes up to ~1e-2 (measured 2026-10-10).
+            ts.append(torch.from_numpy(np.ascontiguousarray(im[..., ::-1].transpose(2, 0, 1))).float().div_(255.0))
+        if len({tuple(t.shape) for t in ts}) != 1:
+            raise ValueError(f"letterboxed shapes differ within a batch: {sorted({tuple(t.shape) for t in ts})}")
+        t = torch.stack(ts).to(self.device)
+
+        with torch.no_grad():
+            out = self.model(t)
+        y = out[0] if isinstance(out, (tuple, list)) else out
+
+        if self.end2end:
+            dets = [yi[yi[:, 4] >= self.conf] for yi in y]
+        else:
+            dets = nms.non_max_suppression(y, self.conf, self.iou, nc=self.nc, max_det=self.max_det)
+        feats = self._feats.cpu().numpy() if self._feats is not None else None
+
+        records = []
+        for i, (im0, det) in enumerate(zip(im0s, dets)):
+            h0, w0 = im0.shape[:2]
+            boxes = det[:, :4].clone()
+            if boxes.shape[0]:
+                boxes = ops.scale_boxes(t.shape[2:], boxes, im0.shape)
+            gain = min(t.shape[2] / h0, t.shape[3] / w0)
+            det_c = det.cpu()
+            rec = {
+                "boxes_xyxy": boxes.cpu().numpy(),
+                "conf": det_c[:, 4].numpy(),
+                "cls": det_c[:, 5].numpy().astype(int),
+                "image_hw": (h0, w0),
+            }
+            if feats is not None:
+                rec["feat"] = feats[i]
+            if self.has_sigma:
+                rec["sigma_ltrb"] = (det_c[:, 6:10] / gain).numpy()
+                if det_c.shape[1] >= 14:
+                    rec["dfl_sigma_ltrb"] = (det_c[:, 10:14] / gain).numpy()
+            records.append(rec)
+        return records
+
 
 class UQPredictor(PlainPredictor):
     """Gaussian-head inference: σ + DFL-derived σ + features, one forward pass."""

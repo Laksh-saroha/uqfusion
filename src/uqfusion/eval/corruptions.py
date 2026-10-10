@@ -39,8 +39,24 @@ def _albu(name: str, severity: int):
     raise ValueError(f"unknown corruption '{name}' — options: {CORRUPTIONS}")
 
 
-def make_corruption(name: str, severity: int = 2, seed: int = 0):
-    """Returns transform(im_bgr, index) -> corrupted im_bgr (deterministic per index)."""
+def make_corruption(name: str, severity: int = 2, seed: int = 0, *, version: str = "v1",
+                    modality: str = "vis", images: list | None = None, params: dict | None = None):
+    """Returns transform(im_bgr, index) -> corrupted im_bgr (deterministic per index).
+
+    `version="v1"` (the default, and what every cache built before 2026-10-09 used) is the
+    albumentations parameterisation above, bit-for-bit unchanged. `version="v2"` is the
+    physically modelled, content-only rebuild in `corruptions_v2.py`; it needs `modality`
+    and, for fog and glare, the ordered frame list `images` the index refers to; `params`
+    overrides v2 constants for a sensitivity row (v2 only).
+    """
+    if version == "v2":
+        from uqfusion.eval.corruptions_v2 import make_corruption_v2
+
+        return make_corruption_v2(name, severity, seed, modality=modality, images=images, params=params)
+    if params:
+        raise ValueError("params= is a corruption v2 option")
+    if version != "v1":
+        raise ValueError(f"unknown corruption version '{version}' -- options: v1, v2")
     import albumentations as A
 
     t = A.Compose([_albu(name, severity)], p=1.0)
@@ -49,4 +65,25 @@ def make_corruption(name: str, severity: int = 2, seed: int = 0):
         t.set_random_seed(seed * 100003 + index)
         return t(image=im_bgr)["image"]
 
+    transform.spec = {"corrupt": name, "severity": severity, "corrupt_seed": seed, "corrupt_version": "v1"}
     return transform
+
+
+def corruption_from_meta(meta: dict, images: list | None = None, modality: str | None = None):
+    """The transform a cache (or statistics file) was built with, or None for a clean one.
+
+    Caches written before v2 carry no `corrupt_version`; they are v1 by construction. A v2
+    cache stamped with a different `corrupt_code` was made by an older revision of
+    corruptions_v2.py and cannot be replayed by this one: that raises.
+    """
+    if not meta.get("corrupt"):
+        return None
+    tf = make_corruption(meta["corrupt"], meta["severity"], meta["corrupt_seed"],
+                         version=meta.get("corrupt_version") or "v1",
+                         modality=modality or meta.get("modality") or "vis", images=images,
+                         params=meta.get("corrupt_params"))
+    want = meta.get("corrupt_code")
+    if (meta.get("corrupt_version") == "v2" and tf.spec.get("corrupt_code") != want):
+        raise ValueError(f"cache built by corruptions_v2 revision {want!r}, this is "
+                         f"{tf.spec.get('corrupt_code')!r}: rebuild it rather than replay it")
+    return tf

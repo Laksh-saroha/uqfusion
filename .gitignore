@@ -45,3 +45,6 @@ scratch_val_perclass*.log
 
 # server dgxanode01 snapshot (workspace mirror, ~37 GB of weights/logs); see server_dgxanode01/README.md
 server_dgxanode01/
+
+# isolated venv for Depth Anything V2 (corruption v2 fog depth); inherits system site-packages
+.venv_depth/
