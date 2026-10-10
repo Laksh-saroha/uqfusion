@@ -179,13 +179,14 @@ T_ABSTRACT = (
     "detectors with single-pass Gaussian variance heads feed a decision layer, and the registered comparison is "
     "real predicted σ against the same σ shuffled onto the wrong boxes, on ship AP, with a 0.0060 floor and "
     "block-bootstrap intervals. As a coordinate weight σ passes on zero of four conditions; as a score re-ranker it "
-    "passes on three, so it is informative. It is not useful: the signal lies within each detector's own boxes, the "
+    "passes on three with the corruptions it was registered on (one or two of four with physically modelled "
+    "corruptions), so it is informative. It is not useful: the signal lies within each detector's own boxes, the "
     "σ-scored system is below the system with no σ on six of eight cells, and a learned within-detector variant "
     "failed its pre-registered replication on five retrained detectors (positive on all five, beyond the floor on "
     "two). The recorded runs had scored a ship-and-buoy macro instead of the registered metric, and the macro read "
     "NULL on both paths; we argue that the scored quantity belongs in the registration. The mechanism that shipped "
     "instead, an image-statistic veto with union aggregation, beats the visible stream by day on five retrained "
-    "systems (+0.0059 to +0.0107 AP) but discards a working visible stream at night (−0.1847) once a label artifact "
+    "systems (+0.0070 to +0.0133 AP) but discards a working visible stream at night (−0.1847) once a label artifact "
     "behind its night arm was corrected. Paired noise floors, dependence-aware intervals and magnitude floors moved "
     "20 of 74 earlier findings to indeterminate, and one logged look at an untouched run returns a gap of +0.0216 "
     "that excludes neither zero nor 0.05.")
@@ -193,7 +194,8 @@ T_C1 = (
     "1. **A pre-registered test with a split answer.** As a coordinate weight in the fusion, real σ does not beat "
     "the same σ shuffled onto the wrong boxes on any of four conditions at a 0.0060 AP floor (R-D1), and letting σ "
     "arbitrate relaxed cross-modal correspondences does not rescue it (Stage 1, S1-NULL). As a score re-ranker, real "
-    "σ beats shuffled σ on three of four conditions on the registered metric, ship AP, so the uncertainty is "
+    "σ beats shuffled σ on three of four conditions on the registered metric, ship AP, on the corruptions it was "
+    "registered with (two and one of four on physically modelled corruptions, §6.4), so the uncertainty is "
     "informative. It is not useful: the re-ranking is within each detector's own boxes, and the σ-scored system is "
     "below the shipped system without σ on six of eight cells (§6.4). Learned jointly with confidence, σ's "
     "within-detector gain is positive on all five retrained detectors but fails its pre-registered replication at "
@@ -260,10 +262,12 @@ T_6_3_INTRO = (
     "lessons are in Appendix G.1; two of the lessons recur in §8. Here we re-measure the shipped rule on the five "
     "Phase 3 systems.")
 T_FIG6 = (
-    "**Figure 7. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean.** By day "
-    "the fused output sits just above VIS alone on every cell. At night VIS is vetoed on every frame, so the fused "
-    "output equals IR alone: right where VIS fails (fog, low light), wrong where it still works (clean, glare). "
-    "Sources: `docs/eval/p3_night_check_2026-09-27.json`, `docs/eval/p3_corrupt_cells_2026-09-27.json`.")
+    "**Figure 7. The shipped rule on the five Phase 3 systems (Table 3b), ship AP (local AP), seed mean, corruption "
+    "v2.** By day the fused output sits just above VIS alone on every cell, and above the clean IR stream where fog "
+    "takes VIS below it. At night VIS is vetoed on every clean, low-light and glared frame and on 86 percent of "
+    "fogged ones, so the fused output equals IR alone: right under fog, where VIS falls below IR, and wrong on the "
+    "other three night cells, where VIS still works. Sources: `docs/eval/p3_night_check_2026-09-27.json`, "
+    "`docs/eval/p3_corrupt_cells_v2_2026-10-10.json`.")
 T_6_4_DECOMP = (
     "**The gain is re-ranking within a stream, not fusion.** We decomposed the score-path deltas by emptying the IR "
     "stream, descriptively and after the verdict (Appendix H.2). By day, VIS re-ranking alone gives +0.0160 on clean "
@@ -287,7 +291,8 @@ T_6_5_POST = (
 T_6_6_INHERIT = (
     "**The retrained system inherits the rule and pays for it.** The five Phase 3 VIS detectors trained on the "
     "restored labels see at night (0.2535 seed-mean ship AP on the night run), but the frozen rule still drops VIS on "
-    "every night frame (Figure 9), at the costs in Table 3b. The rule was correct for the detector it was written against and "
+    "every night frame (Figure 9; Appendix G.3 shows the other two conditions and three further scenes), at the "
+    "costs in Table 3b. The rule was correct for the detector it was written against and "
     "is wrong for the detector it ships with. Nothing in the image changed; what changed is the claim the rule makes "
     "about the detector.")
 T_6_6_ARM = (
@@ -300,11 +305,18 @@ T_6_6_ARM = (
     "defect of the shipped system, not a tuned repair.")
 T_6_7 = (
     "The night vote trusts IR, which was uncorrupted in every benchmark cell, so we attacked the frozen rule "
-    "`ir_p05 > 41.5` with six IR hazards at three severities (Appendix I, Table 6). A false night on a clear day "
-    "vetoes a working VIS stream. The raw rule misreads up to 94.8 percent of clear days as night under IR fog and "
-    "19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and an authority bound "
-    "took the false-night rate on 19 IR-corruption arms to 0 percent at zero benchmark cost; that figure is "
-    "in-sample (§9), and the both-degraded worst-case false-veto rate fell from 24 percent to 1.3 percent. An "
+    "`ir_p05 > 41.5` with IR blur, fog and noise at three severities (Appendix I, Table 6; corruption v2). A false "
+    "night on a clear day vetoes a working VIS stream. The raw rule misreads up to 61.4 percent of clear days as "
+    "night under IR fog and 96.3 percent under IR noise. The hardened vote (two votes, the multivariate IR health "
+    "score and an authority bound) calls no false night on any of the nine arms; that figure is in-sample (§9). "
+    "The weak-IR fallback is the hole: with low-light VIS and fogged or noisy IR it vetoes VIS on up to 96.3 "
+    "percent of day frames, because v2 low light, like a fogged night, trips both `dark` and `veil`. On the v1 "
+    "corruptions the both-degraded worst case had been 1.3 percent. Priced on development frames, those vetoes "
+    "cost 0.0067 to 0.0125 ship AP at moderate IR damage and 0.11 to 0.16 at severe damage. A fogged IR also hurts "
+    "with no veto at all: its scattered boxes earn VIS false positives the cross-modal support bonus, which then "
+    "costs up to 0.0113 where it is worth +0.0068 with clean IR. Dropping `veil` from the fallback, the one place "
+    "the axis still acts under v2, recovers +0.0074 to +0.1431 on those low-light days and changes none of the 31 "
+    "other cells; it is one draw on development frames, a candidate for a registered fix and not a change. An "
     "abstain signal was demoted to an advisory flag after it prevented zero bad vetoes and lost 2,095 correct ones.")
 T_6_8_LEAD = (
     "Table L (Appendix J) lists the fusion and post-processing levers that were tested and not adopted, as paired "
@@ -316,12 +328,15 @@ T_7_1_LOOK = (
     "writes a `LOOK_TAKEN` marker before scoring begins, so a crash mid-look still counts as the look having been "
     "taken (Appendix K.1). The exposure is logged in the project's ledger.")
 T_7_2_DESC = (
-    "The ten descriptive cells (Table 7, Appendix K.2) carry no pass or fail language. They show only what the "
-    "development cells already showed: the fused output tracks the VIS stream. IR-side corruption leaves it within "
-    "±0.0014 of clean, and VIS-side corruption moves it by up to 0.2568.")
+    "The descriptive cells (Table 7, Appendix K.2) carry no pass or fail language. Re-scored under the v2 "
+    "corruptions, they show what the development cells show: the fused output tracks the VIS stream. IR-side "
+    "corruption leaves it within 0.0047 of clean, and VIS-side corruption moves it by up to 0.2559. Low light "
+    "(0.2134, where v1's additive clip had left 0.0121), rain (+0.0359) and fog (−0.0136) moved with the "
+    "corruption model, not with the system; the three IR-glare cells have no v2 counterpart.")
 T_LIM = [
     "1. **One held-out run.** No untouched test set existed before pohang04; pohang02 and pohang03 were declared "
-    "TEST after the fact and fail a selection-bias test. pohang04 is now spent, and its look is inconclusive (§7.2).",
+    "TEST after the fact and fail a selection-bias test. pohang04 is now spent: its look is inconclusive (§7.2), "
+    "and its corrupted cells were re-scored under the v2 corruptions, a disclosed second exposure.",
     "2. **The shipped night rule is wrong for the shipped detector** (§6.3, §6.6). It is reported, not repaired.",
     "3. **Three checkpoint generations** (yolo26s, pre-restore yolo26m, Phase 3), each named, never pooled.",
     "4. **In-sample constants.** The IR night threshold, the IR health model and the capability prior were "
@@ -335,8 +350,11 @@ T_LIM = [
     "10. **R-D1** was scored on the wrong metric before being re-scored on the registered one, α was never tuned, "
     "Table 3a and Table L were re-scored on ship AP after the fact, and the within-detector σ gain is "
     "unresolved in size (§6.4, §6.8).",
+    "11. **Two corruption generations.** Results recorded before 2026-10-10 used broken off-the-shelf corruptions; "
+    "Table 3b, Table 6 and the corrupted rows of Table 7 report the camera-chain v2, R-D1 and Stage 1 were re-run on "
+    "it as robustness checks, and Table 3a, Tables 4, 4b, 4c and 5 and Table L remain v1 records (§5.1).",
     "",
-    "The full list of 24 items is in Appendix L.",
+    "The full list of 25 items is in Appendix L.",
 ]
 T_CONCL = (
     "A pre-registered test asked whether predicted uncertainty should decide how two sensors' detections are "
@@ -346,7 +364,9 @@ T_CONCL = (
     "signal establishes that using it helps, and a registration should name both. And the scored quantity is "
     "part of the registration: scoring a macro that included a class one stream cannot detect reversed one of "
     "two verdicts. The sensor-selection rule that shipped instead shows the cost of not re-pricing a decision "
-    "rule when the detector beneath it changes.")
+    "rule when the detector beneath it changes. The same holds for the corruptions that grade such a rule: the "
+    "off-the-shelf ones we first used were broken, and replacing them with a model of the camera moved verdicts "
+    "in both directions.")
 TABLE_4C = "| Path | Condition | `crossmodal` | `crossmodal26m` |\n|---|---|---|---|\n| coordinate (S1 − S3) | clean | −0.000566"
 
 
@@ -446,9 +466,10 @@ def build_tmlr():
     out.append(section("### 6.5 Relaxing correspondence does not rescue the coordinate path (Stage 1)", kept))
 
     s66 = ["**Removing the night arm", "The measured lesson from", "A related repair"]
+    s66f = ["![detections_conditions]", "**Figure 10.", "![detections_scenes]", "**Figure 11."]
     kept, mv66 = rework("### 6.6 Night visible blindness was a label artifact",
                         replace={"**The retrained system inherits": T_6_6_INHERIT, s66[0]: T_6_6_ARM,
-                                 s66[1]: None, s66[2]: None}, moved=s66)
+                                 s66[1]: None, s66[2]: None, **dict.fromkeys(s66f)}, moved=s66 + s66f)
     out.append(section("### 6.6 Night visible blindness was a label artifact", kept))
 
     out.append(section("### 6.7 Is the IR night switch safe when IR is corrupted?", T_6_7))
@@ -464,7 +485,7 @@ def build_tmlr():
                         replace={"The look is mechanically": T_7_1_LOOK}, moved=["The look is mechanically"])
     out.append(section("### 7.1 Protocol (fixed before the look)", kept))
     s72 = ["**Table 7.", "| Cell (VIS / IR)"]
-    kept, mv72 = rework("### 7.2 Result", replace={s72[0]: None, s72[1]: None, "The ten descriptive cells": T_7_2_DESC},
+    kept, mv72 = rework("### 7.2 Result", replace={s72[0]: None, s72[1]: None, "The descriptive cells carry no pass": T_7_2_DESC},
                         moved=s72)
     out.append(section("### 7.2 Result", kept))
 
@@ -483,9 +504,10 @@ def build_tmlr():
                 pick(mv, "**Why day-only is primary.**", "One registered rule was amended",
                      "We do not rank uncertainty methods", "![checkpoint_selection]", "**Figure 5.",)
                 + "\n\n" + mv8["**Checkpoint selection is noisier"]))
-    put("G", "## Appendix G. Gate history and night-arm re-pricing (from §6.3 and §6.6)\n",
+    put("G", "## Appendix G. Gate history, night-arm re-pricing and detection examples (from §6.3 and §6.6)\n",
         section("### G.1 Gate rewrite history", pick(mv63, *s63) + "\n\n" + mv8["**Synthetic ladders"]),
-        section("### G.2 Night-arm re-pricing", pick(mv66, *s66)))
+        section("### G.2 Night-arm re-pricing", pick(mv66, *s66)),
+        section("### G.3 More detection examples", pick(mv66, *s66f)))
     put("H", "## Appendix H. Uncertainty-mechanism details (from §6.4 and §6.5)\n",
         section("### H.1 R-D1 as recorded, on the macro", pick(mv64, "**Table 4c.", TABLE_4C, "Two macro results")),
         section("### H.2 Score-path decomposition", pick(mv64, "**The gain is re-ranking")),
@@ -497,7 +519,7 @@ def build_tmlr():
         section("### J.2 Notes", pick(mv68, "The soft-NMS rejection") + "\n\n" + mv8["**Redundancy is worth"]))
     put("K", "## Appendix K. Held-out look details (from §7)\n",
         section("### K.1 Single-shot mechanics", pick(mv71, "The look is mechanically")),
-        section("### K.2 All eleven cells", pick(mv72, *s72)))
+        section("### K.2 All cells", pick(mv72, *s72)))
     put("L", section("## Appendix L. Limitations in full (from §9)", strip_rule(body("## 9. Limitations"))))
     put("M", section("## Appendix M. Reproducibility and implementation notes",
                      strip_rule(body("## 10. Reproducibility and implementation notes"))))
@@ -540,7 +562,7 @@ def build_joe():
         "the concatenation of the two detectors' outputs. What works by day is a hard veto on image statistics, "
         "dropping the visible stream when the thermal camera reports night and the visible frame is dark or "
         "veiled, followed by the union of the surviving detections: on five retrained systems it beats the visible "
-        "stream alone on every daylight condition (+0.0059 to +0.0107 AP). The same rule, written while a "
+        "stream alone on every daylight condition (+0.0070 to +0.0133 AP). The same rule, written while a "
         "labelling artifact made the visible detector blind at night, discards a working visible stream once the "
         "detector is retrained (−0.1847 AP on clear nights). We report the evaluation protocol in full, including "
         "paired noise floors, intervals that respect 10 Hz autocorrelation and a single pre-registered look at an "
@@ -611,8 +633,11 @@ def build_joe():
         "labels, changes the rule's premise; re-measure the rule on every condition before deployment (§6.3, §6.6).\n"
         "* *Gate on the health of the stream to be dropped, not on a scene condition that happens to coincide with "
         "it.* Darkness stood in for \"the visible detector fails\" only while a labelling artifact made it true.\n"
-        "* *Harden any cross-sensor vote against the voting sensor's own failures.* The thermal night vote misread "
-        "up to 94.8 percent of clear days as night under thermal fog until it had to pass a health check (§6.7).\n"
+        "* *Harden any cross-sensor vote against the voting sensor's own failures.* The thermal night vote misreads "
+        "up to 96.3 percent of clear days as night under thermal noise unless it must pass a health check, and a "
+        "fallback that lets the other camera confirm the vote inherits that camera's blind spots (§6.7).\n"
+        "* *Check synthetic corruptions against real frames before they grade a system.* Off-the-shelf fog was a "
+        "fixed blur that the gate's fog detector had learned to see; physical fog it mostly misses (§5.1, §8).\n"
         "* *Budget the evaluation for small effects.* Paired comparisons, intervals that respect frame "
         "autocorrelation and a magnitude floor are needed, because fusion changes of a few thousandths of AP are "
         "otherwise indistinguishable from resampling noise (§5.3, §5.4).")

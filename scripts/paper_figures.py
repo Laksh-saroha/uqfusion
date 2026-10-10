@@ -299,13 +299,16 @@ def fig2() -> None:
 
 # --------------------------------------------------------------------------------------------
 # Figure for Table 3b: the shipped rule on the five Phase 3 systems, per cell.
-# Sources: docs/eval/p3_night_check_2026-09-27.json (clean) and
-# docs/eval/p3_corrupt_cells_2026-09-27.json (fog, lowlight, glare at severity 2).
+# Sources: docs/eval/p3_night_check_2026-09-27.json (clean) and the corrupted cells (fog,
+# lowlight, glare at severity 2) under corruption v2 (2026-10-10); the v1 cells of 2026-09-27
+# (docs/eval/p3_corrupt_cells_2026-09-27.json) are the record the paper keeps beside them.
 # --------------------------------------------------------------------------------------------
+P3_CORRUPT = "docs/eval/p3_corrupt_cells_v2_2026-10-10.json"
+
 
 def fig3b() -> None:
     nc = read_json("docs/eval/p3_night_check_2026-09-27.json")["slices"]
-    cc = read_json("docs/eval/p3_corrupt_cells_2026-09-27.json")["cells"]
+    cc = read_json(P3_CORRUPT)["cells"]
     rows = []
     for tod in ("day", "night"):
         a = nc[tod]["ap_mean"]

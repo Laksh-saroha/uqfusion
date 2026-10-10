@@ -1,142 +1,446 @@
 {
  "system": "Phase 3 VIS seed 0 + IR seed 0",
  "preset": "crossmodal26m",
- "fog": {
+ "corruption": {
   "draw": 941,
   "severity": 2,
-  "stream": "VIS only"
+  "stream": "VIS only",
+  "version": "v2",
+  "cache_root": "runs/cache_p3dev_v2"
  },
  "conf_display": 0.25,
- "rule": {
-  "pick_seed": 0,
-  "min_ships": 3,
-  "min_median_ship_height_px": 15.0,
-  "crop": [
-   320,
-   170
+ "night_display_gamma": 0.45,
+ "frames": {
+  "port_day": [
+   "pohang03_L_011704.png",
+   221,
+   240
+  ],
+  "ferry_night": [
+   "pohang01_L_014451.png",
+   147,
+   251
+  ],
+  "quay_day": [
+   "pohang00_L_012572.png",
+   141,
+   253
+  ],
+  "tug_day": [
+   "pohang03_L_011921.png",
+   221,
+   245
+  ],
+  "moored_night": [
+   "pohang01_L_014898.png",
+   205,
+   254
   ]
  },
  "panels": [
   {
-   "row": "clean/day",
-   "frame_index": 725,
-   "run": "pohang00",
-   "vis": "pohang00_L_012753.png",
-   "ir": "pohang00_012753.png",
+   "figure": "fig_detections",
+   "row": "port_day/clean",
+   "frame_index": 2117,
+   "run": "pohang03",
+   "vis": "pohang03_L_011704.png",
+   "ir": "pohang03_011634.png",
    "crop_xy": [
-    50,
-    256
+    221,
+    240
+   ],
+   "veto_vis": false,
+   "gt_ships": 20,
+   "shown": {
+    "vis": 13,
+    "ir": 11,
+    "fused_from_vis": 14,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.68,
+     0.68,
+     0.77,
+     0.4,
+     0.6,
+     0.66,
+     0.48,
+     0.89,
+     0.83,
+     0.84,
+     0.48,
+     0.74,
+     0.45
+    ],
+    "ir": [
+     0.48,
+     0.71,
+     0.3,
+     0.63,
+     0.46,
+     0.48,
+     0.37,
+     0.25,
+     0.38,
+     0.35,
+     0.33
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections",
+   "row": "port_day/fog",
+   "frame_index": 2117,
+   "run": "pohang03",
+   "vis": "pohang03_L_011704.png",
+   "ir": "pohang03_011634.png",
+   "crop_xy": [
+    221,
+    240
+   ],
+   "veto_vis": false,
+   "gt_ships": 20,
+   "shown": {
+    "vis": 0,
+    "ir": 11,
+    "fused_from_vis": 0,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [],
+    "ir": [
+     0.48,
+     0.71,
+     0.3,
+     0.63,
+     0.46,
+     0.48,
+     0.37,
+     0.25,
+     0.38,
+     0.35,
+     0.33
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections",
+   "row": "ferry_night/clean",
+   "frame_index": 1408,
+   "run": "pohang01",
+   "vis": "pohang01_L_014451.png",
+   "ir": "pohang01_014452.png",
+   "crop_xy": [
+    147,
+    251
+   ],
+   "veto_vis": true,
+   "gt_ships": 6,
+   "shown": {
+    "vis": 2,
+    "ir": 2,
+    "fused_from_vis": 0,
+    "fused_from_ir": 2
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.94,
+     0.67
+    ],
+    "ir": [
+     0.75,
+     0.53
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections",
+   "row": "ferry_night/fog",
+   "frame_index": 1408,
+   "run": "pohang01",
+   "vis": "pohang01_L_014451.png",
+   "ir": "pohang01_014452.png",
+   "crop_xy": [
+    147,
+    251
+   ],
+   "veto_vis": true,
+   "gt_ships": 6,
+   "shown": {
+    "vis": 2,
+    "ir": 2,
+    "fused_from_vis": 0,
+    "fused_from_ir": 2
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.71,
+     0.0
+    ],
+    "ir": [
+     0.75,
+     0.53
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections_conditions",
+   "row": "port_day/lowlight",
+   "frame_index": 2117,
+   "run": "pohang03",
+   "vis": "pohang03_L_011704.png",
+   "ir": "pohang03_011634.png",
+   "crop_xy": [
+    221,
+    240
+   ],
+   "veto_vis": false,
+   "gt_ships": 20,
+   "shown": {
+    "vis": 12,
+    "ir": 11,
+    "fused_from_vis": 14,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.68,
+     0.74,
+     0.68,
+     0.73,
+     0.41,
+     0.54,
+     0.45,
+     0.55,
+     0.0,
+     0.58,
+     0.57,
+     0.64
+    ],
+    "ir": [
+     0.48,
+     0.71,
+     0.3,
+     0.63,
+     0.46,
+     0.48,
+     0.37,
+     0.25,
+     0.38,
+     0.35,
+     0.33
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections_conditions",
+   "row": "port_day/glare",
+   "frame_index": 2117,
+   "run": "pohang03",
+   "vis": "pohang03_L_011704.png",
+   "ir": "pohang03_011634.png",
+   "crop_xy": [
+    221,
+    240
+   ],
+   "veto_vis": false,
+   "gt_ships": 20,
+   "shown": {
+    "vis": 5,
+    "ir": 11,
+    "fused_from_vis": 6,
+    "fused_from_ir": 0
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.65,
+     0.79,
+     0.51,
+     0.74,
+     0.56
+    ],
+    "ir": [
+     0.48,
+     0.71,
+     0.3,
+     0.63,
+     0.46,
+     0.48,
+     0.37,
+     0.25,
+     0.38,
+     0.35,
+     0.33
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections_conditions",
+   "row": "ferry_night/lowlight",
+   "frame_index": 1408,
+   "run": "pohang01",
+   "vis": "pohang01_L_014451.png",
+   "ir": "pohang01_014452.png",
+   "crop_xy": [
+    147,
+    251
+   ],
+   "veto_vis": true,
+   "gt_ships": 6,
+   "shown": {
+    "vis": 2,
+    "ir": 2,
+    "fused_from_vis": 0,
+    "fused_from_ir": 2
+   },
+   "best_iou_to_gt": {
+    "vis": [
+     0.94,
+     0.51
+    ],
+    "ir": [
+     0.75,
+     0.53
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections_conditions",
+   "row": "ferry_night/glare",
+   "frame_index": 1408,
+   "run": "pohang01",
+   "vis": "pohang01_L_014451.png",
+   "ir": "pohang01_014452.png",
+   "crop_xy": [
+    147,
+    251
+   ],
+   "veto_vis": true,
+   "gt_ships": 6,
+   "shown": {
+    "vis": 0,
+    "ir": 2,
+    "fused_from_vis": 0,
+    "fused_from_ir": 2
+   },
+   "best_iou_to_gt": {
+    "vis": [],
+    "ir": [
+     0.75,
+     0.53
+    ]
+   }
+  },
+  {
+   "figure": "fig_detections_scenes",
+   "row": "quay_day/clean",
+   "frame_index": 544,
+   "run": "pohang00",
+   "vis": "pohang00_L_012572.png",
+   "ir": "pohang00_012572.png",
+   "crop_xy": [
+    141,
+    253
    ],
    "veto_vis": false,
    "gt_ships": 4,
    "shown": {
     "vis": 4,
-    "ir": 3,
+    "ir": 5,
     "fused_from_vis": 4,
     "fused_from_ir": 0
    },
    "best_iou_to_gt": {
     "vis": [
-     0.96,
-     0.92,
-     0.97,
-     0.91
+     0.98,
+     0.93,
+     0.9,
+     0.95
     ],
     "ir": [
-     0.72,
-     0.75,
-     0.38
+     0.67,
+     0.55,
+     0.49,
+     0.14,
+     0.0
     ]
    }
   },
   {
-   "row": "fog/day",
-   "frame_index": 725,
-   "run": "pohang00",
-   "vis": "pohang00_L_012753.png",
-   "ir": "pohang00_012753.png",
+   "figure": "fig_detections_scenes",
+   "row": "tug_day/clean",
+   "frame_index": 2152,
+   "run": "pohang03",
+   "vis": "pohang03_L_011921.png",
+   "ir": "pohang03_011851.png",
    "crop_xy": [
-    50,
-    256
+    221,
+    245
    ],
    "veto_vis": false,
-   "gt_ships": 4,
+   "gt_ships": 19,
    "shown": {
-    "vis": 3,
-    "ir": 3,
-    "fused_from_vis": 3,
+    "vis": 11,
+    "ir": 7,
+    "fused_from_vis": 11,
     "fused_from_ir": 0
    },
    "best_iou_to_gt": {
     "vis": [
-     0.88,
-     0.83,
-     0.76
+     0.7,
+     0.68,
+     0.69,
+     0.65,
+     0.6,
+     0.57,
+     0.27,
+     0.53,
+     0.72,
+     0.93,
+     0.72
     ],
     "ir": [
-     0.72,
-     0.75,
-     0.38
+     0.19,
+     0.54,
+     0.36,
+     0.51,
+     0.34,
+     0.25,
+     0.22
     ]
    }
   },
   {
-   "row": "clean/night",
-   "frame_index": 1701,
+   "figure": "fig_detections_scenes",
+   "row": "moored_night/clean",
+   "frame_index": 1855,
    "run": "pohang01",
-   "vis": "pohang01_L_014744.png",
-   "ir": "pohang01_014745.png",
+   "vis": "pohang01_L_014898.png",
+   "ir": "pohang01_014899.png",
    "crop_xy": [
-    174,
-    250
+    205,
+    254
    ],
    "veto_vis": true,
-   "gt_ships": 5,
+   "gt_ships": 6,
    "shown": {
-    "vis": 3,
-    "ir": 4,
+    "vis": 2,
+    "ir": 5,
     "fused_from_vis": 0,
-    "fused_from_ir": 4
+    "fused_from_ir": 5
    },
    "best_iou_to_gt": {
     "vis": [
-     0.69,
-     0.92,
-     0.9
+     0.73,
+     0.95
     ],
     "ir": [
-     0.59,
-     0.63,
-     0.53,
-     0.57
-    ]
-   }
-  },
-  {
-   "row": "fog/night",
-   "frame_index": 1701,
-   "run": "pohang01",
-   "vis": "pohang01_L_014744.png",
-   "ir": "pohang01_014745.png",
-   "crop_xy": [
-    174,
-    250
-   ],
-   "veto_vis": true,
-   "gt_ships": 5,
-   "shown": {
-    "vis": 0,
-    "ir": 4,
-    "fused_from_vis": 0,
-    "fused_from_ir": 4
-   },
-   "best_iou_to_gt": {
-    "vis": [],
-    "ir": [
-     0.59,
-     0.63,
-     0.53,
-     0.57
+     0.77,
+     0.67,
+     0.66,
+     0.19,
+     0.11
     ]
    }
   }

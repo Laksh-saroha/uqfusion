@@ -2,11 +2,13 @@
 
 There are four drafts of the same paper, each shaped for one venue. All four derive from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09). Every number in them is copied from Draft 2, which cites the source file for each. No draft adds a measurement.
 
+**2026-10-10: corruption v2.** The corrupted cells were re-measured with the camera-chain corruptions of `docs/eval/corruption_v2/README.md` after the Albumentations corruptions were found broken. Draft 2 §5.1, §6.3 (Table 3b, Figure 7, the veil repair re-priced), §6.4 (R-D1 robustness), §6.5 (Stage 1 robustness), §6.6 (Figures 9–10), §6.7 (Table 6, the weak-IR fallback's cost and a candidate repair, the support bonus under fogged IR), §7 (Table 7: pohang04's corrupted cells re-scored, a disclosed second exposure), §8 and §9 changed; the TMLR and JOE drafts were regenerated (the TMLR summaries in `build_long_drafts.py` were updated), and the MaCVi and PBVS drafts were edited by hand to match.
+
 | file | venue | review | length target | this draft | emphasis |
 |---|---|---|---|---|---|
 | `PAPER_MACVI.md` | MaCVi, the Maritime Computer Vision workshop | double-blind (assumed) | 8 pages, CVF two-column, references extra (assumed) | 3.0k words, 2 tables, 4 figures | maritime: sensor failures at sea, the veto that broke, the IR night switch, one held-out run |
 | `PAPER_PBVS.md` | PBVS, Perception Beyond the Visible Spectrum (a CVPR workshop) | double-blind (assumed) | 8 pages, CVF two-column, references extra (assumed) | 2.5k words, 3 tables, 3 figures | VIS–IR: misregistration makes fusion concatenation, σ cannot arbitrate between bands, positioning against UA-CMDet, the IR night vote |
-| `PAPER_TMLR.md` | Transactions on Machine Learning Research | double-blind | no hard limit; a main body over 12 pages gets a longer review | 10.3k-word main body (5 tables, 5 figures), 8.4k in appendices A–M; compiled `tmlr/main.pdf` is 41 pages, references start on page 20 | pre-registration, informative versus useful, the metric as part of the registration, the failed replication, the evaluation protocol |
+| `PAPER_TMLR.md` | Transactions on Machine Learning Research | double-blind | no hard limit; a main body over 12 pages gets a longer review | 10.3k-word main body (5 tables, 5 figures), 8.4k in appendices A–M; compiled `tmlr/main.pdf` is 47 pages, references start on page 23 | pre-registration, informative versus useful, the metric as part of the registration, the failed replication, the evaluation protocol |
 | `PAPER_JOE.md` | IEEE Journal of Oceanic Engineering | single-blind (IEEE norm) | no fixed maximum; double-spaced review copy | 16.6k-word main body, 4.1k in appendices A–C | maritime engineering: the sensing problem, design lessons for vessel perception, the full evaluation |
 
 ## How each draft was made
@@ -28,7 +30,7 @@ py -3.13 venues/build_long_drafts.py
 
 The script also rewrites the reference section of all four drafts. It takes the Draft 2 entries each text cites and reports any author–year citation without an entry.
 
-The TMLR main body is cut toward 15 typeset pages. Tables R, 1, 1b, 4c, L and 7 and Figures 2, 4, 5 and 6 move to the appendices. Nine subsections are condensed by handwritten summaries in the script (every number copied from Draft 2); their full text moves to the appendices. Appendices A–M follow the order of the sections they come from.
+The TMLR main body is cut toward 15 typeset pages. Tables R, 1, 1b, 4c, L and 7 and Figures 2, 4, 5, 6, 10 and 11 move to the appendices. Nine subsections are condensed by handwritten summaries in the script (every number copied from Draft 2); their full text moves to the appendices. Appendices A–M follow the order of the sections they come from.
 
 **TMLR LaTeX.** `build_tmlr_latex.py` converts `PAPER_TMLR.md` into `tmlr/main.tex`, `tmlr/references.bib` (parsed from the draft's reference list) and `tmlr/figures/` (copies of the vector PDFs). Tables and figures are renumbered in order of appearance. Every "Table X", "Figure X", "§x.y" and "Appendix X.n" becomes a `\ref`, and every author–year citation becomes a natbib `\citet` or `\citealp`. The build fails on any undefined target. Edit the Markdown, not `main.tex`, then re-run both scripts:
 
@@ -37,7 +39,7 @@ py -3.13 venues/build_long_drafts.py
 py -3.13 venues/build_tmlr_latex.py
 ```
 
-**Compiling.** The style files (`tmlr.sty`, `tmlr.bst`, `fancyhdr.sty`) come from the official TMLR style repository, github.com/JmlrOrg/tmlr-style-file; `natbib` comes from the TeX distribution. They are not in this repository. `tmlr/main.pdf` was compiled on 2026-10-09 (last after adding Figures 2 and 9) with Tectonic 0.17.0 in a scratch directory holding `main.tex`, `references.bib`, `figures/` and the three style files: `tectonic --keep-logs main.tex`. It compiled with no errors, no warnings, no overfull boxes and no undefined references. Overleaf's TMLR template works the same way: upload `main.tex`, `references.bib` and `figures/`.
+**Compiling.** The style files (`tmlr.sty`, `tmlr.bst`, `fancyhdr.sty`) come from the official TMLR style repository, github.com/JmlrOrg/tmlr-style-file; `natbib` comes from the TeX distribution. They are not in this repository. `tmlr/main.pdf` was compiled on 2026-10-09 (last after adding Figures 2 and 9–11) with Tectonic 0.17.0 in a scratch directory holding `main.tex`, `references.bib`, `figures/` and the three style files: `tectonic --keep-logs main.tex`. It compiled with no errors, no warnings, no overfull boxes and no undefined references. Overleaf's TMLR template works the same way: upload `main.tex`, `references.bib` and `figures/`.
 
 ## Facts behind the targets, as found 2026-10-09
 
@@ -56,7 +58,7 @@ Sources: [WACV 2027 workshops](https://wacv.thecvf.com/Conferences/2027/Workshop
 1. **Confirm each venue's current call:** deadline, page limit, template, and anonymity rules. The MaCVi 2027 venue is unknown.
 2. **Port to the venue's LaTeX template.** TMLR is ported and compiled (`tmlr/main.pdf`). The other three are Markdown drafts, and their page counts are estimates until typeset.
 3. **Workshop length.** Both workshop drafts sit below a typical 8-page budget. MaCVi now carries the detection examples (its Figure 4), and room remains for the gate-history figure (MaCVi) or the Stage 1 detail (PBVS).
-4. **TMLR length.** Typeset, the main body runs about 19 pages (references start on page 20 of 41; the detection examples of Figure 9 added one), above the 15 aimed for and well past TMLR's 12-page mark for a normal review. If it needs to shrink, the next cuts are §7.1's protocol detail to Appendix K, §4.2's decision layer to its figure plus one paragraph, and §6.4's "Independent probes" paragraph (it repeats §6.8).
+4. **TMLR length.** Typeset, the main body runs about 22 pages (references start on page 23 of 47; the detection examples of Figure 9 added one, the corruption v2 results of 2026-10-10 about three), above the 15 aimed for and well past TMLR's 12-page mark for a normal review. If it needs to shrink, the next cuts are §7.1's protocol detail to Appendix K, §4.2's decision layer to its figure plus one paragraph, and §6.4's "Independent probes" paragraph (it repeats §6.8).
 5. **Dual submission.** Check each venue's dual-submission and prior-publication rules before sending more than one version anywhere. Workshop proceedings often count as prior publication for journals.
 6. **Anonymization.** The TMLR, MaCVi and PBVS drafts carry no author block and no repository link. Restore both for the camera-ready.
 7. **Acknowledgements.** They are still a placeholder in Draft 2, and none of the drafts include them.

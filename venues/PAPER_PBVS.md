@@ -13,7 +13,7 @@ Visible–infrared (VIS–IR) detectors are often proposed with uncertainty deci
 Three findings follow.
 
 1. **Misregistration turns decision-level fusion into concatenation.** At the adopted merge threshold, only 0.05 percent of visible boxes have an infrared partner. Relaxing correspondence and letting predicted variance arbitrate the extra merges is non-inferior on one of four conditions.
-2. **Uncertainty is informative but not a fusion signal.** As a fusion weight, real variance does not beat the same values shuffled onto the wrong boxes on any of four conditions. As a score re-ranker it does, on three of four, yet the signal lies within each detector's own boxes. Using it is worse than using no variance on six of eight cells.
+2. **Uncertainty is informative but not a fusion signal.** As a fusion weight, real variance does not beat the same values shuffled onto the wrong boxes on any of four conditions. As a score re-ranker it does, on three of four with the corruptions it was registered on (one of four with physically modelled corruptions), yet the signal lies within each detector's own boxes. Using it is worse than using no variance on six of eight cells.
 3. **The cross-modal signal that does work is coarse.** Infrared's vote on whether it is night selects the visible stream better than any visible statistic can. Hardened against six infrared corruptions, its false-night rate falls from 94.8 percent to 0 percent in-sample. But the veto built on it encodes a claim about one visible detector, and it broke when that detector was retrained.
 
 ---
@@ -54,7 +54,7 @@ Table 1 places this work beside them. The closest prior mechanism to our shipped
 
 **IR export.** IR is exported as 8-bit by per-frame min–max normalization. This can mask thermal crossover, because a near-isothermal vessel is stretched to full local contrast.
 
-**Benchmark.** The development set is 2,232 paired validation frames (1,200 day, 1,032 night from one run). It crosses four simulated VIS conditions (clean, fog, low light, glare; Buslaev et al., 2020) with day and night.
+**Benchmark.** The development set is 2,232 paired validation frames (1,200 day, 1,032 night from one run). It crosses four simulated VIS conditions (clean, fog, low light, glare) with day and night. Off-the-shelf filters (Buslaev et al., 2020) were broken for this purpose (their fog is a fixed 21-px blur), so the corrupted cells use a camera-chain model fitted to training frames, applied before the IR export's per-frame stretch where IR is corrupted.
 
 **Detectors.** Both bands use yolo26m. VIS is two-class. IR is single-class with a P2 neck, because the thermal detector cannot see buoys (buoy AP 0.0002), so ship AP is the registered metric throughout. A log-variance branch predicts σ for the four box edges.
 
@@ -107,7 +107,7 @@ The relaxed, σ-live cell is non-inferior on one condition of four, at every flo
 
 A path passes on three of four conditions with a delta of at least 0.0060 and an interval excluding zero.
 
-**Table 3. Real minus shuffled σ, and the score path against no σ (S5 − S0). Shipped preset, gated-fusion ship AP, 2,232 paired frames, block-bootstrap 95% CI.**
+**Table 3. Real minus shuffled σ, and the score path against no σ (S5 − S0). Shipped preset, gated-fusion ship AP, 2,232 paired frames, block-bootstrap 95% CI, the registered (off-the-shelf) corruptions.**
 
 | Condition | Coordinate path | Score path | Score path vs no σ |
 |---|---|---|---|
@@ -119,7 +119,7 @@ A path passes on three of four conditions with a delta of at least 0.0060 and an
 
 **Coordinate path: NULL.** Real σ also differs from no σ by at most 0.0001 on this path. That is the expected result when almost nothing merges, but Stage 1 (§5.1) shows that letting more boxes merge does not change it.
 
-**Score path: POSITIVE, but not fusion.** Removing the IR detections locates the gain inside each band. By day, re-ranking VIS boxes alone gives +0.0153 to +0.0167, and adding IR moves the delta by −0.0040 to +0.0035, with no consistent sign. At night VIS is vetoed, so the night part is IR re-ranking IR boxes.
+**Score path: POSITIVE, but not fusion.** The pass depends on the corruption model: re-run with the camera-chain corruptions, only the clean condition clears the floor. Removing the IR detections locates the gain inside each band. By day, re-ranking VIS boxes alone gives +0.0153 to +0.0167, and adding IR moves the delta by −0.0040 to +0.0035, with no consistent sign. At night VIS is vetoed, so the night part is IR re-ranking IR boxes.
 
 **Informative, not useful.** σ orders a detector's own boxes better than chance, and it says nothing about which band to believe. Spent at the registered strength it costs AP: the system without σ is better on six of eight cells across both presets.
 
@@ -144,30 +144,30 @@ Redundancy is worth what it is independent of. A persistent false positive is th
 
 **Figure 2. Which per-box signals predict a true positive.** Lift = P(TP | signal fires) / P(TP | it does not), VIS boxes on clean day paired frames. A signal at lift 1.0 cannot change an AP ranking whatever weight it gets.
 
-**Trusting IR's vote has a failure mode.** IR was uncorrupted in every benchmark cell, so we corrupted it with six hazards at three severities. A false night on a clear day vetoes a working VIS stream. The raw vote misread 94.8 percent of clear days as night under severe IR fog, and 19–27 percent under IR glare. Two votes, an IR self-check, the multivariate health score and an authority bound took the false-night rate on 19 corruption arms to 0 percent at zero benchmark cost. That figure is in-sample, because the threshold and health model were fitted on data that includes the evaluated night run. The worst case, both bands degraded, fell from a 24 percent false-veto rate to 1.3 percent.
+**Trusting IR's vote has a failure mode.** IR was uncorrupted in every benchmark cell, so we corrupted it with blur, fog and noise at three severities, each followed by the export's per-frame stretch. A false night on a clear day vetoes a working VIS stream. The raw vote misreads 61.4 percent of clear days as night under dense IR fog and 96.3 percent under heavy IR noise: the stretch lifts a damaged frame's dark percentile toward the night level. Two votes, the multivariate health score and an authority bound take the false-night rate on all nine arms to 0 percent at zero benchmark cost. That figure is in-sample, because the threshold and health model were fitted on data that includes the evaluated night run. The weak-IR fallback is the hole: with fogged or noisy IR and low-light VIS it vetoes VIS on up to 96 percent of day frames, because an underexposed day frame looks like a fogged night to the VIS statistics it reads, at a cost of up to 0.16 ship AP. A fogged IR also turns the cross-modal support bonus against the system, at up to 0.0113.
 
 **The veto encodes a claim about one VIS detector.** Its night arm was written while VIS scored 0.0000 at night. That zero was a label-filtering artifact: after a pre-registered label restore, night VIS reached 0.2520. We retrained both bands, five seeds each, and kept the rule frozen (Figure 3).
 
-* By day, union aggregation beats VIS alone on all four cells (+0.0059 to +0.0107).
-* At night the rule is right where VIS fails: fog and low light, +0.068.
-* It is wrong where VIS still works: clean night −0.1847, glare night −0.0872.
+* By day, union aggregation beats VIS alone on all four cells (+0.0070 to +0.0133).
+* At night the rule is right only where VIS falls below IR: fog, +0.0248.
+* It is wrong where VIS still works: clean night −0.1847, low-light night −0.1703, glare night −0.0146.
 
 The rule gates on darkness, but what should decide is VIS health.
 
 ![phase3_cells](../docs/figures/fig_phase3_cells.png)
 
-**Figure 3. The frozen rule on five retrained VIS+IR systems**, seed-mean ship AP, clean IR. At night the fused output equals IR alone.
+**Figure 3. The frozen rule on five retrained VIS+IR systems**, seed-mean ship AP, clean IR, camera-chain corruptions. At night the fused output equals IR alone.
 
 A single held-out run, scored once, gives fused ship AP 0.2682 [0.2576, 0.2793]. Its gap to development, +0.0216 [−0.0120, +0.0502], is unresolved.
 
 ## 6. Limitations
 
 * **Timestamp pairing only.** No time-varying homography was built.
-* **Simulated corruptions; one night run.** No between-run night interval is estimable.
+* **Simulated corruptions; one night run.** The camera-chain corruptions rest on one real sun event, real night lights and stated assumptions; the data contain no real fog. No between-run night interval is estimable.
 * **In-sample IR safety.** The IR-safety figures are in-sample.
 * **Untuned σ strength.** α was fixed and never tuned.
 * **Development data, pre-restore checkpoints.** The R-D1 and Stage 1 verdicts are development-data results.
-* **Spent held-out run.** The held-out run is single and is now spent.
+* **Spent held-out run.** The held-out run is single and is now spent: its corrupted cells were re-scored under the replacement corruptions, a disclosed second exposure.
 
 ## 7. Conclusion
 
