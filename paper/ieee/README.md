@@ -8,7 +8,7 @@ The same paper as [`../README.md`](../README.md), set for an IEEE journal: gener
 * **Layout:** `IEEEtran` journal class, two columns, numbered citations (`IEEEtranN`), "Fig." and "Section IV-B" references, table captions as short titles with the rest of the Markdown caption as a note under the table.
 * **Appendices A–K are a separate `supplement.pdf`** (one column, tables and figures numbered S1, S2, …, its own reference list). The two documents cross-reference each other through the `xr` package (`S-` and `M-` label prefixes), so "Appendix D.2" in the paper and "Section V-B" or "Table I" in the supplement resolve to the right numbers.
 
-Files: `main.tex`, `supplement.tex`, `references.bib`, `figures/` (generated), `main.pdf` (9 pages: body pages 1–8, references from page 8) and `supplement.pdf` (28 pages). Compile with Tectonic in a scratch folder holding the four generated items, in the order main, supplement, main, supplement; `IEEEtran.cls` and `IEEEtranN.bst` come from the TeX Live bundle. No errors, overfull boxes, undefined references or multiply defined citations on 2026-10-12.
+Files: `main.tex`, `supplement.tex`, `references.bib`, `figures/` (generated), `main.pdf` (9 pages: body pages 1–8, references from page 8) and `supplement.pdf` (29 pages). Compile with Tectonic in a scratch folder holding the four generated items, in the order main, supplement, main, supplement; `IEEEtran.cls` and `IEEEtranN.bst` come from the TeX Live bundle. No errors, overfull boxes, undefined references or multiply defined citations on 2026-10-12.
 
 **Before submission to JOE.**
 1. **One venue at a time.** This and the TMLR version are the same paper; submit to one journal only.

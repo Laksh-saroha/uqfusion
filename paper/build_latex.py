@@ -35,7 +35,7 @@ if IEEE:  # IEEE review is single-blind: the code link stays, and TMLR's broader
 
 FIG_WIDTH = {  # fraction of \linewidth, from each figure's aspect ratio
     "fig_n4_gate": 1.0, "fig_tta_heldout": 1.0, "fig_decision_layer": 1.0, "fig_phase3_cells": 0.7,
-    "fig_night_restore": 0.6, "fig_detections": 1.0, "fig_uq_calibration": 0.9,
+    "fig_night_restore": 0.6, "fig_detections": 1.0, "fig_uq_calibration": 0.9, "fig_throughput": 1.0,
 }
 TABLE_NOTES = ("†", "Ship AP; each gap is against")  # paragraphs that annotate the table just above them
 STATE = {"two_col": False}  # True while converting the IEEE main body, whose floats choose one or two columns

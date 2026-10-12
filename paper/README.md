@@ -13,7 +13,7 @@ py -3.13 paper/build_latex.py
 tectonic --keep-logs main.tex              # in a scratch folder holding main.tex, references.bib, figures/ and the style files
 ```
 
-**State on 2026-10-12.** 50 pages: main body pages 1–11 (TMLR's normal-review mark is 12), references from page 12, Appendices A–K after them. No errors, overfull boxes or undefined references. 43 references, 17 tables, 7 figures.
+**State on 2026-10-12.** 51 pages: main body pages 1–12 (TMLR's normal-review mark is 12), references from page 12, Appendices A–K after them. No errors, overfull boxes or undefined references. 43 references, 19 tables, 8 figures.
 
 **Before submission.**
 1. The review copy is anonymous: the author block is hidden and the code link is not given. Restore both for the camera-ready (`\usepackage[accepted]{tmlr}`), and add Acknowledgements, which the review copy omits.
