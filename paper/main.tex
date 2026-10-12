@@ -107,7 +107,7 @@ Frames are taken in non-overlapping blocks of eight consecutive frames. Where th
 
 $\mu = (N\mu_{\mathrm{src}} + n\mu_b)/(N+n)$, $\sigma^2 = (N\sigma^2_{\mathrm{src}} + n\sigma^2_b)/(N+n)$,
 
-with N = 16, n = 8, and $\mu$\_b, $\sigma$$^{2}$\_b the block's statistics over its frames and spatial positions, computed layer by layer as the block passes through the network. Frames the gate does not pass keep the detector's plain output. No gradient is taken, no weight changes, no label is read, and the thermal detector is never adapted; the two streams are then fused by \texttt{union}.
+with N = 16, n = 8, and $\mu_b$, $\sigma^2_b$ the block's statistics over its frames and spatial positions, computed layer by layer as the block passes through the network. Frames the gate does not pass keep the detector's plain output. No gradient is taken, no weight changes, no label is read, and the thermal detector is never adapted; the two streams are then fused by \texttt{union}.
 
 \subsection{Variants}\label{sec:4.4}
 \begin{itemize}

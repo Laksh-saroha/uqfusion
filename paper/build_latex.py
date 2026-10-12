@@ -1,27 +1,44 @@
-"""Convert PAPER.md into a TMLR LaTeX submission in paper/.
+"""Convert PAPER.md into a TMLR LaTeX submission in paper/, or with --ieee into an IEEE journal submission in
+paper/ieee/.
 
 Writes main.tex, references.bib (from the paper's own reference list) and figures/ (copies of docs/figures/*.pdf).
 The TMLR style files (tmlr.sty, tmlr.bst, fancyhdr.sty, natbib.sty) are not in the repository: compile on
 Overleaf from the TMLR template, or drop the files from the TMLR style repository into paper/.
 
+The IEEE version (IEEEtran, two columns, numbered citations; IEEEtran.cls and IEEEtranN.bst ship with TeX Live)
+takes its author, abstract and index terms from paper/ieee/front.md, drops the TMLR broader-impact section,
+restores the code link, and moves Appendices A-K into a separate supplement.tex. The two documents cross-reference
+each other through the xr package, so compile main, then supplement, then main again.
+
 Tables and figures are renumbered in order of appearance; every "Table X", "Figure X", "§x.y" and "Appendix X.n"
 in the text becomes a \\ref, and the build fails if any target is undefined. Re-run after the Markdown changes:
 
     py -3.13 paper/build_latex.py
+    py -3.13 paper/build_latex.py --ieee
 """
 import re
 import shutil
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "paper"
+IEEE = "--ieee" in sys.argv[1:]
+OUT = ROOT / "paper" / ("ieee" if IEEE else "")
 MD = (ROOT / "PAPER.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+CODE_ANON = "in a public repository, withheld from this review copy for anonymity and linked in the camera-ready"
+CODE_OPEN = "in the public repository (github.com/Laksh-saroha/uqfusion, branch `fusion-uq-phase3`)"
+if IEEE:  # IEEE review is single-blind: the code link stays, and TMLR's broader-impact section goes
+    assert MD.count(CODE_ANON) == 1
+    MD = MD.replace(CODE_ANON, CODE_OPEN)
+    i, j = MD.index("\n## 9. Broader impact statement\n"), MD.index("\n## References\n")
+    MD = MD[:i] + "\n" + MD[j:]
 
 FIG_WIDTH = {  # fraction of \linewidth, from each figure's aspect ratio
     "fig_n4_gate": 1.0, "fig_tta_heldout": 1.0, "fig_decision_layer": 1.0, "fig_phase3_cells": 0.7,
     "fig_night_restore": 0.6, "fig_detections": 1.0, "fig_uq_calibration": 0.9,
 }
 TABLE_NOTES = ("†", "Ship AP; each gap is against")  # paragraphs that annotate the table just above them
+STATE = {"two_col": False}  # True while converting the IEEE main body, whose floats choose one or two columns
 
 UNI = [  # applied after escaping, longest first
     ("10⁻⁴", "10$^{-4}$"), ("R̄", r"$\bar{R}$"), ("−", "$-$"), ("±", r"$\pm$"), ("×", r"$\times$"),
@@ -34,6 +51,7 @@ UNI = [  # applied after escaping, longest first
 MATH = {  # the BN-mix formulas (§4.3) and the Appendix D.1 formulas, which the Markdown carries as code spans
     "μ = (N μ_src + n μ_b) / (N + n)": r"$\mu = (N\mu_{\mathrm{src}} + n\mu_b)/(N+n)$",
     "σ² = (N σ²_src + n σ²_b) / (N + n)": r"$\sigma^2 = (N\sigma^2_{\mathrm{src}} + n\sigma^2_b)/(N+n)$",
+    "μ_b": r"$\mu_b$", "σ²_b": r"$\sigma^2_b$",
     "u_i = ¼ Σ_t σ_{i,t} / s_{i,t}": r"$u_i = \frac{1}{4}\sum_t \sigma_{i,t}/s_{i,t}$",
     "U_box,m = Σ_i c_i u_i / Σ_i c_i": r"$U_{\mathrm{box},m} = \sum_i c_i u_i / \sum_i c_i$",
     "O_m = sigmoid((d_m − μ_d) / τ)": r"$O_m = \mathrm{sigmoid}((d_m - \mu_d)/\tau)$",
@@ -139,6 +157,8 @@ def code(s, breakable=True):
     s = escape(s)
     if breakable:
         s = s.replace("/", r"/\allowbreak{}").replace(r"\_", r"\_\allowbreak{}")
+        if IEEE:  # narrower columns: dated file names also break at their hyphens
+            s = s.replace("-", r"-\allowbreak{}")
     return r"\texttt{" + s + "}"
 
 
@@ -193,7 +213,7 @@ class Converter:
         else:
             def sec(m):
                 self.used_labels.add(("sec", m[1]))
-                return T(r"\S\ref{sec:" + m[1] + "}")
+                return T((r"Section~" if IEEE else r"\S") + r"\ref{sec:" + m[1] + "}")
             s = re.sub(r"§(\d+(?:\.\d+)?)", sec, s)
 
             def app(m):
@@ -208,7 +228,8 @@ class Converter:
                 def one(mm):
                     self.used_labels.add((kind, mm[0]))
                     return r"\ref{" + kind + ":" + mm[0] + "}"
-                return T(m[1] + "~" + re.sub(LABEL, one, labs))
+                word = {"Figure": "Fig.", "Figures": "Figs."}.get(m[1], m[1]) if IEEE else m[1]
+                return T(word + "~" + re.sub(LABEL, one, labs))
             s = re.sub(r"\b(Tables?|Figures?) (" + LABEL + r"(?:,? (?:and )?" + LABEL + r")*)", tabfig, s)
         s = escape(s)
         s = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", s, flags=re.S)
@@ -218,6 +239,11 @@ class Converter:
         s = re.sub(r'"([^"]*)"', r"``\1''", s)
         while "\x00" in s:
             s = re.sub(r"\x00(\d+)\x00", lambda m: toks[int(m[1])], s)
+        if IEEE:  # numbered citations: "(A, 2020; B, 2021)" -> "[1], [2]", an inline "A, 2020" -> "[1]"
+            s = s.replace(r"\citealp{", r"\cite{")
+            s = re.sub(r"\((\\cite\{[^}]+\}(?:; \\cite\{[^}]+\})*)\)",
+                       lambda m: r"\cite{" + ",".join(re.findall(r"\\cite\{([^}]+)\}", m[1])) + "}", s)
+            return s
         return re.sub(r"\(\\citealp\{([^}]+)\}\)", r"\\citep{\1}", s)
 
 
@@ -251,10 +277,14 @@ def table_tex(cv, p, caption, label, notes):
             cols.append("r" if a.endswith(":") and not a.startswith(":") else "l")
     use_x = any("X" in c for c in cols)
     env, spec = ("tabularx", r"{\linewidth}") if use_x else ("tabular", "")
+    # In a two-column IEEE page a column holds about 55 characters of \footnotesize; wider tables span both.
+    fenv = "table*" if STATE["two_col"] and (total + 2 * n > 55 or use_x) else "table"
     if caption is None:  # an uncaptioned table stays in the text flow
         lines = [r"\begin{center}", size]
+        if fenv == "table*":
+            lines = [r"\begin{table*}[!t]", r"\centering", size]
     else:
-        lines = [r"\begin{table}[htbp]", r"\centering", size,
+        lines = [rf"\begin{{{fenv}}}[{'!t' if fenv == 'table*' else 'htbp'}]", r"\centering", size,
                  r"\caption{" + caption + "}", r"\label{tab:" + label + "}"]
     if n >= 7:  # narrow columns: tighten the gutters so long words fit
         lines.append(r"\setlength{\tabcolsep}{3pt}")
@@ -271,16 +301,22 @@ def table_tex(cv, p, caption, label, notes):
         lines.append(r"\end{adjustbox}")
     for nt in notes:
         lines.append(r"\par\smallskip\raggedright\footnotesize " + cv.inline(nt))
-    lines.append(r"\end{table}" if caption is not None else r"\end{center}")
+    if caption is None and fenv != "table*":
+        lines.append(r"\end{center}")
+    else:
+        lines.append(rf"\end{{{fenv}}}")
     return "\n".join(lines)
 
 
 def figure_tex(cv, img, caption, label):
     stem = Path(re.match(r"!\[[^\]]*\]\(([^)]+)\)", img)[1]).stem
     w = FIG_WIDTH[stem]
-    return "\n".join([r"\begin{figure}[htbp]", r"\centering",
+    env = "figure"
+    if STATE["two_col"]:  # a full-width figure spans both columns; a narrower one fills one column
+        env, w = ("figure*", w) if w >= 0.9 else ("figure", 1.0)
+    return "\n".join([rf"\begin{{{env}}}[{'!t' if env == 'figure*' else 'htbp'}]", r"\centering",
                       rf"\includegraphics[width={w}\linewidth]{{figures/{stem}.pdf}}",
-                      r"\caption{" + caption + "}", r"\label{fig:" + label + "}", r"\end{figure}"])
+                      r"\caption{" + caption + "}", r"\label{fig:" + label + "}", rf"\end{{{env}}}"])
 
 
 def list_tex(cv, lines):
@@ -324,6 +360,13 @@ def list_tex(cv, lines):
 def caption_parts(p, kind):
     m = re.match(r"\*\*" + kind + r" (\w+)\. (.*?)\*\*(.*)$", p, re.S)
     return m[1], "**" + m[2] + "**" + m[3]
+
+
+def ieee_table_caption(p):
+    """IEEE sets a table caption as a short small-caps title: the bold lead becomes the caption and the rest of
+    the Markdown caption a note under the table."""
+    m = re.match(r"\*\*Table (\w+)\. (.*?)\*\*(.*)$", p, re.S)
+    return m[1], m[2].rstrip("."), [m[3].strip()] if m[3].strip() else []
 
 
 def convert(md, cv):
@@ -383,8 +426,11 @@ def convert(md, cv):
                 k += 2
                 continue
             if p.startswith("**Table ") and k + 1 < len(ps) and is_table(ps[k + 1]):
-                lab, cap = caption_parts(p, "Table")
-                notes, j = [], k + 2
+                if IEEE:
+                    lab, cap, notes = ieee_table_caption(p)
+                else:
+                    (lab, cap), notes = caption_parts(p, "Table"), []
+                j = k + 2
                 while j < len(ps) and ps[j].startswith(TABLE_NOTES):
                     notes.append(ps[j])
                     j += 1
@@ -412,16 +458,31 @@ def convert(md, cv):
             tex.append("")
             k += 1
 
+    STATE["two_col"] = IEEE
     blocks(main, appendix=False)
+    in_main = {f"{kind}:{lab}" for kind, lab in defined}
     tex.append(r"\FloatBarrier")  # main-body floats stay before the references
-    tex.append(r"\bibliography{references}")
-    tex.append(r"\bibliographystyle{tmlr}")
-    tex.append("")
-    tex.append(r"\appendix")
+    if IEEE:  # the appendices go to supplement.tex, which has its own reference list
+        tex.append(r"\bibliographystyle{IEEEtranN}")
+        tex.append(r"\bibliography{references}")
+        main_tex, tex = "\n".join(tex), []
+    else:
+        tex.append(r"\bibliography{references}")
+        tex.append(r"\bibliographystyle{tmlr}")
+        tex.append("")
+        tex.append(r"\appendix")
+    STATE["two_col"] = False
     counters["sub"] = 0
     blocks(appx, appendix=True)
     undefined = sorted(cv.used_labels - defined)
     assert not undefined, undefined
+    if IEEE:  # a label defined in the other document is imported by xr under that document's prefix
+        def cross(text, here_is_main):
+            def one(m):
+                other = (m[1] not in in_main) if here_is_main else (m[1] in in_main)
+                return r"\ref{" + (("S-" if here_is_main else "M-") if other else "") + m[1] + "}"
+            return re.sub(r"\\ref\{([^}]+)\}", one, text)
+        return title, [cv.inline(a) for a in abstract], cross(main_tex, True), cross("\n".join(tex), False)
     return title, [cv.inline(a) for a in abstract], "\n".join(tex)
 
 
@@ -466,6 +527,97 @@ PREAMBLE = r"""\documentclass[10pt]{article}
 """
 
 
+IEEE_PACKAGES = r"""\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{adjustbox}
+\usepackage{placeins}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xr}  % labels and citations of the other document, under its prefix
+\emergencystretch=2em  % long file names in \texttt
+
+% Generated by paper/build_latex.py --ieee from PAPER.md and paper/ieee/front.md; edit those, not this file.
+"""
+
+IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
+\PACKAGES
+\externaldocument[S-]{supplement}  % Appendices A-K; compile main, supplement, main
+
+\begin{document}
+
+\title{\TITLE}
+
+\author{\AUTHOR%
+\thanks{\AFFIL}%
+\thanks{Appendices A--K, cited in the text, are provided as supplementary material.}}
+
+\markboth{IEEE Journal of Oceanic Engineering}{\SHORT}
+
+\maketitle
+
+\begin{abstract}
+\ABSTRACT
+\end{abstract}
+
+\begin{IEEEkeywords}
+\KEYWORDS
+\end{IEEEkeywords}
+
+\BODY
+
+\end{document}
+"""
+
+IEEE_SUPP = r"""\documentclass[journal,onecolumn]{IEEEtran}
+\PACKAGES
+\externaldocument[M-]{main}  % section, table and figure numbers of the paper
+
+% Appendices keep their letters (Appendix D.2); tables and figures are numbered S1, S2, ...
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thesection}{\Alph{section}}
+\renewcommand{\thesubsection}{\thesection.\arabic{subsection}}
+\makeatletter
+\def\thesectiondis{Appendix \Alph{section}:}
+\def\thesubsectiondis{\thesection.\arabic{subsection}}
+\makeatother
+
+\begin{document}
+
+\title{Supplementary Material for\\``\TITLE''}
+\author{\AUTHOR}
+\markboth{IEEE Journal of Oceanic Engineering}{\SHORT: supplementary material}
+\maketitle
+
+This supplement holds Appendices A--K of the paper. Section numbers in Roman numerals, tables numbered I, II and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
+
+\BODY
+
+\FloatBarrier
+\bibliographystyle{IEEEtranN}
+\bibliography{references}
+
+\end{document}
+"""
+
+
+def front_matter():
+    text = (OUT / "front.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+    parts = dict(re.findall(r"^## (.+?)\n\n(.+?)(?=\n\n## |\s*$)", text, re.S | re.M))
+    return {k: parts[k].strip() for k in ("Author", "Affiliation", "Abstract", "Index Terms")}
+
+
+def fill(template, values):
+    for k, v in values.items():
+        template = template.replace("\\" + k, v.replace("\\", "\x03"))
+    return template.replace("\x03", "\\")
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     (OUT / "figures").mkdir(exist_ok=True)
@@ -473,14 +625,26 @@ def main():
     assert len({r["key"] for r in refs}) == len(refs)
     write_bib(refs)
     cv = Converter(refs)
-    title, abstract, body = convert(MD, cv)
-    tex = PREAMBLE.replace("%s", "\x01", 3)
-    for part in (cv.inline(title, heading=True), "\n\n".join(abstract), body):
-        tex = tex.replace("\x01", part, 1)
-    (OUT / "main.tex").write_text(tex, encoding="utf-8")
+    if IEEE:
+        title, _, body, appx = convert(MD, cv)
+        fm = front_matter()
+        assert len(fm["Abstract"].split()) <= 250, len(fm["Abstract"].split())
+        vals = {"PACKAGES": IEEE_PACKAGES, "TITLE": cv.inline(title, heading=True), "AUTHOR": fm["Author"],
+                "AFFIL": cv.inline(fm["Affiliation"]), "SHORT": "Saroha: Infrared-gated test-time adaptation",
+                "ABSTRACT": cv.inline(fm["Abstract"]), "KEYWORDS": cv.inline(fm["Index Terms"].rstrip("."))}
+        tex = fill(IEEE_MAIN, {**vals, "BODY": body})
+        (OUT / "main.tex").write_text(tex, encoding="utf-8")
+        (OUT / "supplement.tex").write_text(fill(IEEE_SUPP, {**vals, "BODY": appx}), encoding="utf-8")
+        tex += appx
+    else:
+        title, abstract, body = convert(MD, cv)
+        tex = PREAMBLE.replace("%s", "\x01", 3)
+        for part in (cv.inline(title, heading=True), "\n\n".join(abstract), body):
+            tex = tex.replace("\x01", part, 1)
+        (OUT / "main.tex").write_text(tex, encoding="utf-8")
     for stem in FIG_WIDTH:
         shutil.copyfile(ROOT / "docs" / "figures" / f"{stem}.pdf", OUT / "figures" / f"{stem}.pdf")
-    cited = set(re.findall(r"\\cite(?:t|alp|p)\{([^}]+)\}", tex))
+    cited = {k for g in re.findall(r"\\cite(?:t|alp|p)?\{([^}]+)\}", tex) for k in g.split(",")}
     unused = sorted({r["key"] for r in refs} - cited)
     print(f"main.tex: {len(tex.split())} words of LaTeX, {len(refs)} bib entries, "
           f"{len(cv.used_labels)} cross-references resolved" + (f"; uncited {unused}" if unused else ""))

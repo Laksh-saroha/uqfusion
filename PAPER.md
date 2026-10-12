@@ -97,7 +97,7 @@ Frames are taken in non-overlapping blocks of eight consecutive frames. Where th
 
 `μ = (N μ_src + n μ_b) / (N + n)`, `σ² = (N σ²_src + n σ²_b) / (N + n)`,
 
-with N = 16, n = 8, and μ_b, σ²_b the block's statistics over its frames and spatial positions, computed layer by layer as the block passes through the network. Frames the gate does not pass keep the detector's plain output. No gradient is taken, no weight changes, no label is read, and the thermal detector is never adapted; the two streams are then fused by `union`.
+with N = 16, n = 8, and `μ_b`, `σ²_b` the block's statistics over its frames and spatial positions, computed layer by layer as the block passes through the network. Frames the gate does not pass keep the detector's plain output. No gradient is taken, no weight changes, no label is read, and the thermal detector is never adapted; the two streams are then fused by `union`.
 
 ### 4.4 Variants
 
