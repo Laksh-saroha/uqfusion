@@ -270,7 +270,7 @@ What this says. The glare intensity is the constant that matters: ±0.036 on gla
 glare/night VIS falls to 0.060 (below IR 0.0687), so the glare/night failure (−0.0146) holds at the
 fitted intensity but not at twice it. The AE strength is a second-order effect (−0.0069 to +0.0035 on
 glare, < 0.001 on fog). Revision 2's Lorentzian lamp would have switched the night veto off on every
-glared night frame (veto 0%) while cutting VIS to 0.016, which is the defect §3 describes, measured.
+glared night frame (veto 0%) while cutting VIS to 0.014, which is the defect §3 describes, measured.
 IR_BETA_RATIO moves the IR-fog cell by −0.026 to +0.014 at night.
 
 ### 8.6 What the weak-IR fallback costs (`fallback_cost.md`, `scripts/v2_fallback_cost.py`)
