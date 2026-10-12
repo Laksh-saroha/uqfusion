@@ -802,7 +802,7 @@ from the detector" are different claims and only the first is true.
     * A second concurrent cache build was tried for 2 minutes and stopped: it was slower (12.4 against 14.5
       frames/s). It wrote nothing.
 
-* **2026-10-12 (11:45 PM) — N4Fg registered: N4F with N4g's glare term, development and pohang04 glare/clean
+* **2026-10-12 (11:44 PM) — N4Fg registered: N4F with N4g's glare term, development and pohang04 glare/clean
   (P-FG)** (`docs/prereg-ttbn-fulltta-glare-2026-10-12.md`). Asked by Laksh to fill the "not scored" N4F glare
   entry of the paper's Table 3 and Fig. 2.
   * New exposure of pohang04 (the ninth scoring) if development passes: `full_tta`, N4F and N4Fg on glare/clean,
@@ -811,3 +811,8 @@ from the detector" are different claims and only the first is true.
   * Development draws 945–947 get a third use (N4F's, the no-retrain verdict's), disclosed.
   * Seen first: every development and pohang04 number to date, and, label-free, where N4g's gate differs from N4's
     on 945–947 (glare only) and which adapted blocks are missing (listed in the registration).
+  * **Time corrected.** The registration and this entry were first stamped 11:45 PM; the registration commit
+    (`483cc5b`) is 11:44:33 PM, and they now say 11:44 PM. The development build started after that commit
+    (11:44 PM, `runs/novel/ttbn_fulltta_glare/dev_chain.log`). No N4Fg number existed at either time.
+  * **11:48 PM — Amendment 1:** at Laksh's request pohang04 is built and scored after the development report
+    whatever its verdict (integrity checks still stop the queue). Written before any N4Fg number existed.

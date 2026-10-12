@@ -1,6 +1,6 @@
 # Pre-registration: N4F with N4g's glare term (N4Fg), development and pohang04 glare/clean (P-FG), 2026-10-12
 
-Written at 11:45 PM on 10-12, before any N4Fg number exists on development or pohang04, and before any `full_tta`
+Written at 11:44 PM on 10-12, before any N4Fg number exists on development or pohang04, and before any `full_tta`
 or N4F detection exists on pohang04's glare/clean cell. Logged in `docs/exposure-ledger-2026-09-09.md` at the same
 time. Code: `scripts/ttbn_fulltta_glare.py`.
 
@@ -112,3 +112,17 @@ before all four draws are scored and bootstrapped.
    bootstrap; report (`docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.md`). Stop here on a failure.
 3. pohang04: plain flipped glare views; N4Fg's missing flipped adapted blocks; score (`UQF_FAST_*`); bootstrap
    (`p04_heldout_score.py boot`); report (`docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.md`); ledger.
+
+## Amendment 1 (11:48 PM on 10-12): pohang04 runs whatever development's verdict
+
+Laksh asked at 11:47 PM for the whole pipeline to be queued unattended and run regardless of the result. Written
+before any N4Fg number exists: the development build had finished draw 945's blocks; no check, score or report had
+run.
+
+* The pohang04 build and P-FG run after the development report whatever its verdict. They still stop if an
+  integrity check fails: the fp16 check (step 1), the reproduction checks of step 2, or any gate-equality or
+  frame-identity check in scoring.
+* P-FG's rule is unchanged. If development FAILS, the pohang04 result is reported with that verdict beside it and
+  is not adopted as a replication of a development pass.
+* Each step is logged in the ledger with its time by the queue script
+  (`runs/holdout_p04/ttbn_fulltta_glare/queue.sh`).

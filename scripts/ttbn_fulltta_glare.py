@@ -485,9 +485,12 @@ OTHER_BUILT = [("clean", "blur_s2"), ("clean", "fog_s2"), ("fog", None)]
 
 
 def _dev_passed() -> None:
+    """Amendment 1 (Laksh, 10-12): pohang04 runs whatever development's verdict, but only after a development
+    report whose integrity checks passed (reproduction and fp16 checks)."""
     v = json.loads(DEV_REPORT.read_text(encoding="utf-8")).get("verdict") if DEV_REPORT.is_file() else None
-    if v != "PASSES":
-        raise SystemExit(f"N4Fg's pohang04 test runs only after a development pass (verdict: {v})")
+    if v not in ("PASSES", "FAILS"):
+        raise SystemExit(f"N4Fg's pohang04 test needs a development report with its checks passed (verdict: {v})")
+    print(f"[n4fg-p04] development verdict: {v}", flush=True)
 
 
 def p04_new_flip(k: int, cond: str, draw) -> Path:
@@ -686,16 +689,21 @@ def cmd_report_p04(args) -> int:
             res[tag] = {"gate_g": rg, "gate": r4, "equal": True, "minus_n4f": 0.0, "p_ft": pft[tag]}
             rows.append(f"| {name} | {rg:.3f} | {r4:.3f} | = N4F (gates equal on every draw) | 0 |")
             continue
-        ft = psc.series("full_tta/fused", c)
-        n4f = ft if not any(x.any() for x in g4) else psc.series("full_tta_ttbn/fused", c)
-        # draws where the gates are equal: N4Fg's stream is N4F's, and its presort is N4F's
-        vals, reps = [], []
-        for s, a, b in zip(subs, gg, g4):
-            d = psc.PRE / ("full_tta_ttbng/fused" if not np.array_equal(a, b) else
-                           ("full_tta_ttbn/fused" if b.any() else "full_tta/fused")) / tag / f"all_{s}"
-            vals.append(json.loads((d / "obs.json").read_text())["ap"])
-            reps.append(np.load(d / "reps.npy"))
-        tg = (float(np.mean(vals)), np.mean(reps, axis=0))
+        # per draw: N4F's presort is `full_tta`'s where N4's gate fires on no frame (P-FT scored only the others);
+        # N4Fg's is N4F's where the gates are equal
+        def per_draw(pick):
+            vals, reps = [], []
+            for s, a, b in zip(subs, gg, g4):
+                d = psc.PRE / pick(a, b) / tag / f"all_{s}"
+                vals.append(json.loads((d / "obs.json").read_text())["ap"])
+                reps.append(np.load(d / "reps.npy"))
+            return float(np.mean(vals)), np.mean(reps, axis=0)
+
+        def n4f_name(a, b):
+            return "full_tta_ttbn/fused" if b.any() else "full_tta/fused"
+
+        n4f = per_draw(n4f_name)
+        tg = per_draw(lambda a, b: "full_tta_ttbng/fused" if not np.array_equal(a, b) else n4f_name(a, b))
         dl, (lo, hi) = tg[0] - n4f[0], psc.ci(tg[1] - n4f[1])
         res[tag] = {"gate_g": rg, "gate": r4, "equal": False, "full_tta_ttbng": tg[0], "full_tta_ttbn": n4f[0],
                     "minus_n4f": dl, "ci_minus_n4f": [lo, hi]}
@@ -716,7 +724,12 @@ def cmd_report_p04(args) -> int:
     v = ("REPLICATES" if gain and not worse else
          f"DOES NOT REPLICATE (glare/clean {'gains' if gain else 'does not gain'}; "
          f"worse than N4F: {', '.join(worse) or 'none'})")
+    dv = json.loads(DEV_REPORT.read_text(encoding="utf-8"))["verdict"]
     L = ["# N4Fg (N4F with N4g's glare term) on pohang04's glare cell", "",
+         f"Development verdict: **N4Fg {dv} development** (`ttbn_fulltta_glare_dev_2026-10-12.md`). Under Amendment 1 "
+         "of the registration pohang04 was scored whatever that verdict; "
+         + ("a held-out result after a development failure is reported, not adopted." if dv != "PASSES" else
+            "development passed, so the original order held.") , "",
          "`docs/prereg-ttbn-fulltta-glare-2026-10-12.md`. Ship AP against the VIS ground truth; every arm here is an "
          "ensemble of all five systems, mean over the four draws (VIS v2 glare severity 2, draws 941–944, IR clean). "
          "Δ = `full_tta_ttbng` − `full_tta`, paired; 95% interval from the gate-free scoring's 1,000 moving-block "
