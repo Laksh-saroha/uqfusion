@@ -11,7 +11,7 @@ led() { printf '%s\n' "$@" >> $LED; }
 fail() {
   echo "[queue] FAILED: $1 $(t)"
   led "  * **$(t) — N4Fg queue stopped: $1.** See \`$2\`. Nothing after this step ran."
-  git add $LED docs/eval/ttbn/ttbn_fulltta_glare_* runs/novel/ttbn_fulltta_glare/*.log runs/novel/ttbn_fulltta_glare/*.sh 2>/dev/null
+  git add $LED docs/eval/ttbn/ttbn_fulltta_glare_* 2>/dev/null
   git commit -q -m "N4Fg queue stopped: $1" && git push -q origin fusion-uq-phase3
   exit 1
 }
@@ -28,7 +28,7 @@ DV=$(py -3.13 -c "import json;print(json.load(open('docs/eval/ttbn/ttbn_fulltta_
 led "* **$(date +%F) ($(t)) — N4Fg development: $DV** (\`docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.md\`; registered in" \
     "  \`docs/prereg-ttbn-fulltta-glare-2026-10-12.md\`). Draws 945–947, third use. $(sed -n 's/^\*\*N4Fg [A-Z]* development\.\*\* //p' docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.md)" \
     "  * pohang04 starts now whatever the verdict (Amendment 1)."
-git add $LED docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.* $D/*.log $D/*.sh $D/fp16_check.json $D/score_dev.json $P/queue.sh scripts/ttbn_fulltta_glare.py scripts/paper_figures.py
+git add $LED docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.* scripts/ttbn_fulltta_glare.py scripts/paper_figures.py
 git commit -q -m "N4Fg development: $DV" && git push -q origin fusion-uq-phase3
 echo "[queue] development $DV; pohang04 build $(t)"
 
@@ -54,6 +54,6 @@ led "* **$(date +%F) ($(t)) — N4Fg on pohang04: P-FG $V** (\`$R\`; registered 
     "  * $(grep '^| N4F (' $R | sed 's/\*\*//g')" \
     "  * Other cells (gate-equality check against P-FT): see the report's second table."
 py -3.13 scripts/paper_figures.py tta_heldout > $P/figure.log 2>&1 || echo "[queue] figure FAILED (see $P/figure.log)"
-git add $LED $R docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.json $P/*.log $P/gates.json docs/figures/fig_tta_heldout.*
+git add $LED $R docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.json docs/figures/fig_tta_heldout.*
 git commit -q -m "N4Fg on pohang04 glare/clean: P-FG $V" && git push -q origin fusion-uq-phase3
 echo "[queue] ALL DONE: P-FG $V $(t)"

@@ -113,9 +113,9 @@ before all four draws are scored and bootstrapped.
 3. pohang04: plain flipped glare views; N4Fg's missing flipped adapted blocks; score (`UQF_FAST_*`); bootstrap
    (`p04_heldout_score.py boot`); report (`docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.md`); ledger.
 
-## Amendment 1 (11:48 PM on 10-12): pohang04 runs whatever development's verdict
+## Amendment 1 (11:47 PM on 10-12): pohang04 runs whatever development's verdict
 
-Laksh asked at 11:47 PM for the whole pipeline to be queued unattended and run regardless of the result. Written
+Laksh asked at 11:46 PM for the whole pipeline to be queued unattended and run regardless of the result. Written
 before any N4Fg number exists: the development build had finished draw 945's blocks; no check, score or report had
 run.
 

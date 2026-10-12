@@ -814,5 +814,5 @@ from the detector" are different claims and only the first is true.
   * **Time corrected.** The registration and this entry were first stamped 11:45 PM; the registration commit
     (`483cc5b`) is 11:44:33 PM, and they now say 11:44 PM. The development build started after that commit
     (11:44 PM, `runs/novel/ttbn_fulltta_glare/dev_chain.log`). No N4Fg number existed at either time.
-  * **11:48 PM — Amendment 1:** at Laksh's request pohang04 is built and scored after the development report
+  * **11:47 PM — Amendment 1:** at Laksh's request pohang04 is built and scored after the development report
     whatever its verdict (integrity checks still stop the queue). Written before any N4Fg number existed.
