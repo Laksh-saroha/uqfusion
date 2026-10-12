@@ -821,9 +821,13 @@ from the detector" are different claims and only the first is true.
   `docs/prereg-ttbn-fulltta-glare-2026-10-12.md`). Draws 945–947, third use. No cell worse than `full_tta`: PASS. Cells where the glare term adds gated frames at or above −0.0014 against N4F: PASS.
   * pohang04 starts now whatever the verdict (Amendment 1).
   * **12:06 AM — P-FG: pohang04 builds started** (plain flipped glare views, then N4Fg's flipped adapted blocks).
-  * **01:12 AM — P-FG: pohang04 builds done; scoring started** (`UQF_FAST_*`).
-* **2026-10-13 (01:44 AM) — N4Fg on pohang04: P-FG REPLICATES** (`docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.md`; registered in
+  * **1:12 AM — P-FG: pohang04 builds done; scoring started** (`UQF_FAST_*`). Scored 1:32 AM; bootstrap done 1:44 AM.
+* **2026-10-13 (1:44 AM) — N4Fg on pohang04: P-FG REPLICATES** (`docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.md`; registered in
   `docs/prereg-ttbn-fulltta-glare-2026-10-12.md`, Amendment 1). Ninth scoring of pohang04. Development: PASSES.
-  * glare/clean: | N4Fg (`full_tta_ttbng`, N4g's gate 81.0%) | 0.1967 | +0.0311 [+0.0286, +0.0332] |
-  * | N4F (`full_tta_ttbn`, N4's gate 1.9%) | 0.1656 | +0.0000 [-0.0000, +0.0000] |
-  * Other cells (gate-equality check against P-FT): see the report's second table.
+  * glare/clean: N4Fg 0.1967 against `full_tta` 0.1656, Δ +0.0311 [+0.0286, +0.0332]; N4g's gate fires on 81.0% of
+    frames. N4F (N4's gate, 1.9%) equals `full_tta` (+0.0000).
+  * No cell worse than N4F: in clean/blur_s2, clean/fog_s2 and fog/clean (where the glare term adds frames) N4Fg − N4F
+    is +0.0000; the six other cells equal P-FT by construction (gates checked equal on every draw).
+  * Descriptive: N4Fg − N4g (one pass, P-G) +0.0240 [+0.0216, +0.0261]. N4Fg is the highest-scoring system measured on
+    glare/clean (`ttbng_lex` 0.1762, N4g 0.1726).
+  * 1:45 AM: report, ledger and Fig. 2 committed and pushed by the queue (`19ede9d`).

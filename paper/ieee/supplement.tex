@@ -662,7 +662,7 @@ The descriptive cells carry no pass or fail language. Under v2 they show what th
 The look ran once, for 18.6 hours, at freeze commit \texttt{85a07c1}. It is logged in the exposure ledger, and a tracked marker makes any re-run refuse.
 
 \subsection{Later registered scorings}\label{app:G.3}
-On 2026-10-11 the project decided that pohang04 is scored whenever a result needs held-out validation. Each scoring is registered before its numbers exist and logged in the exposure ledger. pohang04 has still fitted nothing: no constant, threshold or calibration of any system below. It has now been scored eight times: the look (Appendix~\ref{app:G.2}), the v2 re-score of its corrupted cells, and the six registrations below (P-U and P-F together, P-T, P-A, P-FT, P-C2 and P-G). Each later result should be weighed as a further registered exposure of one daylight run, not as a first look. All use the look's nine cells (clean/clean and the eight v2 cells; P-G adds a VIS glare cell), the five Phase 3 systems, development calibration, and the look's 1,000 moving-block replicates (L = 20, seed 1). Each $\Delta$ is paired.
+On 2026-10-11 the project decided that pohang04 is scored whenever a result needs held-out validation. Each scoring is registered before its numbers exist and logged in the exposure ledger. pohang04 has still fitted nothing: no constant, threshold or calibration of any system below. It has now been scored nine times: the look (Appendix~\ref{app:G.2}), the v2 re-score of its corrupted cells, and the seven registrations below (P-U and P-F together, P-T, P-A, P-FT, P-C2, P-G and P-FG). Each later result should be weighed as a further registered exposure of one daylight run, not as a first look. All use the look's nine cells (clean/clean and the eight v2 cells; P-G adds a VIS glare cell), the five Phase 3 systems, development calibration, and the look's 1,000 moving-block replicates (L = 20, seed 1). Each $\Delta$ is paired.
 
 \begin{table}[htbp]
 \centering
@@ -706,7 +706,7 @@ lowlight / clean & 0.2134 & +0.0018 & +0.0324 & +0.0264 & +0.0052 & +0.0361 & +0
 \end{itemize}
 \end{itemize}
 
-\textbf{Test-time adaptation.} The five adaptation scorings (P-T, P-C2, P-G, P-FT and P-A) are reported in Section~\ref{M-sec:5.2} (Table~\ref{M-tab:3}, Fig.~\ref{M-fig:2}), and the descriptive \texttt{ttbn\_\allowbreak{}lex} arm in Section~\ref{M-sec:5.4}.
+\textbf{Test-time adaptation.} The six adaptation scorings (P-T, P-C2, P-G, P-FT, P-FG and P-A) are reported in Section~\ref{M-sec:5.2} (Table~\ref{M-tab:3}, Fig.~\ref{M-fig:2}), and the descriptive \texttt{ttbn\_\allowbreak{}lex} arm in Section~\ref{M-sec:5.4}.
 
 \subsection{A night test on frames no fusion system had seen}\label{app:G.4}
 Every night number in Appendices D--F comes from development: 1,032 pohang01 frames of the VIS val split. pohang04 is all daylight. pohang01's \textbf{test} split, however, had never been fusion-scored: a scan of all 263 detection-cache directories found none of its frames. Its 1,109 pairs whose VIS and IR frames are both test-split frames therefore form a night test for the fusion rules. They are not new for the detectors, because the Phase 3 detectors trained on the same run's train split. We registered the test before building a single cache (\texttt{docs/\allowbreak{}prereg-\allowbreak{}p01-\allowbreak{}nighttest-\allowbreak{}2026-\allowbreak{}10-\allowbreak{}11.md}).
@@ -860,7 +860,7 @@ A 44-of-93-run IR architecture ladder was stopped early on the basis of an ANOVA
 \item Every gain is on simulated corruptions. The largest, +0.1823 under VIS sensor noise on pohang04, is on an ImageNet-C-style severity with no physical anchor (Appendix~\ref{app:B.1}); fog, low light and glare follow the camera-chain model. The gate does not fire on clean held-out frames, so the method has not met a real degradation.
 \item Two of the gate's terms used pohang04's label-free statistics before any pohang04 score existed. The IR health bound was switched from the authority bound to the merge bound after the first was seen to pass 9.5\% of clean pohang04 frames. N4g's glare thresholds were checked to fire on 0.10\% of clean pohang04 frames. No label was read, but neither choice is blind to the held-out run.
 \item The gate needs a healthy IR stream, and where IR is degraded it fires less. On development, low light with IR fog at severity 3 is gated on 4.5\% of frames, against 100\% with clean IR. Every pohang04 adaptation cell has clean IR.
-\item Development draws 942--944 carry five verdicts (N4, N4g, N4c, N4c2, N4ae), and N4F reused draws 945--947. Each later verdict is weaker evidence than a first test, as its registration states.
+\item Development draws 942--944 carry five verdicts (N4, N4g, N4c, N4c2, N4ae), and N4F and N4Fg reused draws 945--947. Each later verdict is weaker evidence than a first test, as its registration states.
 \item N4 reads up to 0.7 s ahead; N4c2 removes that at the cost of a second pass per block. fp16 builds are not bit-reproducible across processes (about 4\% of frames differ in box count), which moves AP by at most 0.0003 on development.
 \item Neither N4 nor N4F was timed (item 18).
 \end{itemize}
