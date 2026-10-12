@@ -584,8 +584,90 @@ def fig_tta() -> None:
     save(fig, "fig_tta_heldout")
 
 
+# --------------------------------------------------------------------------------------------
+# PAPER.md Figure 1: the recommended system, N4 (IR-gated test-time adaptation), drawn from
+# scripts/ttbn.py's gate and the constants it loads (runs/eval/structure_constants.json; the
+# glare term of N4g from scripts/ttbn_variants.py).
+# --------------------------------------------------------------------------------------------
+
+def fig_n4() -> None:
+    import re
+    sc = read_json("runs/eval/structure_constants.json")["axes"]
+    vis_bound, ir_bound, irp = sc["vis_health"]["bound"], sc["ir_health"]["bound"], sc["ir_p05"]["threshold"]
+    src = (ROOT / "scripts" / "ttbn_variants.py").read_text(encoding="utf-8")
+    g_mean, g_std = map(float, re.search(r"GLARE_MEAN, GLARE_STD = ([\d.]+), ([\d.]+)", src).groups())
+
+    fig, ax = plt.subplots(figsize=(DOUBLE, 3.45))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 54.6)
+    ax.axis("off")
+    T, B = 7.0, 6.2
+
+    def box(x, y, w, h, title, body="", edge=RULE, fill="white", dashed=False):
+        ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.8",
+                                    lw=0.9, ec=edge, fc=fill, ls=(0, (3, 2)) if dashed else "-"))
+        if title:
+            ax.text(x + 1.0, y + h - 1.1, title, ha="left", va="top", fontsize=T, fontweight="bold", color=INK)
+        if body:
+            ax.text(x + 1.0, y + h - 4.2, body, ha="left", va="top", fontsize=B, color=INK2, linespacing=1.4)
+
+    def arrow(x0, y0, x1, y1, color=MUTED):
+        ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
+                    arrowprops=dict(arrowstyle="-|>", color=color, lw=0.9, mutation_scale=7, shrinkA=0, shrinkB=0))
+
+    def stream(y0, y1, label, color):
+        ax.add_patch(FancyBboxPatch((0.4, y0), 2.4, y1 - y0, boxstyle="round,pad=0,rounding_size=0.6",
+                                    lw=0, fc=color))
+        ax.text(1.6, (y0 + y1) / 2, label, rotation=90, ha="center", va="center", fontsize=6.8,
+                color="white", fontweight="bold")
+
+    o = 2.6                                                     # room for the two-line strip below
+    stream(30 + o, 51.5 + o, "VIS frame", VIS)
+    stream(7 + o, 28.5 + o, "IR frame", IR)
+    box(5, 28.3 + o, 25, 16.2, "VIS frame health",
+        f"11 statistics → novelty d²\nunhealthy: d² > {vis_bound:.1f}\n(that is, q_vis < 1)\n"
+        f"N4g adds: mean > {g_mean:.1f}\n   and std > {g_std:.1f}", edge=VIS)
+    box(5, 15.5 + o, 25, 12, "IR reading of the scene",
+        f"reads day:  p05 ≤ {irp:g}\nhealthy:  d² ≤ {ir_bound:.1f}\n(11 statistics, clean max)", edge=IR)
+    arrow(2.8, 37.5 + o, 5, 37.5 + o)
+    arrow(2.8, 22 + o, 5, 22 + o)
+
+    box(33.5, 15.5 + o, 26, 29, "Gate (per frame)",
+        "VIS unhealthy\n∧ IR reads day\n∧ IR healthy\nlabel-free\n\n"
+        "dark VIS, IR reads night:\n   a dark scene, not adapted\n"
+        "dark VIS, IR reads day:\n   a degraded camera, adapted")
+    arrow(30, 37.5 + o, 33.5, 37.5 + o)
+    arrow(30, 22 + o, 33.5, 22 + o)
+
+    box(63, 32 + o, 36.5, 19.5, "VIS detector (frozen)",
+        "yolo26m, ship + buoy. On gated blocks\n"
+        "of 8 frames every BatchNorm layer uses\n"
+        "BN-mix statistics:\n"
+        "μ = (16 μ_src + 8 μ_b) / 24, likewise σ²\n"
+        "N4c2: the previous block's statistics\n"
+        "no label, gradient or weight change", edge=VIS)
+    arrow(59.5, 38 + o, 63, 38 + o, color=FUSED)
+    arrow(2.8, 49 + o, 63, 49 + o, color=VIS)
+    ax.text(46, 49.6 + o, "VIS frames", ha="center", va="bottom", fontsize=B, color=INK2)
+
+    box(63, 18.5 + o, 36.5, 10.5, "Fuse: union (no veto)",
+        "WBF at IoU 0.85, constant weights;\nsupport at IoU 0.30 → fused boxes", fill=BAND, edge=BAND)
+    box(63, 7 + o, 36.5, 8.5, "IR detector (never adapted)", "yolo26m-P2, ship only", edge=IR)
+    arrow(2.8, 10 + o, 63, 10 + o, color=IR)
+    ax.text(46, 9.4 + o, "IR frames", ha="center", va="top", fontsize=B, color=INK2)
+    arrow(81.25, 32 + o, 81.25, 29 + o, color=VIS)
+    arrow(81.25, 15.5 + o, 81.25, 18.5 + o, color=IR)
+
+    box(5, 0.3, 94.5, 7.4, "", edge=MUTED, dashed=True)
+    ax.text(6, 5.6, "Where compute allows (N4F):", ha="left", va="center", fontsize=T, fontweight="bold",
+            color=INK2)
+    ax.text(6, 2.4, "the same gate and adaptation on all ten VIS views of full_tta "
+            "(5 checkpoints × raw and flipped)", ha="left", va="center", fontsize=B, color=INK2)
+    save(fig, "fig_n4_gate")
+
+
 FIGS = {  # paper order: Figure 1 ... Figure 8, then Figure 12
-    "decision_layer": fig1, "throughput": fig1b, "uq_calibration": fig3, "lift_screen": fig5,
+    "n4_gate": fig_n4, "decision_layer": fig1, "throughput": fig1b, "uq_calibration": fig3, "lift_screen": fig5,
     "checkpoint_selection": fig6, "gate_history": fig2, "phase3_cells": fig3b,
     "night_restore": fig4, "tta_heldout": fig_tta,
 }

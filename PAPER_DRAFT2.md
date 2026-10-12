@@ -3,7 +3,7 @@
 **Laksh Saroha**, Department of Electronics and Communication Engineering, Thapar Institute of Engineering and Technology, Patiala.
 Mentor: Dr. Sandeep Mandia. UG Research Fellowship project.
 
-> Final draft, 2026-10-12. Every number carries its AP convention (local linear-interpolation AP unless stated) and names the file it comes from. Development results and held-out results are labelled as such throughout. The revision history, including every reframing and its cause, is in `docs/paper-revision-history.md`.
+> **Not the paper.** Since 2026-10-12 the paper is [`PAPER.md`](PAPER.md) (TMLR, led by the IR-gated test-time adaptation), built to `paper/main.pdf`. This file is the evidence record it draws on: every section, table and source path, unchanged. Final draft, 2026-10-12. Every number carries its AP convention (local linear-interpolation AP unless stated) and names the file it comes from. Development results and held-out results are labelled as such throughout. The revision history, including every reframing and its cause, is in `docs/paper-revision-history.md`.
 
 ---
 
