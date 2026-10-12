@@ -17,7 +17,18 @@ fail() {
 }
 export PYTHONIOENCODING=utf-8 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 KMP_BLOCKTIME=0
 echo "[queue] waiting for the development chain $(t)"
-until grep -q "DEV DONE\|stopping" $D/dev_chain.log || grep -qs "^\[chain\] FAILED" $D/*.log; do sleep 30; done
+dev_running() { powershell -NoProfile -c "@(Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*ttbn_fulltta_glare.py*-dev*' -or \$_.CommandLine -like '*ttbn_fulltta_glare.py check-fp16*' }).Count" | tr -d '\r'; }
+idle=0
+until grep -q "DEV DONE\|stopping" $D/dev_chain.log || grep -qs "^\[chain\] FAILED" $D/*.log; do
+  sleep 30
+  if [ "$(dev_running)" = "0" ]; then idle=$((idle + 1)); else idle=0; fi
+  if [ $idle -ge 4 ]; then              # two minutes with no development step running: the chain died; resume it
+    echo "[queue] development chain not running; resuming it $(t)"
+    led "  * **$(t) — N4Fg development chain resumed by the queue** (its session ended; every step resumes where it stopped)."
+    bash $D/dev_chain.sh > $D/dev_chain.log 2>&1
+    idle=0
+  fi
+done
 # fp16 check outcome to the ledger (registration step 1)
 if [ -f $D/fp16_check.json ]; then
   led "  * **$(date -r $D/fp16_check.json +'%I:%M %p') — N4Fg development fp16 check:** $(tail -1 $D/check_fp16.log | cut -c9-). File \`$D/fp16_check.json\`."
