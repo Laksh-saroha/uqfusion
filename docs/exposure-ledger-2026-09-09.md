@@ -816,3 +816,7 @@ from the detector" are different claims and only the first is true.
     (11:44 PM, `runs/novel/ttbn_fulltta_glare/dev_chain.log`). No N4Fg number existed at either time.
   * **11:47 PM — Amendment 1:** at Laksh's request pohang04 is built and scored after the development report
     whatever its verdict (integrity checks still stop the queue). Written before any N4Fg number existed.
+  * **11:56 PM — N4Fg development fp16 check:** full_tta_ttbng glare/clean/day draw 945: fp32 0.21928 fp16 0.21922 diff -0.00006 -> PASS: fp16. File `runs/novel/ttbn_fulltta_glare/fp16_check.json`.
+* **2026-10-13 (12:06 AM) — N4Fg development: PASSES** (`docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.md`; registered in
+  `docs/prereg-ttbn-fulltta-glare-2026-10-12.md`). Draws 945–947, third use. No cell worse than `full_tta`: PASS. Cells where the glare term adds gated frames at or above −0.0014 against N4F: PASS.
+  * pohang04 starts now whatever the verdict (Amendment 1).
