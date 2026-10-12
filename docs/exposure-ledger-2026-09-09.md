@@ -820,3 +820,10 @@ from the detector" are different claims and only the first is true.
 * **2026-10-13 (12:06 AM) — N4Fg development: PASSES** (`docs/eval/ttbn/ttbn_fulltta_glare_dev_2026-10-12.md`; registered in
   `docs/prereg-ttbn-fulltta-glare-2026-10-12.md`). Draws 945–947, third use. No cell worse than `full_tta`: PASS. Cells where the glare term adds gated frames at or above −0.0014 against N4F: PASS.
   * pohang04 starts now whatever the verdict (Amendment 1).
+  * **12:06 AM — P-FG: pohang04 builds started** (plain flipped glare views, then N4Fg's flipped adapted blocks).
+  * **01:12 AM — P-FG: pohang04 builds done; scoring started** (`UQF_FAST_*`).
+* **2026-10-13 (01:44 AM) — N4Fg on pohang04: P-FG REPLICATES** (`docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.md`; registered in
+  `docs/prereg-ttbn-fulltta-glare-2026-10-12.md`, Amendment 1). Ninth scoring of pohang04. Development: PASSES.
+  * glare/clean: | N4Fg (`full_tta_ttbng`, N4g's gate 81.0%) | 0.1967 | +0.0311 [+0.0286, +0.0332] |
+  * | N4F (`full_tta_ttbn`, N4's gate 1.9%) | 0.1656 | +0.0000 [-0.0000, +0.0000] |
+  * Other cells (gate-equality check against P-FT): see the report's second table.
