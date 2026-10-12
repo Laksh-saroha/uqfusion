@@ -187,7 +187,10 @@ T_ABSTRACT = (
     "NULL on both paths; we argue that the scored quantity belongs in the registration. The mechanism that shipped "
     "instead, an image-statistic veto with union aggregation, beats the visible stream by day on five retrained "
     "systems (+0.0070 to +0.0133 AP) but discards a working visible stream at night (−0.1847) once a label artifact "
-    "behind its night arm was corrected. Paired noise floors, dependence-aware intervals and magnitude floors moved "
+    "behind its night arm was corrected. Registered replacements scored on fresh corruption draws, on development "
+    "frames only, show that switching the veto off beats it on 30 of 60 cells and loses on none, that no learned gate "
+    "we registered beats that, and that five frozen checkpoints per stream with flip augmentation and no gate raise "
+    "mean fused ship AP from 0.0894 to 0.1862. Paired noise floors, dependence-aware intervals and magnitude floors moved "
     "20 of 74 earlier findings to indeterminate, and one logged look at an untouched run returns a gap of +0.0216 "
     "that excludes neither zero nor 0.05.")
 T_C1 = (
@@ -322,6 +325,32 @@ T_6_8_LEAD = (
     "Table L (Appendix J) lists the fusion and post-processing levers that were tested and not adopted, as paired "
     "ship-AP deltas on the frames each row names. Most are inert or negative; three results from it bear on the "
     "argument of this paper.")
+T_6_9 = (
+    "The shipped gate holds fused ≥ max(VIS, IR) on 32 of the 60 development cells under the v2 corruptions. We "
+    "registered replacements for it in three rounds, each before any of its numbers existed, and scored them on fresh "
+    "corruption draws on the Phase 3 systems. All are development results, and the night axis of `crossmodal26m` "
+    "stays closed (full text in Appendix J.3). Learned late fusion in the spirit of CLOCs (Pang et al., 2020), a "
+    "set-transformer variant, a version restricted to stream trust (LLF-2) and a trust model over the frozen "
+    "backbones' embeddings all FAIL their registered predictions. Each recovers the night cells and is worse than "
+    "shipped somewhere by day, because a model fitted to a noisy matching target re-orders a detector's own boxes "
+    "worse than its confidence does. The simplest replacement, the veto switched off (`union`), IMPROVES on shipped "
+    "by the registered rule (30 cells better, none worse) and holds the claim on 59 of 60; three new hand-written "
+    "gates, one with Bayesian pair fusion (Chen et al., 2022), lose to it. Two structural facts explain much of this. Boxes appended below every other box cannot lower "
+    "AP, so a vetoed stream should be demoted, not deleted: `demote` is never below shipped, and a fixed tier order "
+    "with every VIS box above every IR box (`lex`) is never below VIS and holds the claim on all 60 cells, although "
+    "it gives up the cross-modal support that helps by day. And a frame-level gate pools two score scales into one "
+    "ranking: switching streams on a random 75 percent of frames scores 0.3420, below both VIS alone (0.3485) and "
+    "the union (0.3566).")
+T_6_10 = (
+    "Changes that leave every detector frozen were registered beside the gate replacements and scored the same way "
+    "(Table 8; full text in Appendix J.4). Merging the five frozen checkpoints of each stream with plain WBF raises "
+    "VIS ship AP by +0.0192 and IR by +0.0073. Under the shipped gate that is better than shipped on 43 cells and "
+    "worse on none, but it still fails the claim on the same 28 cells, because the night veto discards the better "
+    "stream. Composed with the gate's removal, gated IR denoising and flip test-time augmentation, the result "
+    "(`full_tta`) is the best system measured here: better than shipped on 57 of 60 cells, worse on none, mean fused "
+    "ship AP 0.1862 against 0.0894. It costs ten detector passes per stream per frame and has no held-out "
+    "validation. A descriptive audit of the shipped constants on v2 confirms every fusion constant and finds one "
+    "switch wrong, the weak-IR fallback, on the closed night axis (Appendix J.4).")
 T_7_1_LOOK = (
     "The look is mechanically single-shot: the scoring script refuses to run unless the repository is at a clean "
     "FREEZE commit, a 316-file hash manifest verifies and the development reference reproduces exactly, and it "
@@ -337,7 +366,8 @@ T_LIM = [
     "1. **One held-out run.** No untouched test set existed before pohang04; pohang02 and pohang03 were declared "
     "TEST after the fact and fail a selection-bias test. pohang04 is now spent: its look is inconclusive (§7.2), "
     "and its corrupted cells were re-scored under the v2 corruptions, a disclosed second exposure.",
-    "2. **The shipped night rule is wrong for the shipped detector** (§6.3, §6.6). It is reported, not repaired.",
+    "2. **The shipped night rule is wrong for the shipped detector** (§6.3, §6.6). It is reported, not repaired; "
+    "separate systems remove the night cost on development (§6.9, §6.10), with no held-out night to validate them.",
     "3. **Three checkpoint generations** (yolo26s, pre-restore yolo26m, Phase 3), each named, never pooled.",
     "4. **In-sample constants.** The IR night threshold, the IR health model and the capability prior were "
     "fitted on frames that the evaluation also scores.",
@@ -366,7 +396,9 @@ T_CONCL = (
     "two verdicts. The sensor-selection rule that shipped instead shows the cost of not re-pricing a decision "
     "rule when the detector beneath it changes. The same holds for the corruptions that grade such a rule: the "
     "off-the-shelf ones we first used were broken, and replacing them with a model of the camera moved verdicts "
-    "in both directions.")
+    "in both directions. On development frames the largest gains came from removing the rule and merging frozen "
+    "checkpoints of each detector, not from any gate we could write or learn, and part of every frame-level gate's "
+    "loss is the cost of pooling two score scales into one ranking.")
 TABLE_4C = "| Path | Condition | `crossmodal` | `crossmodal26m` |\n|---|---|---|---|\n| coordinate (S1 − S3) | clean | −0.000566"
 
 
@@ -374,7 +406,7 @@ def build_tmlr():
     """Main body cut toward 15 typeset pages; appendices A–M follow the order of the sections they come from."""
     L = dict(A="B", B="D", C="E")
     title = D2.split("\n", 1)[0]  # Draft 2's title line
-    note = ("> Venue draft for TMLR, derived from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09) by "
+    note = ("> Venue draft for TMLR, derived from `PAPER_DRAFT2.md` as of 2026-10-11 by "
             "`venues/build_long_drafts.py`. TMLR has no hard page limit, but a main body over 12 pages gets a "
             "longer review. The main body is cut toward 15 typeset pages: condensed subsections keep their headings, "
             "and their full text, four tables and one figure move to appendices A–M, in the order of the sections "
@@ -478,6 +510,14 @@ def build_tmlr():
     kept, mv68 = rework("### 6.8 Levers that are inert or negative",
                         replace={k: None for k in s68}, moved=s68)
     out.append(section("### 6.8 Levers that are inert or negative", T_6_8_LEAD + "\n\n" + kept))
+    h69 = "### 6.9 Replacing the hand-written gate (development, registered)"
+    h610 = "### 6.10 Changes that retrain nothing (development, registered)"
+    out.append(section(h69, T_6_9))
+    aud = "**The shipped constants under v2.**"
+    s610 = ["Before any of their numbers existed", "**Ensembles are the largest lever", "**Restoration helps only"]
+    s610 += [aud] if aud in body(h610) else []
+    kept, mv610 = rework(h610, replace={s610[0]: T_6_10, **{k: None for k in s610[1:]}}, moved=s610)
+    out.append(section(h610, kept))
 
     out.append(section("## 7. Held-out evaluation: the single pohang04 look",
                        strip_rule(body("## 7. Held-out evaluation: the single pohang04 look"))))
@@ -514,9 +554,11 @@ def build_tmlr():
         section("### H.3 Stage 1 in full", pick(mv65, *s65)))
     put("I", section("## Appendix I. IR night-switch safety (full text of §6.7)",
                      strip_rule(body("### 6.7 Is the IR night switch safe when IR is corrupted?"))))
-    put("J", "## Appendix J. Levers tested and not adopted (from §6.8)\n",
+    put("J", "## Appendix J. Levers not adopted, gate replacements and no-retraining changes (from §6.8–§6.10)\n",
         section("### J.1 Table L", pick(mv68, "**Table L.", "| Lever | Result")),
-        section("### J.2 Notes", pick(mv68, "The soft-NMS rejection") + "\n\n" + mv8["**Redundancy is worth"]))
+        section("### J.2 Notes", pick(mv68, "The soft-NMS rejection") + "\n\n" + mv8["**Redundancy is worth"]),
+        section("### J.3 Replacing the hand-written gate (full text of §6.9)", strip_rule(body(h69))),
+        section("### J.4 Changes that retrain nothing (full text of §6.10)", pick(mv610, *s610)))
     put("K", "## Appendix K. Held-out look details (from §7)\n",
         section("### K.1 Single-shot mechanics", pick(mv71, "The look is mechanically")),
         section("### K.2 All cells", pick(mv72, *s72)))
@@ -544,8 +586,8 @@ def build_joe():
     L = dict(A="A", B="B", C="A")
     title = ("# Predicted Uncertainty and Sensor Selection for Visible–Infrared Ship Detection at Sea: "
              "A Pre-Registered Evaluation on the Pohang Canal Dataset")
-    note = ("> Venue draft for the IEEE Journal of Oceanic Engineering, derived from `PAPER_DRAFT2.md` at commit "
-            "`d9260ef` (2026-10-09) by `venues/build_long_drafts.py`. JOE sets no fixed length; this version keeps "
+    note = ("> Venue draft for the IEEE Journal of Oceanic Engineering, derived from `PAPER_DRAFT2.md` as of "
+            "2026-10-11 by `venues/build_long_drafts.py`. JOE sets no fixed length; this version keeps "
             "Draft 2's numbering, reframes the front and back matter for a maritime-engineering audience, and moves "
             "the backbone benchmark, the metric contracts, the checkpoint-selection analysis and the implementation "
             "notes to appendices. Every number is from Draft 2. See `venues/README.md`.")
@@ -564,7 +606,10 @@ def build_joe():
         "veiled, followed by the union of the surviving detections: on five retrained systems it beats the visible "
         "stream alone on every daylight condition (+0.0070 to +0.0133 AP). The same rule, written while a "
         "labelling artifact made the visible detector blind at night, discards a working visible stream once the "
-        "detector is retrained (−0.1847 AP on clear nights). We report the evaluation protocol in full, including "
+        "detector is retrained (−0.1847 AP on clear nights). Switching the veto off, registered and scored on fresh "
+        "corruption draws, beats it on 30 of 60 development cells and loses on none; no learned gate we registered "
+        "does better, and merging five frozen checkpoints per detector with flipped views and no gate raises mean "
+        "fused ship AP from 0.0894 to 0.1862. We report the evaluation protocol in full, including "
         "paired noise floors, intervals that respect 10 Hz autocorrelation and a single pre-registered look at an "
         "untouched run (fused ship AP 0.2682), and draw design lessons for maritime perception systems.")
     index = ("*Index Terms*—Maritime object detection, infrared imaging, sensor fusion, uncertainty estimation, "
@@ -619,12 +664,14 @@ def build_joe():
               "### 6.6 Night visible blindness was a label artifact",
               "### 6.7 Is the IR night switch safe when IR is corrupted?",
               "### 6.8 Levers that are inert or negative",
+              "### 6.9 Replacing the hand-written gate (development, registered)",
+              "### 6.10 Changes that retrain nothing (development, registered)",
               "## 7. Held-out evaluation: the single pohang04 look", "### 7.1 Protocol (fixed before the look)",
               "### 7.2 Result"]:
         b = strip_rule(body(h))
         out.append(section(h, b) if b else h + "\n")
     implications = (
-        "**Implications for maritime perception systems.** Five practical points follow for teams fielding "
+        "**Implications for maritime perception systems.** Seven practical points follow for teams fielding "
         "visible–thermal detection on vessels.\n"
         "* *Measure registration before designing fusion.* With timestamp pairing and a 3–6 px residual, "
         "decision-level fusion degenerated to concatenation; cross-modal agreement cannot serve as evidence when "
@@ -640,7 +687,10 @@ def build_joe():
         "fixed blur that the gate's fog detector had learned to see; physical fog it mostly misses (§5.1, §8).\n"
         "* *Budget the evaluation for small effects.* Paired comparisons, intervals that respect frame "
         "autocorrelation and a magnitude floor are needed, because fusion changes of a few thousandths of AP are "
-        "otherwise indistinguishable from resampling noise (§5.3, §5.4).")
+        "otherwise indistinguishable from resampling noise (§5.3, §5.4).\n"
+        "* *Spend compute on the detectors before the gate.* Merging frozen checkpoints and flipped views of each "
+        "detector gained more than any gate we designed or learned, and a gate that switches outputs frame by frame "
+        "pays for mixing score scales even when it chooses well (§6.9, §6.10).")
     out.append(section("## 8. Discussion", strip_rule(body("## 8. Discussion")) + "\n\n" + implications))
     out.append(section("## 9. Limitations", strip_rule(body("## 9. Limitations"))))
     concl = (
@@ -648,7 +698,8 @@ def build_joe():
         "under pre-registered tests, that it cannot: the variance a detector predicts for its own boxes is "
         "informative about those boxes and silent about which sensor has failed. The system that works by day is "
         "a hard veto on image statistics with the union of the survivors, and its night behaviour shows how such a "
-        "rule fails when the detector beneath it changes. On the Pohang Canal data, with simulated adverse weather "
+        "rule fails when the detector beneath it changes. Removing the rule and merging frozen checkpoints of each "
+        "detector did more on development frames than any gate we could write or learn. On the Pohang Canal data, with simulated adverse weather "
         "and a single night run, these results are development evidence that one untouched run cannot extend. "
         "More held-out runs, field-collected adverse conditions and a co-registered camera rig are the next "
         "requirements.")

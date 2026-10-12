@@ -141,7 +141,7 @@ pohang04's verdict was scored once, under a pre-registered rule: a held-out gap 
 * **Frozen night rule.** The shipped night rule is wrong for the shipped detector, and it is reported, not repaired.
 * **Two checkpoint generations, not pooled.** The R-D1 results are on pre-restore checkpoints.
 * **Unvalidated fixed strength.** α was fixed and never tuned, so whether another strength beats the system without σ is untested.
-* **Detector-only throughput.** 57.0 FPS is one detector's fp32 prediction step on a laptop GPU, with the clock pinned at 1500 MHz because an unpinned sweep ranked some larger models faster than smaller ones; the two-stream figure is derived, not measured.
+* **Detector-only throughput.** 57.0 FPS is one detector's fp32 prediction step on a laptop GPU, with the clock pinned at 1500 MHz because an unpinned sweep ranked some larger models faster than smaller ones; measured end to end, the two-stream pipeline runs at 9.1 FPS, bound by image statistics computed on full-resolution frames (60.6 of 109.9 ms per pair).
 
 ## 7. Conclusion
 
