@@ -510,6 +510,7 @@ def fig1b() -> None:
 # Sources: docs/eval/ttbn/ttbn_p04_2026-10-11.json (P-T, N4 vs union),
 #          docs/eval/ttbn/ttbn_fulltta_p04_2026-10-11.json (P-FT, N4F vs full_tta),
 #          docs/eval/ttbn/ttbn_glare_p04_2026-10-12.json (P-G, N4g vs union on glare),
+#          docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.json (P-FG, N4Fg vs full_tta on glare),
 #          docs/eval/holdout_p04_gatefree_2026-10-11.json (clean/clean baselines).
 # Before adaptation is a hollow muted ring, after is the fused aqua; the delta is in ink.
 # --------------------------------------------------------------------------------------------
@@ -537,9 +538,14 @@ def fig_tta() -> None:
         c = n4[key]
         return c["union"], c["union_ttbn"], c["delta"], None
 
+    fg = ROOT / "docs/eval/ttbn/ttbn_fulltta_glare_p04_2026-10-12.json"      # P-FG (N4Fg on glare), if scored
+
     def ten_pass(key):
         if key == "glare__clean":
-            return None
+            if not fg.is_file():
+                return None
+            c = json.loads(fg.read_text(encoding="utf-8"))["cells"][key]
+            return c["full_tta"], c["full_tta_ttbng"], c["delta"], "N4Fg"
         if key == "clean__clean":
             v = gf["full_tta|clean__clean"]["value"]
             return v, v, 0.0, None
