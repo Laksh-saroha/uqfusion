@@ -801,3 +801,13 @@ from the detector" are different claims and only the first is true.
       without them before the restart; the fast paths are byte-identical.
     * A second concurrent cache build was tried for 2 minutes and stopped: it was slower (12.4 against 14.5
       frames/s). It wrote nothing.
+
+* **2026-10-12 (11:45 PM) — N4Fg registered: N4F with N4g's glare term, development and pohang04 glare/clean
+  (P-FG)** (`docs/prereg-ttbn-fulltta-glare-2026-10-12.md`). Asked by Laksh to fill the "not scored" N4F glare
+  entry of the paper's Table 3 and Fig. 2.
+  * New exposure of pohang04 (the ninth scoring) if development passes: `full_tta`, N4F and N4Fg on glare/clean,
+    plus N4Fg in the three existing cells where N4g's gate adds frames. No ensemble detection existed on glare/clean
+    when the registration was written.
+  * Development draws 945–947 get a third use (N4F's, the no-retrain verdict's), disclosed.
+  * Seen first: every development and pohang04 number to date, and, label-free, where N4g's gate differs from N4's
+    on 945–947 (glare only) and which adapted blocks are missing (listed in the registration).
