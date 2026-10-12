@@ -92,7 +92,7 @@ def main() -> int:
     # --- 2. corruption functions all produce valid changed images -------------
     probe = cv2.imread(str(val_imgs[0]))
     for name in CORRUPTIONS:
-        out = make_corruption(name, severity=2, seed=0)(probe, 0)
+        out = make_corruption(name, severity=2, seed=0, version="v1")(probe, 0)
         assert out.shape == probe.shape and out.dtype == np.uint8, f"corruption '{name}' broke the image"
         assert not np.array_equal(out, probe), f"corruption '{name}' was a no-op"
     print(f"[p3-smoke] all {len(CORRUPTIONS)} corruptions valid: {', '.join(CORRUPTIONS)}")
@@ -101,7 +101,7 @@ def main() -> int:
     def degrade(im, i):
         return degrade_image(im, seed=i)
 
-    fog = make_corruption("fog", severity=2, seed=0)
+    fog = make_corruption("fog", severity=2, seed=0, version="v1")
     caches: dict[str, list[dict]] = {}
     for src, predictor in predictors.items():
         for cond, transform in (("clean", None), ("degraded", degrade)):

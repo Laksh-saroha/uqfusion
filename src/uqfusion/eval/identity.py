@@ -216,7 +216,7 @@ def labels_sha256(records: list[dict]) -> str | None:
     Returns None when no label file exists for any frame, which is a real state (an
     IR cache scored against VIS labels) rather than an error.
     """
-    from uqfusion.eval.matching import label_path_for
+    from uqfusion.eval.matching import _FAST_IO, label_path_for
 
     h = hashlib.sha256()
     seen = 0
@@ -224,8 +224,13 @@ def labels_sha256(records: list[dict]) -> str | None:
         if "image_path" not in r:
             continue
         lp = Path(label_path_for(r["image_path"]))
-        if lp.is_file():
-            h.update(lp.read_bytes())
+        if _FAST_IO:                         # the same bytes, from the validated snapshot (labelcache)
+            from uqfusion.eval.labelcache import read_label_bytes
+            b = read_label_bytes(lp)
+        else:
+            b = lp.read_bytes() if lp.is_file() else None
+        if b is not None:
+            h.update(b)
             seen += 1
         else:
             h.update(b"<missing>")

@@ -387,3 +387,417 @@ from the detector" are different claims and only the first is true.
   five systems, ship AP, day and night; paired by system. Fogged VIS is included because protecting a
   fogged night with damaged IR is what the fallback was built for. Adopts nothing; a change would need its
   own registration. **No pohang04 frame is scored.** Logged before the run.
+
+* **2026-10-10 — two degraded-IR repairs to `crossmodal26m`, registered, development**
+  (`docs/prereg-degraded-ir-repairs-2026-10-10.md`, `scripts/v2_degraded_ir_repairs.py`). R1: the
+  weak-IR fallback confirms with `concentrated` alone (drops `dark AND veil`). R2: the cross-modal
+  support bonus applies only where IR is merge-healthy (`healthy_ir`). R1+R2 is the new preset
+  `crossmodal26m_r`; `crossmodal26m` is unchanged and bit-identical. Verdict on the fresh VIS draws
+  942–944 / IR 952–954 only (draw 941 informed R1 and is reported descriptively); five Phase 3 systems,
+  60 cells (VIS clean/fog/fog_s1/glare/lowlight × IR clean, fog s1–s3, noise s2–s3 × day/night), ship
+  AP, paired by system. New IR caches: `runs/cache_p3dev_v2/seed*/draw94{2,3,4}_95*/gauss_ir_paired_
+  {fog_s1,fog_s2,fog_s3,noise_s2,noise_s3}.pkl`. **No pohang04 frame is read or scored.** Logged
+  before the run (the caches were still building).
+
+* **2026-10-10 — learned late fusion (LLF), registered, development** (`docs/prereg-llf-2026-10-10.md`,
+  `scripts/llf.py`). A separate decision layer, not a change to `crossmodal26m` and not a fourth clause
+  on the closed night axis: every VIS and IR ship box is re-scored by a gradient-boosted model from
+  box, cross-stream and frame-health features, trained on draw 941 / 951 caches of the five Phase 3
+  systems (20% of units). It is scored leave-one-run-out on VIS draws 942–944 / IR 952–954, 60 cells,
+  ship AP, against max(VIS, IR) and the shipped preset (P1: all 60 cells hold; P2: never worse than
+  shipped, better somewhere). Secondary: night blocks, leave one corruption family out, two ablations.
+  Model and features fixed in the registration; nothing tuned. **No pohang04 frame is read or scored.**
+  Logged before any model was trained.
+  *Amendment, same day, before any LLF evaluation number:* a second arm, LLF-Net (a set transformer
+  over all candidates of a frame, GPU-trained, fixed hyperparameters, primary folds only), with the
+  same features, target, rows, folds, draws and criteria (`prereg-llf-2026-10-10.md` Amendment 1).
+  The IR caches for draws 942–944 finished at 20:4x; both scorers were started while the last two were
+  still being written, and they wait for each file.
+
+* **2026-10-10 — LLF verdict, then LLF-2 registered.** LLF (`docs/eval/llf/llf_2026-10-10.md`)
+  FAILS P1 (33/60 cells; shipped 32) and P2 (17 worse, 25 better). It removes the night rule's cost
+  (+0.16 to +0.23) but falls 0.0174 below VIS on clean day. LLF-2 (`docs/prereg-llf2-2026-10-10.md`)
+  restricts the learner to stream trust: `is_ir`, monotone `conf`, monotone `x_sup` and `x_higher`,
+  and the frame-health features. It is scored on **fresh** draws, VIS 945–947 / IR 955–957, which
+  were built for it (`runs/cache_p3dev_v2/seed*/draw94{5,6,7}_95*`). Registered after the LLF verdict
+  and before any LLF-Net or LLF-2 number. **No pohang04 frame is read or scored.**
+
+* **2026-10-10 (10:50 PM) — three no-retraining changes, registered, development**
+  (`docs/prereg-no-retrain-2026-10-10.md`). E1: checkpoint ensembles (WBF @0.55 of 2 or 5 frozen
+  checkpoints per stream, shipped gate on top; `scripts/seed_ensemble.py`). E2: classical image-only
+  restoration before detection (method per modality selected by a rule declared in the registration on
+  draw 941, every fourth frame, systems 0–2; applied where the shipped gate's own degradation statistic
+  fires; `scripts/restore.py`). Both are scored on the fresh draws VIS 945–947 / IR 955–957, which LLF-2
+  also uses; each system is judged by its own rule. E3: sixteen single-constant moves of
+  `crossmodal26m` priced on development draws 942–944, descriptive; nothing changes on it. Seen before
+  writing: one E1 smoke run (draw 941, system 0, three VIS cells) and one E2 smoke unit (draw 941, VIS
+  fog, 15 frames). Nothing on draws 945–947. **No pohang04 frame is read or scored.**
+  *Amendment 1, 11:00 PM, before any score on draws 945–947:* E4, the same streams fused with no gate
+  (`veto=None`), and E5, five-checkpoint ensembles of gated-restored streams fused with no gate. Both
+  are separate systems; `crossmodal26m` stays frozen. Prompted by an E3 smoke on draw 942 (system 0,
+  IR fog s3), stated in the amendment.
+  *Amendment 2, 11:20 PM, before any score on draws 945–947:* E6, three new gates (`selfconf`
+  output-space health veto, `calunion` health-conditioned isotonic calibration then concatenation,
+  `proben` Bayesian pair fusion; calibrators fitted on draw 941 leave-one-run-out); E7, LLF-2 plus 32
+  PCA components of the frozen backbones' frame embeddings, XGBoost on the GPU, per system.
+  *Amendment 3, 11:30 PM, before any score on draws 945–947:* E8, horizontal-flip test-time
+  augmentation per checkpoint (WBF 0.55), alone (`tta`) and on top of E5 (`full_tta`).
+  *Amendment 4, 1:25 AM 2026-10-11, before any score of its arms on draws 945–947:* E9, tiered
+  concatenation (`lex`: every VIS ship box above every IR ship box, fused ≥ VIS by construction) and
+  demotion instead of deletion (`demote`: the shipped output first, the vetoed stream as the tail,
+  fused ≥ shipped by construction), plus `ens5_lex` and `full_tta_lex`. Prompted by a smoke on draw 941
+  (stated in the amendment, table in `docs/eval/no_retrain/smoke_941_lex.md`); two arms tried there
+  (`lex_sc`, `udemote`) are not registered. Seen on 945–947 before writing: the first two E7 jobs (945,
+  IR clean, systems 0–1). Note (1:30 AM): the VIS-clean × IR-clean cells do not depend on the draw, so
+  every 941 smoke in Amendments 1–4 showed those two cells' 945–947 values; the other 58 were unseen.
+
+* **2026-10-10 (11:59 PM) — degraded-IR repairs verdict** (`docs/eval/corruption_v2/degraded_ir_repairs.md`).
+  R1 ADOPTED (0 cells harmed at 0.0014, 5 gaining ≥ 0.0060, claim 35/60 vs shipped 32); R2 rejected (8
+  harmed); R1+R2 rejected (6 harmed). Per the registration `crossmodal26m_r` is redefined to R1 alone
+  (`src/uqfusion/eval/ctx.py`). Draws 942–944 were already exposed to LLF; this verdict adds no new
+  exposure. **No pohang04 frame was read or scored.**
+
+* **2026-10-11 (7:25 AM) — no-retraining verdicts and the E3 audit, development**
+  (`docs/eval/no_retrain/`, `docs/eval/llf/llf2_2026-10-10.md`, `docs/eval/restore/`,
+  `docs/eval/corruption_v2/constants_audit.md`). Every arm of `prereg-no-retrain-2026-10-10.md`
+  (Amendments 1–4) and LLF-2 has now been scored on VIS 945–947 / IR 955–957, so **those draws are
+  spent**: a further registration needs draws no system here has been scored on. E3 (descriptive, draws
+  942–944, no new exposure): every fusion constant stands. One move meets E3's amendment bar, the weak-IR
+  fallback switched off (25 cells better at 0.0060, none worse at 0.0014, claim fails 28 → 5). It was not
+  registered: it sits on the closed night axis, and the gate-free `union`, already scored on the fresh
+  draws, dominates it on 942–944 (30 better, claim fails 1). End-to-end throughput was timed on 500
+  development frame pairs (`docs/eval/e2e_fps_2026-10-11.md`); nothing was scored. **No pohang04 frame was
+  read or scored.**
+
+* **2026-10-11 (10:16 AM, before any build or score) — pohang04, third scoring, registered**
+  (`docs/prereg-p04-heldout-gatefree-2026-10-11.md`). Laksh decided on 2026-10-11 that pohang04 is scored
+  whenever a result needs held-out validation. Systems: `shipped` (reference), `union` and `full_tta`
+  (primary), `ens5_union` and `lex` (descriptive), with every arm's VIS-only and IR-only streams; the
+  look's clean/clean cell and the re-score's eight v2 cells, draws 941–944 / 951–954. New pohang04 caches
+  (flipped views, NLM-restored IR on flagged frames) are built for `full_tta`. Nothing is fitted on
+  pohang04. `LOOK_TAKEN.json`, its mirror and the look's verdict are untouched.
+  *Amendment 1, 10:48 AM, before any pohang04 cache is built:* the new views are computed in fp16
+  (priced on development: the `full_tta` stream moves by at most 0.0003 ship AP). Throughput benchmarks
+  between 10:20 and 10:47 AM ran the detectors on pohang04 frames for timing only; nothing was kept or
+  scored.
+
+* **2026-10-11 (2:15 PM, before any TT-BN number on draws 942–944 or any TT-BN detection on pohang04) —
+  N4, IR-vouched test-time BatchNorm adaptation of the VIS detector, registered**
+  (`docs/prereg-ttbn-2026-10-11.md`, `scripts/ttbn.py`). The method:
+  * BN-mix statistics, N = 16, over blocks of 8 consecutive frames.
+  * Used only where VIS reports itself unhealthy and IR is healthy and reads day.
+  * Fused by E4 `union`.
+
+  The development verdict is on draws 942–944 / 952–954, five systems, 60 cells. pohang04 (the
+  gate-free registration's cells, draws 941–944) is scored only if development passes, in fp16 only if
+  a development fp16 check passes.
+
+  Seen before writing:
+  * The screen on draw 941, systems 0–1, ungated, N ∈ {16, 64}.
+  * Label-free gate rates on development draws 943/944.
+  * Label-free gate rates on pohang04, from its existing frame-statistics files. No pohang04 detection
+    or label was read.
+
+  The pohang04 rates are why the gate's IR health term is the merge bound, not the screen's authority
+  bound (which passes 9.5% of clean pohang04 IR frames); this is disclosed in the registration.
+  Development screens N1 (self-validated support), N3 (σ-weighted ensemble coordinates) and N5
+  (asymmetric support / cross-tail demotion) were run on draw 941 only and are not registered.
+  *Amendment 1, 2:49 PM, before any fp16 TT-BN detection:* the fp16 build computes the batch statistics
+  with `torch.batch_norm_stats`; the fp16 development check prices it together with the precision.
+
+* **2026-10-11 (5:05 PM, before any number for either arm) — two descriptive lex arms registered.**
+  * Gate-free registration, Amendment 2: `full_tta_lex` on pohang04's nine cells.
+  * N4 registration, Amendment 2: `ttbn_lex` on development draws 942–944 and on pohang04.
+
+  Both use E9 `lex` ordering (every VIS ship box above every IR ship box, no merge) on that system's
+  streams. **No verdict is registered for either.** Appending boxes below every other box never lowers
+  AP, so each arm is at least its VIS stream. Those streams were already seen:
+  * pohang04 clean/clean `full_tta` VIS 0.2946;
+  * every cell's `ens5_union` VIS;
+  * development gated VIS streams of N4;
+  * the pohang04 lowlight/clean partial of N4.
+
+  No corrupted-cell `full_tta` value has been displayed. Both arms are computed from records the
+  registered builds already produce. No new pohang04 inference.
+
+* **2026-10-11 (5:15 PM, before any detection, frame statistic or label read on these frames) — night
+  test on pohang01's test split, registered** (`docs/prereg-p01-nighttest-2026-10-11.md`).
+  * Frames: 1,109 pairs whose VIS and IR frames are both in their test splits.
+  * Arms: `shipped` (reference), `union` (primary: P-N1 Δ vs `shipped`, P-N2 claim), `lex` and
+    `ens5_union` (descriptive). Clean frames only, five systems, development calibration injected.
+  * First exposure of these frames to any fusion system: a scan of the 263 detection-cache directories
+    under `runs/` found none of them.
+  * The detectors trained on the same run's train split, in interleaved blocks; this is disclosed as
+    the test's limit.
+
+* **2026-10-11 (5:23 PM, before any N4g or N4c number on draws 942–944 and before any N4c detection)
+  — two N4 variants registered** (`docs/prereg-ttbn-variants-2026-10-11.md`).
+  * **N4g** adds a glare term to the VIS side of N4's gate: VIS `mean > 117.92` AND `std > 62.31`, each
+    the maximum over clean development day frames.
+  * **N4c** normalises each block with the previous block's statistics: no look-ahead.
+
+  Both have development verdicts only, on draws 942–944 and the 60 cells of N4.
+
+  Seen before writing:
+  * Draw 941, label-free: the frame statistics and how they separate glare.
+  * The draw-941 gated screen with `p95 > 220` as the glare term (glare day +0.0170/+0.0267).
+  * pohang04, label-free: that `p95 > 220` and `std > 62.31` fire on 55% and 22% of its clean frames.
+    This is why the registered term is the conjunction, which fires on 0.10%.
+
+  No pohang04 detection or label was read.
+
+* **2026-10-11 (5:28 PM, before any N4F detection) — N4 on top of `full_tta` (N4F), registered**
+  (`docs/prereg-ttbn-fulltta-2026-10-11.md`, `scripts/ttbn_fulltta.py`).
+  * Method: `full_tta` with every VIS view (unflipped and flipped) BN-mix-adapted where N4's gate fires.
+  * Development: draws 945–947, N4's 60 cells, moving-block intervals; second use of those draws.
+  * pohang04: only if development passes, on N4's cells.
+
+  Nothing about N4F has been seen. Already seen: `full_tta`'s development values on 945–947 and its
+  pohang04 clean/clean value; N4's development verdict and pohang04 partials.
+  **This departs from the 7:25 AM entry that declared 945–947 spent.** It is disclosed in the
+  registration, together with why: fresh draws for `full_tta` cost hours of GPU. A development pass
+  there is weaker evidence, and pohang04 decides.
+
+* **2026-10-11 (5:38 PM) — night test on pohang01's test split, scored** (`docs/eval/night_p01test_2026-10-11.md`).
+  **P-N1 REPLICATES** (`union` − `shipped` +0.0273 [+0.0154, +0.0400]); **P-N2 PASS** (`union` claim
+  −0.0010 [−0.0049, +0.0031]).
+
+  Levels are far below development night: VIS 0.0516, `union` 0.0506, `shipped` 0.0233.
+
+  Post hoc, descriptive:
+  * The test pairs are two ~52 s stretches, and development night is two others.
+  * VIS AP swings 9× between stretches (development 0.14–0.35, test 0.04–0.10).
+  * Night levels are therefore episode properties.
+  * The L = 20 block intervals cannot see between-episode variance.
+
+  The diagnostics read the test frames' label counts and box areas, and per-stretch APs. They also read
+  draw 941's development night AP per stretch (systems 0–2).
+
+* **2026-10-11 (6:21 PM) — night results by episode, descriptive, post hoc** (`docs/eval/night_episodes_2026-10-11.md`,
+  `scratchpad/night_episodes.py`). Not part of any registration.
+  * Read: every night-test arm's ship AP per test stretch (two), the `union` − `shipped` interval at block
+    lengths 20 to 500, and development night per stretch (draw 941 clean caches, five systems).
+  * `union` is above `shipped` in all four stretches: test +0.0270 and +0.0589, development +0.1786 and
+    +0.2822.
+  * The interval's lower bound stays above zero at every block length (+0.0080 at L = 500). With two test
+    stretches, no episode-level interval exists.
+  * VIS ship AP spans 0.0391 to 0.3540 across the four stretches.
+  * `ens5_union` is below `union` on test A (0.0327 against 0.0406) and above it on test B (0.1411 against
+    0.1095).
+
+* **2026-10-11 (6:21 PM) — N4-mix screened on draw 941 and dropped; not registered** (`scratchpad/screen_n4mix.py`).
+  N4-mix replaces N4's adapted VIS record, on N4's gated frames, with a plain WBF (0.55) of the plain and
+  the adapted record of the same checkpoint. Systems 0 and 1; VIS clean, lowlight, fog, fog_s1 and glare;
+  IR clean.
+  * On the six gated day cells, N4-mix is below N4 in five (lowlight +0.0490/+0.0677 against
+    +0.0635/+0.0767 over `union`) and above it in one (fog, system 0: +0.0093 against +0.0087).
+  * Merging on every frame, with no gate, is safer at night than adapting on every frame (clean night
+    −0.0033/−0.0056 against −0.0074/−0.0206), but still loses on clean by day (−0.0143/−0.0016).
+  * Side finding: on fog_s1 by day, ungated adaptation gains +0.0340/+0.0258, while N4 gains
+    +0.0097/+0.0061; its gate fires on 62% of those frames.
+
+  Only draw 941, the screening draw, was read. No verdict draw (942 to 947) and no pohang04 frame.
+
+* **2026-10-11 (6:21 PM, before any flipped or restored view of the night-test frames is built) — night test
+  Amendment 1: `full_tta` and `full_tta_lex`, descriptive** (`docs/prereg-p01-nighttest-2026-10-11.md`).
+  * Definitions are P-F's and pohang04 Amendment 2's. The flipped and restored views are built in fp16, as
+    pohang04's were.
+  * No verdict: every other night-test arm has been seen, including `ens5_union`.
+  * Development night: `full_tta` 0.3192, `full_tta_lex` 0.3010, `union` 0.2895.
+
+* **2026-10-11 (6:38 PM) — night test Amendment 1 scored, descriptive, no verdict**
+  (`docs/eval/night_p01test_amend1_2026-10-11.md`).
+  * `full_tta` 0.0520: +0.0287 [+0.0156, +0.0393] over `shipped`, +0.0014 [−0.0065, +0.0068] over `union`;
+    claim +0.0013 [−0.0022, +0.0040].
+  * `full_tta_lex` 0.0535: +0.0029 [−0.0053, +0.0082] over `union`; claim +0.0028 [+0.0017, +0.0042].
+  * Development night had `full_tta` +0.0297 over `union`. The test-split night does not reproduce it.
+  * By stretch: test A 0.0355 against `union`'s 0.0406, test B 0.1509 against 0.1095.
+  * The IR health check fails on 274 of the 1,109 night frames, which were NLM-restored. All five
+    system contexts reproduce the flag.
+
+* **2026-10-11 (6:55 PM) — N4g and N4c development verdicts** (`docs/eval/ttbn/ttbn_variants_dev_2026-10-11.md`).
+  * **N4g PASSES.** Glare by day: +0.0240 [+0.0178, +0.0302] with IR clean, +0.0130 with IR fog_s1. The
+    worst cell is glare/fog_s3/day, −0.0008 [−0.0014, −0.0002], inside the harm floor. Non-glare cells
+    equal N4's (checked). No pohang04 test is registered for N4g.
+  * **N4c FAILS**: C-H on 10 cells, with low-light day at −0.1637 [−0.1900, −0.1375].
+
+* **2026-10-11 (7:14 PM, before any N4c2 detection on 942–944) — N4c diagnosed; N4c2 registered**
+  (`docs/prereg-ttbn-variants-2026-10-11.md`, Amendment 1; `scripts/ttbn_causal2.py`).
+  * Diagnosis, post hoc, from N4c's own development records: the carried statistics were measured under
+    the previous block's stale normalisation. The first block that uses them collapses (mean max
+    confidence 0.212 against N4's 0.750 over 1,200 day frames), and by block 25 no box is returned. N4c's
+    FAIL stands; it measures that construction, not causality.
+  * N4c2 normalises block b with the statistics N4 measured on block b−1 (closed-loop recording pass);
+    fp16 with fused statistics.
+  * Mechanics checked on draw 941 (screen draw, system 0, low light, five blocks, no label read): mean max
+    confidence tracks N4 within 0.05.
+  * Development on 942–944 is a second use of those draws, disclosed. pohang04 would need its own
+    registration after the development verdict.
+
+* **2026-10-11 (7:50 PM) — N4F development verdict: PASSES** (`docs/eval/ttbn/ttbn_fulltta_dev_2026-10-11.md`).
+  * Draws 945–947, second use, disclosed at registration.
+  * `full_tta` reproduces its no-retrain values in all 60 cells (|difference| < 5e-5).
+  * Δ = `full_tta_ttbn` − `full_tta`. No cell is worse. Better cells:
+    * low-light day +0.0696 [+0.0620, +0.0757];
+    * low light with IR fog s1 +0.0385;
+    * fog +0.0130;
+    * fog s1 +0.0096;
+    * low light with IR fog s2 +0.0071.
+  * P-FT, the registered pohang04 test, follows. Its flipped adapted views are built after N4's pohang04
+    build ends, from the same blocks. Its scoring waits for the full_tta build's draw 944.
+
+* **2026-10-11 (8:22 PM and 8:38 PM) — screens on draw 941: multi-resolution TTA and IR-vouched restoration**
+  (`runs/novel/multires/score.log`; session-scratchpad `screen_restore_gated.py`, `screen_restore_sel.py`).
+  Systems 0 and 1, IR clean, draw 941 only. No verdict draw (942–947) and no pohang04 frame was read.
+  * **Multi-resolution: mixed, not registered.** The 640 record WBF-merged with a 1280 one gains on clean
+    (day +0.0138/+0.0234, night +0.0056/+0.0131), is mixed on low light, and loses on fog (night
+    −0.0084/−0.0042).
+  * **Restoration on N4's gate: positive.**
+    * Auto-exposure on low light: +0.0953/+0.0965, where N4 gives +0.0635/+0.0767.
+    * Dark-channel dehaze: +0.0134/+0.0153 on fog and +0.0176/+0.0129 on fog_s1.
+    * "Dark" (linear luminance < 0.18) splits the screened conditions exactly.
+
+* **2026-10-11 (8:40 PM, before any restored-frame detection on 942–944 or pohang04) — N4ae registered**
+  (`docs/prereg-ttbn-restore-2026-10-11.md`, `scripts/ttbn_restore.py`).
+  * Method: on N4's gate, dark frames get the auto-exposed frame's detections instead of N4's adapted
+    ones; everything else is N4.
+  * Development: draws 942–944 with N4's rules. These draws already carry N4's, N4g's, N4c's and N4c2's
+    verdicts.
+  * pohang04 only after a development pass, on P-T's cells and replicates (P-A).
+  * Dehaze is a descriptive development arm only: development has no VIS noise, rain or blur condition,
+    and pohang04 does.
+  * Seen: the 941 screens above, N4's verdicts and P-T's partials.
+  * Corrected at 8:47 PM, before any restored-frame detection: this entry and the one above were first stamped
+    8:58 PM and 8:52 PM by mistake (the files were written at 8:40 PM and the screen ended at 8:38 PM).
+    The screen's glare rows, finished before the prereg was written, were added to its seen-list: under
+    N4g's gate, dehaze gained +0.0057/+0.0163 on glare where N4g's adaptation gained +0.0170/+0.0267.
+
+* **2026-10-11 (9:11 PM) — N4 on pohang04: P-T REPLICATES** (`docs/eval/ttbn/ttbn_p04_2026-10-11.md`; registered
+  in `docs/prereg-ttbn-2026-10-11.md`). A registered held-out look at pohang04's VIS/IR frames, fp16 adapted
+  records (development fp16 check passed 3:14 PM), the gate-free scoring's 1,000 moving-block replicates.
+  * No cell worse. Better (Δ ≥ +0.0060, interval above zero): noise_s2/clean +0.1823 [+0.1733, +0.1916],
+    fog/clean +0.0370 [+0.0328, +0.0408], lowlight/clean +0.0186 [+0.0154, +0.0219].
+  * rain_s2/clean +0.0036 (gate 0.186); blur_s3/clean +0.0001 (gate 0.092). The gate fires on no frame of
+    clean/clean, clean/noise_s2 or clean/fog_s2 and on almost none of clean/blur_s2 (Δ +0.0000).
+  * Descriptive: the claim (`union_ttbn` − max(adapted VIS, IR)) is negative on lowlight (−0.0054) and
+    clean/blur_s2 (−0.0094, inherited from `union`). `ttbn_lex` − `lex` gives the same gains, and its claim
+    is positive in every scored cell.
+
+* **2026-10-11 (9:41 PM) — N4c2 development verdict: PASSES** (`docs/eval/ttbn/ttbn_causal2_dev_2026-10-11.md`).
+  Draws 942–944 (second use, disclosed in Amendment 1). No cell worse. Better: fog/clean/day +0.0094,
+  fog_s1/clean/day +0.0094, lowlight/clean/day +0.0668 [+0.0559, +0.0777], lowlight/fog_s1/day +0.0327.
+  Price of causality against N4: −0.0038 [−0.0045, −0.0031] on lowlight/clean/day, within ±0.0003 on fog.
+
+* **2026-10-11 (9:45 PM, before any N4c2 detection on pohang04) — N4c2's pohang04 test registered (P-C2)**
+  (`docs/prereg-ttbn-variants-2026-10-11.md`, Amendment 2). P-T's cells, statistic, replicates and
+  thresholds on Δ = `union_ttbnc2` − `union`. Only gated blocks and their predecessors' recording passes run;
+  equivalence to the full grid is checked on development first. Seen: N4c2's development report, P-T and
+  the gate-free pohang04 numbers. N4ae's development scoring was running; none of its numbers had been read.
+
+* **2026-10-11 (9:56 PM, before any N4c2 detection on pohang04) — P-C2's equivalence check failed as first
+  written; diagnosed; changed** (`docs/prereg-ttbn-variants-2026-10-11.md`, Amendment 2 note).
+  * Sparse records against build-dev's stored ones: 39 of 880 frames differ in box count. A full-grid
+    re-run differs from the stored records just as much.
+  * In one process, sparse and full grid are bit-identical on all 880 frames. The variation is fp16/cuDNN
+    nondeterminism across processes.
+  * The check now requires bit-exact agreement within one process. Development frames only (draw 942,
+    low light); no label was read.
+
+* **2026-10-11 (10:01 PM) — N4ae development verdict: PASSES** (`docs/eval/ttbn/ttbn_restore_dev_2026-10-11.md`).
+  Draws 942–944 (fifth use, disclosed in the registration). No cell worse. Better: fog/clean/day +0.0091,
+  fog_s1/clean/day +0.0094, lowlight/clean/day +0.0871 [+0.0734, +0.1008], lowlight/fog_s1/day +0.0451,
+  lowlight/fog_s2/day +0.0096.
+  * N4ae − N4: +0.0165 [+0.0053, +0.0278] on lowlight/clean/day. On every gated fog frame (none dark) N4ae
+    is N4 (Δ 0).
+  * Dark = all gated low-light frames and one gated fog_s1 frame (draw 944).
+  * Descriptive `sel` (dehaze where not dark): above N4 on fog by up to +0.0058 (fog_s1/clean/day
+    [+0.0000, +0.0116]); not registered for pohang04.
+  * P-A's pohang04 build is queued for the `full_tta` build's GPU slot (`runs/holdout_p04/q6_n4ae_p04.sh`,
+    logged 10:01 PM).
+
+* **2026-10-11 (11:17 PM) — gate-free systems on pohang04 complete: P-U PASS, P-F REPLICATES**
+  (`docs/eval/holdout_p04_gatefree_2026-10-11.md`; `docs/prereg-p04-heldout-gatefree-2026-10-11.md`). Draw 944's
+  `full_tta` views finished at 10:51 PM and were scored by 11:12 PM.
+  * `full_tta` − `shipped`: better in all 9 cells. Smallest: noise_s2/clean +0.0083 [+0.0067, +0.0108]. Largest:
+    rain_s2/clean +0.0325, lowlight/clean +0.0324, clean/clean +0.0243 [+0.0199, +0.0278].
+  * Descriptive, `full_tta_lex` − `full_tta`: better on 5 cells (interval above zero) and worse on
+    blur_s3/clean (−0.0016 [−0.0027, −0.0006]). Its claim (fused − max(VIS, IR)) is positive in all 9 cells.
+    `full_tta`'s claim is negative but above the −0.0060 failure margin on lowlight (−0.0027) and
+    clean/fog_s2 (−0.0024).
+
+* **2026-10-12 (1:48 AM) — N4ae on pohang04: P-A REPLICATES** (`docs/eval/ttbn/ttbn_restore_p04_2026-10-11.md`;
+  registered in `docs/prereg-ttbn-restore-2026-10-11.md`). P-T's cells and replicates.
+  * Against `union`: no cell worse. Better: noise_s2 +0.1820 [+0.1732, +0.1913], fog +0.0368 [+0.0327,
+    +0.0405], lowlight +0.0259 [+0.0231, +0.0285].
+  * Descriptive, against N4:
+    * lowlight +0.0073 [+0.0046, +0.0099]: auto-exposure beats adaptation on held-out low light, as on
+      development.
+    * rain_s2 −0.0036 [−0.0048, −0.0024]: every gated rain frame (9,291 over 4 draws) is dark, so
+      auto-exposure replaced N4's adaptation there and lost N4's rain gain. N4ae on rain is +0.0000 against
+      `union`.
+    Development had no rain condition, as the registration disclosed.
+
+* **2026-10-12 (2:41 AM) — P-FT scoring crashed on a frame-identity check; fixed; resumed.** At 2:38 AM
+  `ttbn_fulltta.py score-p04` failed. pohang04's flipped `full_tta` views carry no `image_path` field, and
+  `_adapt` asserted on it.
+  * `_adapt` now identifies those frames by the raw view's path at the same index. The views are
+    index-aligned to pohang04's frame list. The scoring arithmetic is unchanged.
+  * No P-FT number had been produced: the crash came before any presort of a gated cell was written.
+  * Resumed by `runs/holdout_p04/q9_pft_resume.sh`.
+
+* **2026-10-12 (3:13 AM) — N4F on pohang04: P-FT REPLICATES** (`docs/eval/ttbn/ttbn_fulltta_p04_2026-10-11.md`;
+  registered in `docs/prereg-ttbn-fulltta-2026-10-11.md`).
+  * Against `full_tta`: no cell worse. Better: noise_s2 +0.2174 [+0.2079, +0.2265] (0.0206 → 0.2380), fog
+    +0.0445 [+0.0401, +0.0488] (0.0586 → 0.1031), lowlight +0.0190 [+0.0152, +0.0232].
+  * Also rain_s2 +0.0033 [+0.0022, +0.0047] and blur_s3 +0.0000. The gate fires on no clean-VIS cell.
+  * Adaptation and the ensemble stack on held-out data. `full_tta_ttbn` is the highest-scoring system
+    measured on all five corrupted-VIS cells. On the four clean-VIS cells `full_tta_lex` is higher by
+    0.0021–0.0035.
+
+* **2026-10-12 (4:47 AM) — N4c2 on pohang04: P-C2 REPLICATES** (`docs/eval/ttbn/ttbn_causal2_p04_2026-10-11.md`;
+  registered in `docs/prereg-ttbn-variants-2026-10-11.md`, Amendment 2). P-T's cells and replicates.
+  * Against `union`: no cell worse. Better: noise_s2 +0.1820 [+0.1730, +0.1913], fog +0.0363 [+0.0323,
+    +0.0401], lowlight +0.0180 [+0.0148, +0.0212]. Also rain_s2 +0.0035.
+  * Price of causality against N4: −0.0003 (noise), −0.0007 (fog), −0.0006 (lowlight), −0.0001 (rain).
+  * Built with the sparse passes checked bit-exact against the full grid at 10:03 PM. Finished streams were
+    scored during the build (`q7_c2_partial_score.sh`).
+  * This closes the overnight pohang04 queue: P-A, P-FT and P-C2 all REPLICATE.
+
+* **2026-10-12 (4:48 AM) — overnight session closed.** No pohang04 scoring is running. Boot loop stopped
+  (`runs/holdout_p04/boot_loop.stop`). Handoff: `docs/handoff-2026-10-12.md`. The laptop was shut down at
+  Laksh's request.
+
+* **2026-10-12 (9:36 AM) — N4g's pohang04 test registered: P-G, a new glare/clean cell**
+  (`docs/prereg-ttbn-glare-p04-2026-10-12.md`). Asked by Laksh (handoff of 10-12, §4 item 4).
+  * New pohang04 cell: VIS v2 glare at severity 2, draws 941–944, IR clean. None of its detections or frame
+    statistics existed when the registration was written.
+  * Seen first: every development and pohang04 number to date. Also, label-free, where N4g's gate differs from
+    N4's in the nine registered cells: 10 (cell, draw) pairs in clean/blur_s2, clean/fog_s2 and fog/clean.
+  * **Correction:** the N4g registration (10-11) said the glare term adds a gated pohang04 frame only in VIS
+    fog on draw 941. That is incomplete. The registration lists all of them. N4g's development verdict is
+    unaffected.
+  * Boot-loop stop file `runs/holdout_p04/boot_loop.stop` deleted at 9:35 AM (handoff §2); no loop is running.
+  * **9:42 AM — P-G's development fp16 check passed.** N4g, glare/clean/day, draw 942, five systems: fp16
+    0.19543 against fp32 0.19564 (Δ −0.00021, tolerance 0.0010). The fp32 re-score equals the stored development
+    scores exactly. So N4g's new pohang04 blocks are built in fp16 (`runs/novel/ttbn_variants/glare_fp16_check.json`).
+    No pohang04 glare detection existed at this time.
+  * **9:45 AM — times corrected.** The two entries above were first stamped 9:45 AM, 9:38 AM and 10:12 AM by
+    mistake. They are now set from the files' modification times: registration 9:36 AM, fp16 check 9:42 AM.
+    The order of events is unchanged. The plain glare build started at 9:43 AM, after both.
+
+* **2026-10-12 (11:46 AM) — N4g on pohang04: P-G REPLICATES** (`docs/eval/ttbn/ttbn_glare_p04_2026-10-12.md`;
+  registered in `docs/prereg-ttbn-glare-p04-2026-10-12.md`). Builds started at 9:43 AM; scored 11:26 AM;
+  bootstrap done 11:38 AM.
+  * glare/clean (new cell): N4g's gate fires on 81.0% of frames and N4's on 1.9%. Δ vs `union`
+    +0.0309 [+0.0290, +0.0327] (0.1417 → 0.1726). N4 alone +0.0000. Claim +0.0004 [−0.0012, +0.0023].
+  * No cell is worse. In the three existing cells where N4g's gate adds frames (2–3 frames per draw), Δ against N4
+    is +0.0000. The other six cells equal P-T by construction (gates checked equal on every draw).
+  * Descriptive, glare/clean: `ttbng_lex` − `lex` +0.0333 [+0.0312, +0.0354]; `ttbng_lex` 0.1762; `union` equals
+    `shipped` (the veto does not fire).
+  * Speed changes, none touching the arithmetic:
+    * Draws 942–944 ran with the builder's CPU thread pools capped at 2. They were checked bit-identical on
+      draw 941 (5 caches × 400 frames, max |diff| 0; statistics equal).
+    * Scoring used the verified fast paths (`UQF_FAST_*`), as P-T did. Three existing-cell jobs had been scored
+      without them before the restart; the fast paths are byte-identical.
+    * A second concurrent cache build was tried for 2 minutes and stopped: it was slower (12.4 against 14.5
+      frames/s). It wrote nothing.

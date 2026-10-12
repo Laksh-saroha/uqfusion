@@ -19,6 +19,20 @@ import numpy as np
 
 IOU_LEVELS = np.round(np.arange(0.5, 1.0, 0.05), 2)  # 0.50 ... 0.95
 
+_FAST_IO = __import__("os").environ.get("UQF_FAST_IO") == "1"
+
+
+def _label_text(lp: Path) -> str | None:
+    """The label file's text, decoded and newline-translated as `Path.read_text` does, or None when the file
+    does not exist. Under `UQF_FAST_IO=1` the bytes come from `labelcache` (validated by size and mtime)."""
+    if _FAST_IO:
+        from uqfusion.eval.labelcache import read_label_bytes
+        raw = read_label_bytes(lp)
+        return None if raw is None else raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    if not lp.is_file():
+        return None
+    return lp.read_text(encoding="utf-8")
+
 SORT_KIND = "stable"
 """Tie semantics for every descending-confidence sort in this module (R-A1/R-A2).
 
@@ -82,7 +96,8 @@ def load_gt(image_path: str | Path, image_hw: tuple[int, int],
     """
     h, w = image_hw
     lp = label_path_for(image_path)
-    if not lp.is_file():
+    text = _label_text(lp)
+    if text is None:
         if not allow_missing:
             raise FileNotFoundError(
                 f"no label file for {image_path} (looked for {lp}). A missing label "
@@ -93,7 +108,7 @@ def load_gt(image_path: str | Path, image_hw: tuple[int, int],
         return {"boxes_xyxy": np.zeros((0, 4), dtype=np.float64),
                 "cls": np.zeros(0, dtype=int)}
     boxes, clss = [], []
-    for n, line in enumerate(lp.read_text(encoding="utf-8").splitlines(), 1):
+    for n, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
         vals = line.split()
@@ -153,18 +168,11 @@ def match_image(record: dict, gt: dict, iou_thr: float = 0.5) -> dict:
     return {"matched": matched, "iou_realized": iou_real, "err_edges": err, "n_gt": len(gt["cls"])}
 
 
-def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.ndarray:
-    """(N, len(levels)) TP flags — greedy match repeated per IoU level (mAP input)."""
-    n = len(record["conf"])
-    tp = np.zeros((n, len(levels)), dtype=bool)
-    if n == 0:
-        return tp
-    ious = iou_matrix(record["boxes_xyxy"], gt["boxes_xyxy"])
-    same = record["cls"][:, None] == gt["cls"][None, :]
-    ious = ious * same
-    order = np.argsort(-record["conf"], kind=SORT_KIND)
+def _greedy_py(ious: np.ndarray, order: np.ndarray, levels: np.ndarray) -> np.ndarray:
+    """The reference greedy match: per level, detections in `order` take the best unused GT."""
+    tp = np.zeros((ious.shape[0], len(levels)), dtype=bool)
     for k, thr in enumerate(levels):
-        gt_used = np.zeros(len(gt["cls"]), dtype=bool)
+        gt_used = np.zeros(ious.shape[1], dtype=bool)
         for i in order:
             if ious.shape[1] == 0:
                 break
@@ -173,6 +181,54 @@ def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.nda
                 gt_used[j] = True
                 tp[i, k] = True
     return tp
+
+
+# The same loop compiled with numba (2026-10-10, for speed only). np.argmax returns the FIRST
+# maximum, so the compiled scan keeps the first index on ties (strict >), and a used GT reads as
+# -1.0 exactly as in np.where; the outputs are boolean, so equality is exact
+# (`scripts/check_tp_numba.py`). UQF_NO_NUMBA=1 forces the reference path.
+_greedy = _greedy_py
+if not __import__("os").environ.get("UQF_NO_NUMBA"):
+    try:
+        import numba as _nb
+
+        @_nb.njit(cache=False, nogil=True)
+        def _greedy_nb(ious, order, levels):
+            n, m = ious.shape
+            tp = np.zeros((n, levels.shape[0]), dtype=np.bool_)
+            if m == 0:
+                return tp
+            used = np.zeros(m, dtype=np.bool_)
+            for k in range(levels.shape[0]):
+                thr = levels[k]
+                used[:] = False
+                for oi in range(order.shape[0]):
+                    i = order[oi]
+                    best, j = -np.inf, 0
+                    for jj in range(m):
+                        v = -1.0 if used[jj] else ious[i, jj]
+                        if v > best:
+                            best, j = v, jj
+                    if not used[j] and ious[i, j] >= thr:
+                        used[j] = True
+                        tp[i, k] = True
+            return tp
+        _greedy = _greedy_nb
+    except Exception:                                      # noqa: BLE001 - numba is an accelerator only
+        _greedy = _greedy_py
+
+
+def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.ndarray:
+    """(N, len(levels)) TP flags — greedy match repeated per IoU level (mAP input)."""
+    n = len(record["conf"])
+    tp = np.zeros((n, len(levels)), dtype=bool)
+    if n == 0:
+        return tp
+    ious = iou_matrix(record["boxes_xyxy"], gt["boxes_xyxy"])
+    same = record["cls"][:, None] == gt["cls"][None, :]
+    ious = np.ascontiguousarray(ious * same, dtype=np.float64)
+    order = np.argsort(-record["conf"], kind=SORT_KIND).astype(np.int64)
+    return _greedy(ious, order, np.asarray(levels, dtype=np.float64))
 
 
 def local_ap50_95(records: list[dict], gts: list[dict]) -> dict:

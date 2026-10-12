@@ -15,6 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 _EPS = 1e-9
+_FAST_WBF = __import__("os").environ.get("UQF_FAST_WBF") == "1"
 
 
 def apply_homography(boxes_xyxy: np.ndarray, h_matrix: np.ndarray | None) -> np.ndarray:
@@ -185,6 +186,13 @@ def sigma_weighted_fusion(
 
     Returns (boxes, scores, labels) like `weighted_boxes_fusion`.
     """
+    if (_FAST_WBF and not use_sigma and consensus_beta == 1.0 and not consensus_distinct
+            and not np.any(np.asarray(sigma_score_alpha, dtype=np.float64))):
+        # compiled copy of exactly this function on its default path (`wbf_numba`, checked bit-identical
+        # by scripts/check_wbf_numba.py); opt-in with UQF_FAST_WBF=1
+        from uqfusion.uq.wbf_numba import wbf_fast
+        return wbf_fast(boxes_list, scores_list, labels_list, weights, iou_thr, skip_box_thr,
+                        support_iou, support_gamma)
     w = np.asarray(weights, dtype=np.float64)
     if w.sum() <= 0:
         raise ValueError("fusion weights must sum to > 0")

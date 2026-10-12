@@ -77,7 +77,7 @@ def main() -> int:
     if args.limit:
         images = images[: args.limit]
 
-    transform = make_corruption(args.corrupt, args.severity, args.corrupt_seed) if args.corrupt else None
+    transform = make_corruption(args.corrupt, args.severity, args.corrupt_seed, version="v1") if args.corrupt else None
     meta = {
         "source": args.source, "weights": [str(w) for w in args.weights], "data": args.data,
         "split": args.split, "images_list": args.images_list, "imgsz": imgsz, "conf": args.conf,

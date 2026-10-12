@@ -47,6 +47,7 @@ from uqfusion.eval.cache import load_cache                      # noqa: E402
 
 SEEDS = (0, 1, 2, 3, 4)
 VIS_DRAWS = (941, 942, 943, 944)
+FRESH_DRAWS = (945, 946, 947)   # 2026-10-10: unseen draws for LLF-2 (prereg-llf2-2026-10-10.md)
 #: name -> (stem, kind, severity, modality, params). Names after the first five are the
 #: sensitivity rows of docs/eval/corruption_v2/README.md (one constant moved each) and the
 #: degraded-IR cells of the fallback-cost check; build them at one draw (--draws 941).
@@ -108,7 +109,7 @@ def _norm(params):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--draws", type=int, nargs="+", default=list(VIS_DRAWS), choices=VIS_DRAWS)
+    ap.add_argument("--draws", type=int, nargs="+", default=list(VIS_DRAWS), choices=VIS_DRAWS + FRESH_DRAWS)
     ap.add_argument("--conds", nargs="+", default=["fog", "lowlight", "glare"], choices=list(ALL_CONDS))
     ap.add_argument("--jobs", type=int, default=4, help="(draw, condition) units at once (GPU streams)")
     ap.add_argument("--workers", type=int, default=None, help="corruption processes per job "

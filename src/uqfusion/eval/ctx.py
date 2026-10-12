@@ -122,7 +122,10 @@ def constants_for(records, scorer, alpha, combination) -> ReliabilityConstants:
         # calibration constant and a stream with no boxes has no r_box to scale.
         raise ValueError("no detections to fit reliability constants on")
     u = np.concatenate(parts)
-    d = np.asarray([scorer.score(r["feat"]) for r in records])
+    if __import__("os").environ.get("UQF_FAST_DIST") == "1":   # batched BLAS; see MahalanobisScorer.score_fast
+        d = scorer.score_fast(np.stack([np.asarray(r["feat"], dtype=np.float64) for r in records]))
+    else:
+        d = np.asarray([scorer.score(r["feat"]) for r in records])
     return fit_constants(u, d, alpha=alpha, combination=combination)
 
 
@@ -184,6 +187,13 @@ class FusionContext:
     veil_requires_night: bool = False   # AND the veil axis with the night arm
     night_weak_fallback: bool = False   # a disarmed IR may still be CONFIRMED by a dark VIS
     ir_merge_veto: bool = True          # drop a novel IR from the merge (measured harmful)
+    # --- the 2026-10-10 degraded-IR repairs (docs/prereg-degraded-ir-repairs-2026-10-10.md).
+    # Both default to the shipped behaviour, so no existing number can move. The registered
+    # verdict (docs/eval/corruption_v2/degraded_ir_repairs.md) ADOPTED R1 and REJECTED R2 (8 cells
+    # harmed at 0.0014), so `preset="crossmodal26m_r"` turns on R1 only; the R2 switch stays to
+    # reproduce the rejection.
+    fallback_veil: bool = True          # weak-IR fallback confirms with `concentrated | (dark & veil)`
+    support_requires_ir_health: bool = False   # cross-modal support only where IR is merge-healthy
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     # --- the V2 night rule (docs/prereg-night-veto-v2.md). EMPTY BY DEFAULT, so
     # every existing caller keeps the shipped `night & (dark | veil)` clause and
@@ -408,8 +418,17 @@ def load_context(
     if preset is None:
         raise ValueError("load_context() needs an explicit preset: 'crossmodal26m' is the "
                          "shipped system; 'adopted' and 'crossmodal' reproduce older records")
-    if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms"):
+    if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms",
+                      "crossmodal26m_r"):
         raise ValueError(f"unknown preset {preset!r}")
+    # `crossmodal26m_r` is `crossmodal26m` with repair R1 of
+    # docs/prereg-degraded-ir-repairs-2026-10-10.md: the weak-IR fallback confirms with
+    # `concentrated` alone. R1 was adopted on draws 942-944 (0 cells harmed, 5 gaining
+    # >= 0.0060, claim 35/60 vs 32); R2 (support only from a merge-healthy IR) was rejected
+    # and is not part of the preset. Development-only; the pohang04 look scored `crossmodal26m`.
+    repaired = preset == "crossmodal26m_r"
+    if repaired:
+        preset = "crossmodal26m"
     # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
     # force. It is a separate preset and not a change to `crossmodal` because every
     # published number was measured under the latter and must stay reproducible.
@@ -728,7 +747,8 @@ def load_context(
         struct_lov_by_cond=struct_lov_by_cond,
         veil_requires_night=veil_requires_night,
         night_weak_fallback=night_weak_fallback, ir_merge_veto=ir_merge_veto,
-        support_iou=support_iou, support_gamma=support_gamma)
+        support_iou=support_iou, support_gamma=support_gamma,
+        fallback_veil=not repaired, support_requires_ir_health=False)
 
     ctx.role = role
     if capability_sel is _UNSET:
@@ -977,7 +997,12 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
                 if lv is not None:
                     concentrated = lv > float(
                         ctx.struct_const["axes"]["lap_over_var"]["threshold"])
-                vv |= ctx.ir_night_raw & (~ctx.ir_ok) & (concentrated | (dark & veil))
+                # Under corruption v2 the `dark & veil` half is what fires on low-light
+                # DAY frames once IR is fogged or noisy (up to 96%, -0.16 ship AP;
+                # docs/eval/corruption_v2/fallback_cost.md): v2 low light is both dark
+                # and veiled. `fallback_veil=False` (preset crossmodal26m_r) drops it.
+                confirm = (concentrated | (dark & veil)) if ctx.fallback_veil else concentrated
+                vv |= ctx.ir_night_raw & (~ctx.ir_ok) & confirm
 
         # ---- R_sys, and the abstain it exists for --------------------------
         # scope §7.4 introduced R_sys as "has every modality failed?", and under the
@@ -1036,6 +1061,13 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         # saying "no modality is reliable here", for a downstream consumer or a
         # risk-coverage curve. It does not touch the merge.
         abstain = (~healthy_vis) & (~healthy_ir)
+        # The support bonus lets an IR box vouch for a VIS box. A fogged IR's
+        # scattered boxes vouch for VIS false positives (IR fog s3: the bonus costs
+        # 0.0113; docs/eval/corruption_v2/ir_merge_veto.md), so under
+        # `support_requires_ir_health` only a merge-healthy IR may vouch. IR stays in
+        # the merge either way; only the bonus is withheld.
+        if ctx.support_requires_ir_health and kw.get("support_gamma"):
+            kw["support_gamma"] = np.where(healthy_ir, float(kw["support_gamma"]), 0.0).tolist()
         kw["veto_override"] = (vv.tolist(), vi.tolist())
         kw["veto_below"] = None
         res = evaluate_systems(vis, ir, ctx.scorer_vis, ctx.c_vis, **kw)

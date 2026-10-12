@@ -39,11 +39,12 @@ def _albu(name: str, severity: int):
     raise ValueError(f"unknown corruption '{name}' — options: {CORRUPTIONS}")
 
 
-def make_corruption(name: str, severity: int = 2, seed: int = 0, *, version: str = "v1",
+def make_corruption(name: str, severity: int = 2, seed: int = 0, *, version: str,
                     modality: str = "vis", images: list | None = None, params: dict | None = None):
     """Returns transform(im_bgr, index) -> corrupted im_bgr (deterministic per index).
 
-    `version="v1"` (the default, and what every cache built before 2026-10-09 used) is the
+    `version` is required (since 2026-10-10: a silent v1 default let callers build on the broken
+    model). `version="v1"` (what every cache built before 2026-10-09 used) is the
     albumentations parameterisation above, bit-for-bit unchanged. `version="v2"` is the
     physically modelled, content-only rebuild in `corruptions_v2.py`; it needs `modality`
     and, for fog and glare, the ordered frame list `images` the index refers to; `params`

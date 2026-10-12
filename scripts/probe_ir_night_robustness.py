@@ -102,7 +102,7 @@ def main() -> int:
     print(f"[irrob] clean done ({time.time() - t0:.0f}s)", flush=True)
     for kind in args.kinds:
         for s in args.severities:
-            tf = make_corruption(kind, s, args.seed)
+            tf = make_corruption(kind, s, args.seed, version="v1")
             v = p05_of([tf(im, i * args.stride) for i, im in enumerate(grays)])
             rows.append({"corruption": kind, "severity": s, "p05": v})
             print(f"[irrob] {kind} s{s} done ({time.time() - t0:.0f}s)", flush=True)

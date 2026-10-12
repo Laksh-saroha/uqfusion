@@ -92,8 +92,8 @@ def main() -> int:
     out.mkdir(parents=True, exist_ok=True)
     vis = [l.strip() for l in VIS_LIST.read_text().splitlines() if l.strip()]
     ir = [l.strip() for l in IR_LIST.read_text().splitlines() if l.strip()]
-    tf = {c: make_corruption(c[0], c[1], VSEED) for c in VIS_CONDS}
-    tfi = {c: make_corruption(c[0], c[1], ISEED) for c in IR_CONDS}
+    tf = {c: make_corruption(c[0], c[1], VSEED, version="v1") for c in VIS_CONDS}
+    tfi = {c: make_corruption(c[0], c[1], ISEED, version="v1") for c in IR_CONDS}
 
     # contact sheets: the middle paired frame of pohang00, 02, 03 (day) and pohang01 (night)
     by_run: dict[str, list[int]] = {}

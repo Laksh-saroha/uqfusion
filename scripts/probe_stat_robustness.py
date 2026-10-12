@@ -61,9 +61,9 @@ def main() -> int:
     lo, hi = content_rows("vis")
     print(f"[probe] {len(idx)} fit-run frames ({'+'.join(FIT_RUNS)}), pohang01 never read")
 
-    darken = make_corruption("lowlight", args.dark_severity, args.seed)
-    adders = {"glare": make_corruption("glare", 2, args.seed),
-              "fog": make_corruption("fog", 2, args.seed)}
+    darken = make_corruption("lowlight", args.dark_severity, args.seed, version="v1")
+    adders = {"glare": make_corruption("glare", 2, args.seed, version="v1"),
+              "fog": make_corruption("fog", 2, args.seed, version="v1")}
 
     acc = {k: {s: [] for s in STATS} for k in ("clean", "dark", *adders)}
     for j, i in enumerate(idx):

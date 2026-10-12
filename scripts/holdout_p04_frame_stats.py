@@ -72,7 +72,7 @@ def measure(paths: list[str], modality: str, kind, sev, seed, n: int | None = No
     lo, hi = fb.content_rows(modality)
     if (lo, hi) != fs.content_rows(modality):
         raise SystemExit("frame_brightness and frame_structure disagree on content rows")
-    tf = make_corruption(kind, sev, seed) if kind else None
+    tf = make_corruption(kind, sev, seed, version="v1") if kind else None
     br, st = [], []
     for i, p in enumerate(paths[:n] if n else paths):
         im = cv2.imread(p)
