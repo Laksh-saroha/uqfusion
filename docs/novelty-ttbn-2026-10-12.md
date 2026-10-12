@@ -74,3 +74,17 @@ gating is new.
 
 Sources: arXiv 2307.04470; ICLR 2024 READ; PMLR v267 chen25ch (TSA); arXiv 2604.19093v1 (AdaPGC);
 arXiv 2610.07499 (CARAT).
+
+## Addendum, 2026-10-12 (afternoon): the three remaining papers, read in full
+
+Laksh asked for these before the final paper uses "to our knowledge". All three were read from their arXiv full texts.
+
+| Paper | Task / modalities | What adapts, how | How the shifted modality or sample is chosen | Skips adaptation? |
+|---|---|---|---|---|
+| DASP (He, Guo and Jin, CVPR 2026; arXiv 2603.00574) | Audio–video **classification** (Kinetics50-C, VGGSound-C) | Per-modality stable (low-rank) and plastic (full-rank) **adapters**, by gradient (diversity, entropy and KL losses) | Redundancy of the **fused features**: mean squared off-diagonal covariance per modality over a batch | No: the diagnosis picks which adapter part trains, never whether to adapt |
+| SuMi (Guo and Jin, ICLR 2025; arXiv 2503.02616) | Audio–video classification; appendix adds sentiment (MOSI) and image–text (Food101) | Normalisation-layer **affine** parameters, by gradient (weighted entropy plus mutual-information sharing) | Interquartile-range bounds on unimodal **features** and multimodal/unimodal **entropy** | Yes, per sample: samples failing either test get weight zero |
+| ABPEM (Zhao et al., AAAI 2025; arXiv 2503.02221) | Audio–video classification | Part of the **fusion module**, by gradient (attention bootstrapping and principal entropy) | None explicit; attention statistics give a soft reweighting | No |
+
+**Verdict unchanged.** None does object detection, none uses a thermal camera, all three update parameters by gradient,
+and every selection signal is model-side (features, entropies, attention). SuMi does skip samples, so per-sample
+gating of adaptation is prior art, which the "do not claim" list above already covers. The claim sentence stands.

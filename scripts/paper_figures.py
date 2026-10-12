@@ -505,10 +505,89 @@ def fig1b() -> None:
     save(fig, "fig_throughput")
 
 
-FIGS = {  # paper order: Figure 1 ... Figure 8
+# --------------------------------------------------------------------------------------------
+# Figure 12: IR-gated test-time adaptation on the held-out run (pohang04), per cell.
+# Sources: docs/eval/ttbn/ttbn_p04_2026-10-11.json (P-T, N4 vs union),
+#          docs/eval/ttbn/ttbn_fulltta_p04_2026-10-11.json (P-FT, N4F vs full_tta),
+#          docs/eval/ttbn/ttbn_glare_p04_2026-10-12.json (P-G, N4g vs union on glare),
+#          docs/eval/holdout_p04_gatefree_2026-10-11.json (clean/clean baselines).
+# Before adaptation is a hollow muted ring, after is the fused aqua; the delta is in ink.
+# --------------------------------------------------------------------------------------------
+
+TTA_ROWS = [  # (cell key, label)
+    ("clean__clean", "clean"), ("noise_s2__clean", "noise s2"), ("fog__clean", "fog"),
+    ("lowlight__clean", "low light"), ("glare__clean", "glare s2"), ("rain_s2__clean", "rain s2"),
+    ("blur_s3__clean", "blur s3"),
+]
+
+
+def fig_tta() -> None:
+    n4 = read_json("docs/eval/ttbn/ttbn_p04_2026-10-11.json")["cells"]
+    n4f = read_json("docs/eval/ttbn/ttbn_fulltta_p04_2026-10-11.json")["cells"]
+    n4g = read_json("docs/eval/ttbn/ttbn_glare_p04_2026-10-12.json")["cells"]
+    gf = read_json("docs/eval/holdout_p04_gatefree_2026-10-11.json")
+
+    def one_pass(key):
+        if key == "glare__clean":
+            c = n4g[key]
+            return c["union"], c["union_ttbng"], c["delta"], "N4g"
+        if key == "clean__clean":
+            v = gf["union|clean__clean"]["value"]
+            return v, v, 0.0, None
+        c = n4[key]
+        return c["union"], c["union_ttbn"], c["delta"], None
+
+    def ten_pass(key):
+        if key == "glare__clean":
+            return None
+        if key == "clean__clean":
+            v = gf["full_tta|clean__clean"]["value"]
+            return v, v, 0.0, None
+        c = n4f[key]
+        return c["full_tta"], c["full_tta_ttbn"], c["delta"], None
+
+    fig, axes = plt.subplots(1, 2, figsize=(DOUBLE, 2.7), sharey=True, gridspec_kw={"wspace": 0.08})
+    ys = list(range(len(TTA_ROWS)))[::-1]
+    panels = ((axes[0], one_pass, "one pass per stream: union → N4"),
+              (axes[1], ten_pass, "ten passes per stream: full_tta → N4F"))
+    for ax, get, title in panels:
+        for y, (key, _) in zip(ys, TTA_ROWS):
+            r = get(key)
+            if r is None:
+                ax.text(0.005, y, "not scored", va="center", ha="left", fontsize=6.6, color=MUTED)
+                continue
+            before, after, d, tag = r
+            if after - before > 0.025:              # shorter gaps read from the two markers
+                ax.annotate("", xy=(after, y), xytext=(before, y), zorder=2,
+                            arrowprops={"arrowstyle": "-|>", "color": FUSED, "lw": 1.4,
+                                        "shrinkA": 3.5, "shrinkB": 3.5, "mutation_scale": 7})
+            ax.scatter([before], [y], s=34, facecolor="white", edgecolor=MUTED, linewidth=1.2, zorder=3)
+            ax.scatter([after], [y], s=34, color=FUSED, edgecolor="white", linewidth=0.8, zorder=4)
+            if key == "clean__clean":              # label to the left: the panel ends just right of it
+                ax.text(min(before, after) - 0.010, y, "gate never fires", va="center", ha="right",
+                        fontsize=6.6, color=INK)
+                continue
+            label = signed(d) + (f" ({tag})" if tag else "")
+            ax.text(max(before, after) + 0.008, y, label, va="center", ha="left", fontsize=6.6, color=INK)
+        ax.set_xlim(-0.005, 0.37)
+        ax.set_xlabel("ship AP50-95 (local AP), pohang04")
+        ax.set_title(title, loc="left", fontsize=7.5, color=INK)
+        ax.grid(axis="y", visible=False)
+    axes[0].set_yticks(ys, [lab for _, lab in TTA_ROWS])
+    axes[0].set_ylim(-0.6, len(TTA_ROWS) - 0.4)
+    axes[0].set_ylabel("VIS corruption (IR clean)")
+    handles = [plt.Line2D([], [], ls="", marker="o", ms=5.2, mfc="white", mec=MUTED, mew=1.2,
+                          label="without adaptation"),
+               plt.Line2D([], [], ls="", marker="o", ms=5.2, color=FUSED, label="with IR-gated adaptation")]
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.06), ncol=2,
+               handletextpad=0.3, columnspacing=1.4)
+    save(fig, "fig_tta_heldout")
+
+
+FIGS = {  # paper order: Figure 1 ... Figure 8, then Figure 12
     "decision_layer": fig1, "throughput": fig1b, "uq_calibration": fig3, "lift_screen": fig5,
     "checkpoint_selection": fig6, "gate_history": fig2, "phase3_cells": fig3b,
-    "night_restore": fig4,
+    "night_restore": fig4, "tta_heldout": fig_tta,
 }
 
 
