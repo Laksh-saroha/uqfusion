@@ -1,5 +1,7 @@
 # Instructions for Writing the uqfusion Research Paper
 
+> **Superseded as a drafting guide on 2026-10-12: `PAPER_DRAFT2.md` is final.** Read it and `docs/paper-revision-history.md` instead. What changed since the notes below: the paper has four contributions, the fourth being IR-gated test-time adaptation (N4), replicated on pohang04; the recommended system is N4 (N4c2 for a live stream), with N4F where ten passes per stream are affordable; the claim wording and the never-claim list for N4 are in `docs/novelty-ttbn-2026-10-12.md`; pohang04 is scored through registered tests and is never called spent. The forbidden phrasings of §6 and the number hygiene of §7 still hold.
+>
 > **Partly superseded 2026-09-27 — read `PAPER_DRAFT2.md` and `docs/handoff-2026-09-27.md` first.**
 > * §0 rule 6 (pohang04 embargo): lifted. The look was taken on 2026-09-20 and §7 of Draft 2 reports it.
 > * §2 contribution 2: the claim "≥ max(VIS, IR) on all 8 cells" belongs to the pre-restore checkpoints. On the Phase 3 systems it holds on 6 of 8 and fails on clean/night and glare/night (`docs/eval/p3_corrupt_cells_2026-09-27.md`, `docs/eval/p3_night_check_2026-09-27.md`). Draft 2's three contributions replace §2's.
