@@ -1,8 +1,8 @@
-# Uncertainty Is Informative but Not a Fusion Signal: A Pre-Registered Visible–Infrared Study on Misregistered Maritime Video
+# Uncertainty Is Informative but Not a Fusion Signal, and Infrared Is Better Used to Gate Adaptation: A Pre-Registered Visible–Infrared Study on Misregistered Maritime Video
 
 **Anonymous authors** (CVF workshops normally review double-blind; restore the author block for the camera-ready).
 
-> Venue draft for the Perception Beyond the Visible Spectrum workshop (PBVS), derived from `PAPER_DRAFT2.md` at commit `d9260ef` (2026-10-09). The target is 8 pages in CVF format, excluding references. Every number is taken from Draft 2, which cites the source file for each; none is new. Venue facts and open items are in `venues/README.md`.
+> Venue draft for the Perception Beyond the Visible Spectrum workshop (PBVS), derived from `PAPER_DRAFT2.md` (first at commit `d9260ef`, 2026-10-09; updated to the final Draft 2 of 2026-10-12). The target is 8 pages in CVF format, excluding references. Every number is taken from Draft 2, which cites the source file for each; none is new. Venue facts and open items are in `venues/README.md`.
 
 ---
 
@@ -10,11 +10,12 @@
 
 Visible–infrared (VIS–IR) detectors are often proposed with uncertainty deciding how much to trust each band. We tested that idea under a pre-registered decision rule on paired maritime video from the Pohang Canal dataset. The two cameras are not co-registered and are paired by timestamp, with a measured residual of 3–6 px. Each band has its own YOLO26 detector with a single-pass Gaussian variance head.
 
-Three findings follow.
+Four findings follow.
 
 1. **Misregistration turns decision-level fusion into concatenation.** At the adopted merge threshold, only 0.05 percent of visible boxes have an infrared partner. Relaxing correspondence and letting predicted variance arbitrate the extra merges is non-inferior on one of four conditions.
 2. **Uncertainty is informative but not a fusion signal.** As a fusion weight, real variance does not beat the same values shuffled onto the wrong boxes on any of four conditions. As a score re-ranker it does, on three of four with the corruptions it was registered on (one of four with physically modelled corruptions), yet the signal lies within each detector's own boxes. Using it is worse than using no variance on six of eight cells.
 3. **The cross-modal signal that does work is coarse.** Infrared's vote on whether it is night selects the visible stream better than any visible statistic can. Hardened against six infrared corruptions, its false-night rate falls from 94.8 percent to 0 percent in-sample. But the veto built on it encodes a claim about one visible detector, and it broke when that detector was retrained.
+4. **Infrared is more useful as a judge of the scene than as a vote on boxes.** Where IR reads daylight and the visible frame reads unhealthy, re-estimating the visible detector's BatchNorm statistics, with no labels or gradients, replicated on a held-out run under pre-registration: +0.18 ship AP under simulated sensor noise, +0.037 under fog and +0.019 under low light, with no cell worse. Ungated, the same adaptation hurts at night.
 
 ---
 
@@ -26,7 +27,8 @@ We built the uncertainty-gated design and measured every component before decidi
 
 * what registration quality does to decision-level fusion (§5.1);
 * whether predicted variance can arbitrate between bands (§5.2);
-* which cross-modal cue actually selects a band, and how robust it is to corruption of the band it trusts (§5.3).
+* which cross-modal cue actually selects a band, and how robust it is to corruption of the band it trusts (§5.3);
+* whether that cue can decide when the visible detector should adapt at test time (§5.4).
 
 Each verdict was pre-registered with a decision rule and a magnitude floor.
 
@@ -38,13 +40,15 @@ UA-CMDet (Sun et al., 2022) detects vehicles in paired drone RGB–IR imagery. I
 
 Table 1 places this work beside them. The closest prior mechanism to our shipped layer is UA-CMDet's illumination-weighted NMS. Both demote the visible band on an image statistic rather than on a predicted uncertainty. Ours removes the band outright, and only when IR votes night.
 
+Test-time adaptation re-estimates or trains normalisation layers on unlabeled test data (Schneider et al., 2020). Multimodal variants adapt only the shifted modality, deciding from the model's own predictions or features and updating parameters by gradient (Chen et al., 2025; Xu et al., 2026; Mohapatra et al., 2026); Night-TTA adapts colour–thermal segmentation on every night frame (Liu et al., 2023). We found none for visible–infrared detection, and none in which the second sensor's reading of the scene decides whether to adapt. TSA (Chen et al., 2025) reports negative transfer when an unshifted modality is adapted, the failure our gate guards against, and CARAT (Mohapatra et al., 2026) argues that cross-modal agreement misleads when sensors measure different physics. Our gate uses no agreement between predictions: it uses IR's physical reading of daylight.
+
 **Table 1. Positioning against the nearest VIS–IR systems** (from direct reads of each paper's full text).
 
 | Work | Uncertainty target | Inference-time adaptation | Calibration evaluated | Registration assumption |
 |---|---|---|---|---|
 | UA-CMDet (Sun et al., 2022) | per-object training-loss weights from a rule; not predicted | RGB scores × illumination weight, then NMS over branches | no | per-pair affine alignment; residual down-weighted in training |
 | Zhao et al. (2024) | per-label training-loss weights; not predicted at inference | input-dependent attention over fused features | no | datasets distributed as aligned pairs |
-| This work | box coordinates (σ²); frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9926 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC | nearest-timestamp pairing, 3–6 px median residual |
+| This work | box coordinates (σ²); frame OOD (Mahalanobis) | shipped: hard veto on image statistics, fusion weight constant 0.9926 (measured); recommended: no veto, VIS BatchNorm statistics re-estimated where IR reads daylight (§5.4) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC | nearest-timestamp pairing, 3–6 px median residual |
 
 ## 3. Data, system and protocol
 
@@ -158,7 +162,19 @@ The rule gates on darkness, but what should decide is VIS health.
 
 **Figure 3. The frozen rule on five retrained VIS+IR systems**, seed-mean ship AP, clean IR, camera-chain corruptions. At night the fused output equals IR alone.
 
-A single held-out run, scored once, gives fused ship AP 0.2682 [0.2576, 0.2793]. Its gap to development, +0.0216 [−0.0120, +0.0502], is unresolved.
+A single held-out run, scored once under a pre-registered rule, gives fused ship AP 0.2682 [0.2576, 0.2793]. Its gap to development, +0.0216 [−0.0120, +0.0502], is unresolved.
+
+### 5.4 Infrared as a judge: gated test-time adaptation
+
+A degraded visible frame raises a question it cannot answer from its own pixels: is the scene dark, or the camera? The thermal camera can. Our N4 re-estimates the visible detector's BatchNorm statistics on blocks of eight frames, mixing them with the training statistics at prior strength N = 16 (Schneider et al., 2020), but only on frames where the visible frame's health score flags it as unhealthy and IR, itself healthy, reads daylight. It uses no labels and no gradients, and IR is never adapted. Ungated, the same adaptation costs up to 0.031 AP at night; gated, it never fires at night. On development it gains +0.0706 [+0.0593, +0.0818] on low light by day, and no cell of 60 is worse.
+
+Registered before its numbers existed, N4 replicates on pohang04 (Figure 4): +0.1823 [+0.1733, +0.1916] ship AP over the veto-free union under VIS sensor noise, +0.0370 under fog and +0.0186 under low light, with no cell worse. A glare term adds +0.0309 under glare. A causal version that reads no later frame keeps the gains to within 0.0007. Inside an ensemble of five frozen checkpoints with flipped views, adaptation adds what it adds alone, and that combination is the best system we measured on every held-out cell with a corrupted visible stream on which it was scored. All of these gains are on simulated corruptions; on clean held-out frames the gate does not fire.
+
+![tta_heldout](../docs/figures/fig_tta_heldout.png)
+
+**Figure 4. IR-gated test-time adaptation on the held-out run (pohang04)**, per VIS corruption with IR clean, ship AP, mean over five retrained systems and four corruption draws. Left: one pass per stream, without (hollow) and with (filled) adaptation; the glare row adds a glare term to the gate. Right: the same adaptation inside a ten-pass ensemble (not scored on glare). Labels are paired deltas. The gate never fires on the clean cell.
+
+Removing the veto, the system N4 adapts on, is itself registered: it is better than the shipped rule on 30 of 60 development cells and worse on none, and it beats the rule at night on the night run's never-scored test split (+0.0273 [+0.0154, +0.0400]).
 
 ## 6. Limitations
 
@@ -167,15 +183,18 @@ A single held-out run, scored once, gives fused ship AP 0.2682 [0.2576, 0.2793].
 * **In-sample IR safety.** The IR-safety figures are in-sample.
 * **Untuned σ strength.** α was fixed and never tuned.
 * **Development data, pre-restore checkpoints.** The R-D1 and Stage 1 verdicts are development-data results.
-* **Spent held-out run.** The held-out run is single and is now spent: its corrupted cells were re-scored under the replacement corruptions, a disclosed second exposure.
+* **One held-out daylight run, scored repeatedly.** Its corrupted cells were re-scored under the replacement corruptions, a disclosed second exposure, and later systems were scored on it through registered tests, eight scorings in all; every scoring after the first is a repeated look.
+* **Adaptation evidence is simulated.** The gated adaptation's gains are on simulated corruptions, the largest on a noise severity with no physical anchor; two of its gate terms were checked against the held-out run's label-free statistics; its cost was not timed.
 
 ## 7. Conclusion
 
-On misregistered VIS–IR maritime video, decision-level fusion reduces to concatenation. Predicted box variance cannot arbitrate between the bands: it is informative within each detector and inert or harmful between them. The cross-modal cue that does select a band is coarse, namely IR's vote on whether it is night, and it must be hardened against IR's own failures. Any rule built on it is a claim about the VIS detector it was written against.
+On misregistered VIS–IR maritime video, decision-level fusion reduces to concatenation. Predicted box variance cannot arbitrate between the bands: it is informative within each detector and inert or harmful between them. The cross-modal cue that does select a band is coarse, namely IR's vote on whether it is night, and it must be hardened against IR's own failures. Any rule built on it is a claim about the VIS detector it was written against. Used instead to decide when the VIS detector should re-estimate its normalisation statistics, IR's reading of daylight gave the largest gains we measured, and they replicated on a held-out run.
 
 ## References
 
 Buslaev, A., Iglovikov, V. I., Khvedchenya, E., Parinov, A., Druzhinin, M., and Kalinin, A. A. (2020). Albumentations: fast and flexible image augmentations. *Information*, 11(2), 125. doi:10.3390/info11020125.
+
+Chen, M., Zhang, B., Han, Z., Jiang, W., Wang, Y., Feng, S., Du, Y., and Bao, B. (2025). Test-time selective adaptation for uni-modal distribution shift in multi-modal data. In *Proceedings of the 42nd International Conference on Machine Learning (ICML)*, PMLR 267, pp. 9711–9727.
 
 Choi, Jiwon, Cho, D., Lee, G., Kim, H., Yang, G., Kim, J., and Cho, Y. (2025). PoLaRIS dataset: a maritime object detection and tracking dataset in Pohang Canal. In *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, pp. 13626–13632. doi:10.1109/ICRA55743.2025.11128583. Preprint arXiv:2412.06192.
 
@@ -185,10 +204,18 @@ Chung, D., Kim, J., Lee, C., and Kim, J. (2023). Pohang Canal dataset: a multimo
 
 Künsch, H. R. (1989). The jackknife and the bootstrap for general stationary observations. *The Annals of Statistics*, 17(3), 1217–1241. doi:10.1214/aos/1176347265.
 
+Liu, Y., Zhang, W., Zhao, G., Zhu, J., Vasilakos, A. V., and Wang, L. (2023). Test-time adaptation for nighttime color-thermal semantic segmentation. arXiv:2307.04470; to appear in *IEEE Transactions on Artificial Intelligence*.
+
+Mohapatra, P., Sui, Y., Yang, H., Lundell, B., Xia, S., and Zhu, Q. (2026). Source-learned reliance for selective test-time adaptation of multimodal time series. arXiv:2610.07499.
+
 Seitzer, M., Tavakoli, A., Antic, D., and Martius, G. (2022). On the pitfalls of heteroscedastic uncertainty estimation with probabilistic neural networks. In *International Conference on Learning Representations (ICLR)*. arXiv:2203.09168.
+
+Schneider, S., Rusak, E., Eck, L., Bringmann, O., Brendel, W., and Bethge, M. (2020). Improving robustness against common corruptions by covariate shift adaptation. In *Advances in Neural Information Processing Systems 33* (NeurIPS 2020).
 
 Solovyev, R., Wang, W., and Gabruseva, T. (2021). Weighted boxes fusion: ensembling boxes from different object detection models. *Image and Vision Computing*, 107, 104117. doi:10.1016/j.imavis.2021.104117.
 
 Sun, Y., Cao, B., Zhu, P., and Hu, Q. (2022). Drone-based RGB-infrared cross-modality vehicle detection via uncertainty-aware learning. *IEEE Transactions on Circuits and Systems for Video Technology*, 32(10), 6700–6713. doi:10.1109/TCSVT.2022.3168279. Preprint arXiv:2003.02437.
+
+Xu, J., Li, Y., Sun, C., Xu, X., Li, J., and Xu, F. (2026). Multi-modal test-time adaptation via adaptive probabilistic Gaussian calibration. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*. arXiv:2604.19093.
 
 Zhao, J., Wang, Y., Zhang, Y., Wang, H., and Guo, Y. (2024). Uncertainty-aware cross-modality fusion for visible-infrared object detection. In *Proceedings of the International Conference on Digital Image Computing: Techniques and Applications (DICTA)*, pp. 117–125. doi:10.1109/DICTA63115.2024.00029.

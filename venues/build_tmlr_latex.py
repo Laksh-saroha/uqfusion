@@ -23,7 +23,7 @@ FIG_WIDTH = {  # fraction of \linewidth, from each figure's aspect ratio
     "fig_decision_layer": 1.0, "fig_uq_calibration": 0.9, "fig_lift_screen": 0.75, "fig_phase3_cells": 0.7,
     "fig_night_restore": 0.6, "fig_checkpoint_selection": 0.65, "fig_gate_history": 0.65,
     "fig_throughput": 1.0, "fig_detections": 1.0, "fig_detections_conditions": 1.0,
-    "fig_detections_scenes": 1.0,
+    "fig_detections_scenes": 1.0, "fig_tta_heldout": 1.0,
 }
 TABLE_NOTES = ("†", "Ship AP; each gap is against")  # paragraphs that annotate the table just above them
 
@@ -233,7 +233,7 @@ def is_table(p):
 
 
 def is_list_line(ln):
-    return bool(re.match(r"(\* |- |\d+\. )", ln))
+    return bool(re.match(r"\s*(\* |- |\d+\. )", ln))
 
 
 def table_tex(cv, p, caption, label, notes):
@@ -286,18 +286,40 @@ def figure_tex(cv, img, caption, label):
 
 
 def list_tex(cv, lines):
-    out, env = [], None
+    """Markdown lists with one level of nesting. An indented item is nested; an indented line that is not an
+    item continues the item above it, or, after a nested list, the outer item."""
+    items = []  # [level, env | "cont", text]
     for ln in lines:
-        m = re.match(r"(\* |- |(\d+)\. )(.*)$", ln)
-        want = "enumerate" if m[2] else "itemize"
-        if env != want:
-            if env:
-                out.append(rf"\end{{{env}}}")
-            out.append(rf"\begin{{{want}}}")
-            env = want
-        item = cv.inline(m[3])
+        m = re.match(r"(\s*)(\* |- |(\d+)\. )(.*)$", ln)
+        if m:
+            items.append([0 if not m[1] else 1, "enumerate" if m[3] else "itemize", m[4], int(m[3] or 1)])
+            continue
+        assert items and ln.startswith("  "), ln
+        indent = len(ln) - len(ln.lstrip(" "))
+        if items[-1][0] == 1 and indent < 4:
+            items.append([0, "cont", ln.strip(), 0])
+        else:
+            items[-1][2] += " " + ln.strip()
+    out, stack = [], []
+    for lvl, env, text, num in items:
+        if env == "cont":
+            while len(stack) > 1:
+                out.append(rf"\end{{{stack.pop()}}}")
+            out.append(cv.inline(text))
+            continue
+        while len(stack) > lvl + 1:
+            out.append(rf"\end{{{stack.pop()}}}")
+        if len(stack) == lvl + 1 and stack[-1] != env:
+            out.append(rf"\end{{{stack.pop()}}}")
+        while len(stack) < lvl + 1:
+            out.append(rf"\begin{{{env}}}")
+            stack.append(env)
+            if env == "enumerate" and num > 1:  # a list that continues Markdown numbering, e.g. §9 item 25
+                out.append(rf"\setcounter{{{'enumi' if lvl == 0 else 'enumii'}}}{{{num - 1}}}")
+        item = cv.inline(text)
         out.append(r"\item " + ("{}" + item if item.startswith("[") else item))
-    out.append(rf"\end{{{env}}}")
+    while stack:
+        out.append(rf"\end{{{stack.pop()}}}")
     return out
 
 
@@ -382,7 +404,8 @@ def convert(md, cv):
                 lead = []
                 while lines and not is_list_line(lines[0]):
                     lead.append(lines.pop(0))
-                assert all(is_list_line(ln) for ln in lines), p[:120]
+                assert lines and is_list_line(lines[0]), p[:120]
+                assert all(is_list_line(ln) or ln.startswith("  ") for ln in lines), p[:120]
                 if lead:
                     tex.append(cv.inline(" ".join(lead)))
                 tex.extend(list_tex(cv, lines))
