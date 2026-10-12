@@ -60,6 +60,33 @@ Table R positions this work against the nearest prior systems. Every cell for an
 | YOLOv7-Sea (Zhao et al., 2023) | maritime, drone (SeaDronesSee) | RGB | none | test-time augmentation over five scales | no | n/a | five passes per image; speed not reported |
 | This work | maritime | VIS + LWIR | box coordinates (σ²), frame OOD (Mahalanobis) | hard veto on image statistics; fusion weight constant 0.9926 (measured) | yes: D-ECE, interval-ECE, NLL, AUSE/AURC, declared metric contracts, measured noise floor | nearest-timestamp pairing, 3–6 px median residual | two single-pass detectors; 57.0 FPS per detector (fp32), detector time only (§6.1) |
 
+### 2.5 Test-time adaptation, and adapting only the shifted modality
+
+**Single-modality test-time adaptation.** Many methods adapt a source model to unlabeled test data through its normalisation layers:
+* AdaBN (Li et al., 2017) replaces the BatchNorm statistics with those of the test batch.
+* BN-mix (Schneider et al., 2020) mixes the test statistics with the source statistics at a prior strength N; our N4 uses it unchanged (§6.11).
+* TENT (Wang et al., 2021) trains the BatchNorm affine parameters by minimising entropy.
+
+Adapting where nothing shifted can hurt, and our screen measured it (§6.11).
+
+**Multimodal test-time adaptation.** Several methods adapt only the shifted modality, or reweight toward the reliable one. Each decides from the model's own predictions or features, and each updates parameters by gradient:
+* READ (Yang et al., 2024) modulates cross-modal attention with a confidence-aware entropy loss, against what it calls reliability bias.
+* TSA (Chen et al., 2025) learns modality-specific adapters and a router that chooses which modality to adapt. It reports negative transfer when an unshifted modality is adapted, the same failure our gate guards against.
+* AdaPGC (Xu et al., 2026) flags the corrupted modality per sample by the divergence of its prediction from the fused prediction, then updates that encoder's LayerNorm.
+* CARAT (Mohapatra et al., 2026) flags each sensor stream against its own clean statistics. It argues that cross-modal agreement misleads when sensors measure different physical processes.
+* MM-TTA (Shin et al., 2022) adapts camera–LiDAR segmentation with cross-modal pseudo-labels.
+
+These are evaluated on audio–video classification, wearable time series and segmentation.
+
+**Colour–thermal.** Night-TTA (Liu et al., 2023) adapts night colour–thermal segmentation by training BatchNorm affine parameters against an ensemble teacher, on every night frame. Illumination-aware visible–infrared detectors, such as UA-CMDet (§2.2), use illumination to set fusion weights, not to adapt a detector.
+
+**What differs here.** We found no test-time adaptation method for visible–infrared object detection; this rests on full-text reads of the five closest papers on 2026-10-12. Ours differs from the multimodal methods above in three ways:
+* The thermal camera decides *whether* to adapt the visible detector, and it decides from a physical reading of the scene, not from agreement between model outputs. If IR places the frame in daylight, a dark or veiled visible frame is a degraded camera, not night.
+* No gradient is taken and no weight changes. Only BatchNorm statistics are re-estimated, and only on frames the gate passes.
+* Each variant is preregistered and replicated on a held-out run (§7.3).
+
+To our knowledge this is the first label- and gradient-free test-time adaptation for visible–infrared detection in which the second sensor gates adaptation by judging scene illumination. Selective adaptation itself, adapting only the corrupted modality, is not our contribution.
+
 ---
 
 ## 3. Dataset
@@ -852,6 +879,8 @@ Bodla, N., Singh, B., Chellappa, R., and Davis, L. S. (2017). Soft-NMS: improvin
 
 Buslaev, A., Iglovikov, V. I., Khvedchenya, E., Parinov, A., Druzhinin, M., and Kalinin, A. A. (2020). Albumentations: fast and flexible image augmentations. *Information*, 11(2), 125. doi:10.3390/info11020125.
 
+Chen, M., Zhang, B., Han, Z., Jiang, W., Wang, Y., Feng, S., Du, Y., and Bao, B. (2025). Test-time selective adaptation for uni-modal distribution shift in multi-modal data. In *Proceedings of the 42nd International Conference on Machine Learning (ICML)*, PMLR 267, pp. 9711–9727.
+
 Chen, Y.-T., Shi, J., Ye, Z., Mertz, C., Ramanan, D., and Kong, S. (2022). Multimodal object detection via probabilistic ensembling. In *Computer Vision – ECCV 2022*, Lecture Notes in Computer Science, pp. 139–158.
 
 Choi, Jiwon, Cho, D., Lee, G., Kim, H., Yang, G., Kim, J., and Cho, Y. (2025). PoLaRIS dataset: a maritime object detection and tracking dataset in Pohang Canal. In *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, pp. 13626–13632. doi:10.1109/ICRA55743.2025.11128583. Preprint arXiv:2412.06192.
@@ -886,9 +915,15 @@ Ledoit, O., and Wolf, M. (2004). A well-conditioned estimator for large-dimensio
 
 Lee, K., Lee, K., Lee, H., and Shin, J. (2018). A simple unified framework for detecting out-of-distribution samples and adversarial attacks. In *Advances in Neural Information Processing Systems 31* (NeurIPS 2018).
 
+Li, Y., Wang, N., Shi, J., Liu, J., and Hou, X. (2017). Revisiting batch normalization for practical domain adaptation. In *International Conference on Learning Representations (ICLR) Workshop*. arXiv:1603.04779.
+
 Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Dollár, P., and Zitnick, C. L. (2014). Microsoft COCO: common objects in context. In *Computer Vision – ECCV 2014*, Lecture Notes in Computer Science, pp. 740–755. doi:10.1007/978-3-319-10602-1_48.
 
 Liu, T., Pang, B., Zhang, L., Yang, W., and Sun, X. (2021). Sea surface object detection algorithm based on YOLO v4 fused with reverse depthwise separable convolution (RDSC) for USV. *Journal of Marine Science and Engineering*, 9(7), 753. doi:10.3390/jmse9070753.
+
+Liu, Y., Zhang, W., Zhao, G., Zhu, J., Vasilakos, A. V., and Wang, L. (2023). Test-time adaptation for nighttime color-thermal semantic segmentation. arXiv:2307.04470; to appear in *IEEE Transactions on Artificial Intelligence*.
+
+Mohapatra, P., Sui, Y., Yang, H., Lundell, B., Xia, S., and Zhu, Q. (2026). Source-learned reliance for selective test-time adaptation of multimodal time series. arXiv:2610.07499.
 
 Nirgudkar, S., DeFilippo, M., Sacarny, M., Benjamin, M., and Robinette, P. (2023). MassMIND: Massachusetts Maritime INfrared Dataset. *The International Journal of Robotics Research*, 42(1–2), 21–32. doi:10.1177/02783649231153020.
 
@@ -902,6 +937,8 @@ Sakaridis, C., Dai, D., and Van Gool, L. (2018). Semantic foggy scene understand
 
 Schneider, S., Rusak, E., Eck, L., Bringmann, O., Brendel, W., and Bethge, M. (2020). Improving robustness against common corruptions by covariate shift adaptation. In *Advances in Neural Information Processing Systems 33* (NeurIPS 2020).
 
+Shin, I., Tsai, Y.-H., Zhuang, B., Schulter, S., Liu, B., Garg, S., Kweon, I. S., and Yoon, K.-J. (2022). MM-TTA: multi-modal test-time adaptation for 3D semantic segmentation. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*.
+
 Skafte, N., Jørgensen, M., and Hauberg, S. (2019). Reliable training and estimation of variance networks. In *Advances in Neural Information Processing Systems 32* (NeurIPS 2019).
 
 Solovyev, R., Wang, W., and Gabruseva, T. (2021). Weighted boxes fusion: ensembling boxes from different object detection models. *Image and Vision Computing*, 107, 104117. doi:10.1016/j.imavis.2021.104117.
@@ -914,7 +951,13 @@ Wang, A., Chen, H., Liu, L., Chen, K., Lin, Z., Han, J., and Ding, G. (2024). YO
 
 Wang, C.-Y., Yeh, I-H., and Liao, H.-Y. M. (2024). YOLOv9: learning what you want to learn using programmable gradient information. In *Computer Vision – ECCV 2024*, Lecture Notes in Computer Science, pp. 1–21. doi:10.1007/978-3-031-72751-1_1.
 
+Wang, D., Shelhamer, E., Liu, S., Olshausen, B., and Darrell, T. (2021). Tent: fully test-time adaptation by entropy minimization. In *International Conference on Learning Representations (ICLR)*. arXiv:2006.10726.
+
+Xu, J., Li, Y., Sun, C., Xu, X., Li, J., and Xu, F. (2026). Multi-modal test-time adaptation via adaptive probabilistic Gaussian calibration. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*. arXiv:2604.19093.
+
 Yang, L., Kang, B., Huang, Z., Zhao, Z., Xu, X., Feng, J., and Zhao, H. (2024). Depth Anything V2. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024). arXiv:2406.09414.
+
+Yang, M., Li, Y., Zhang, C., Hu, P., and Peng, X. (2024). Test-time adaptation against multi-modal reliability bias. In *International Conference on Learning Representations (ICLR)*.
 
 Zhao, H., Zhang, H., and Zhao, Y. (2023). YOLOv7-sea: object detection of maritime UAV images based on improved YOLOv7. In *Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision Workshops (WACVW)*, pp. 233–238. doi:10.1109/WACVW58289.2023.00029.
 
