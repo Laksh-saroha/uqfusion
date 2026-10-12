@@ -405,6 +405,58 @@ mid-run by the bit-identical GPU path (§9); the CPU run was stopped before it w
 `runs/v2_p04_score.log` ends in "score FAILED". The report and JSON are the GPU run's
 (`runs/holdout_p04/v2/score_gpu.log`).
 
+### 8.11 The two degraded-IR repairs, registered (`degraded_ir_repairs.md`, `scripts/v2_degraded_ir_repairs.py`)
+
+Pre-registered (`docs/prereg-degraded-ir-repairs-2026-10-10.md`) before any number on the verdict draws.
+R1 = §8.9b's fix (the fallback confirms with `concentrated` alone); R2 = the support bonus only where IR
+is merge-healthy. VIS draws 942–944 / IR 952–954, five systems, 60 cells, ship AP, Δ paired by system.
+
+| arm | cells harmed (≤ −0.0014, interval < 0) | clean-IR cells moved | cells gaining ≥ 0.0060 | claim holds | verdict |
+|---|---:|---:|---:|---:|---|
+| R1 | 0 | 0 | 5 | 35 / 60 | **ADOPT** |
+| R2 | 8 | 0 | 0 | 31 / 60 | reject |
+| R1+R2 | 6 | 0 | 4 | 34 / 60 | reject |
+| shipped | — | — | — | 32 / 60 | — |
+
+R1's five gains are all low-light day with degraded IR: fog s1 +0.0178 [+0.0107, +0.0250], fog s2
++0.0072, noise s2 +0.0189, fog s3 +0.0916 [+0.0800, +0.1031], noise s3 +0.1439 [+0.1228, +0.1650]
+(fallback veto 96% → 22% on noise s3). Every other cell moves by exactly 0.0000. R2 costs up to
+0.0158 (clean VIS, IR noise s2 day), so the support bonus is worth keeping even from an IR the merge
+health check distrusts. **`crossmodal26m_r` is now R1 alone** (`ctx.py`); R2's switch remains to
+reproduce the rejection. What R1 cannot fix: at severity 3, low-light day still fails the claim
+(−0.0226 and −0.0218), and every night failure is the night-veto defect (§6.6 of the paper), which
+neither repair touches.
+
+### 8.12 Gate replacements and no-retraining arms on fresh draws (2026-10-10/11)
+
+Registered in `docs/prereg-no-retrain-2026-10-10.md` (Amendments 1–4), `docs/prereg-llf-2026-10-10.md` and
+`docs/prereg-llf2-2026-10-10.md`, each before its arms were scored. Fresh draws VIS 945–947 / IR 955–957
+(no earlier system was scored on them), five Phase 3 systems, 60 cells, ship AP. IMPROVES = no cell worse
+than shipped at 0.0014 with interval < 0, and ≥ 1 cell better at 0.0060 with interval > 0. The paper's
+§6.9–§6.10 and Table 8 carry the full account.
+
+| arm | better / worse vs shipped | claim fails | mean fused | verdict |
+|---|---:|---:|---:|---|
+| shipped `crossmodal26m` | — | 28 | 0.0894 | — |
+| `union` (veto off) | 30 / 0 | 1 | 0.1544 | IMPROVES |
+| `lex` (VIS tier above IR) | 29 / 13 | 0 | 0.1507 | not adopted |
+| `demote` (vetoed stream as tail) | 24 / 0 | 22 | 0.1144 | IMPROVES |
+| `selfconf` / `calunion` / `proben` | 28 / 18–21 | 3 / 9 / 8 | 0.146–0.150 | not adopted |
+| LLF-2 / deep trust (E7) | 26–28 / 17–21 | 8 / 0 | 0.149 | FAIL |
+| `ens5` / `ens5_union` | 43 / 0, 56 / 0 | 28, 1 | 0.1045, 0.1751 | IMPROVES |
+| `full_tta` (ens5 + IR NLM + flip TTA, no gate) | 57 / 0 | 1 | **0.1862** | IMPROVES |
+
+The one cell `union`-family arms fail is clean VIS with IR fog s3 by day: the support bonus of §8.7.
+Frame-level gates also pay a pooling penalty (random switching on 75% of frames scores 0.3420, below
+VIS 0.3485 and union 0.3566; `docs/eval/no_retrain/switching_941.md`). Files:
+`docs/eval/no_retrain/{gate_zoo_fresh,deep_gate_fresh,ensembles_fresh}.md`, `docs/eval/llf/`,
+`docs/eval/restore/`; scripts `gate_zoo.py`, `deep_gate.py`, `llf.py`, `llf_net.py`, `seed_ensemble.py`,
+`restore.py`.
+
+Constants audit (`constants_audit.md`, `scripts/v2_constants_audit.py`, draws 942–944, descriptive): the
+fusion constants stand; the weak-IR fallback is the one switch wrong on v2 (off: 25 better, 0 worse, claim
+fails 28 → 5), on the closed night axis.
+
 ## 9. Speed and parallelism (16 physical / 32 logical cores, RTX 4080 Laptop)
 
 | step | before | now |
