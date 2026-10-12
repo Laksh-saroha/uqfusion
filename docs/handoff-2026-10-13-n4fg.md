@@ -1,5 +1,13 @@
 # Handoff — N4Fg (N4F with N4g's glare term), queued unattended at 11:49 PM on 10-12
 
+**Final, 2:00 AM on 10-13: done.** Development PASSES (glare/clean/day +0.0179 [+0.0141, +0.0207]; no cell worse).
+**P-FG REPLICATES**: glare/clean N4Fg 0.1967 against `full_tta` 0.1656, +0.0311 [+0.0286, +0.0332]; N4F (N4's gate)
+equals `full_tta` there; no other cell worse than N4F. Paper updated (Table 2 row, Table 3 glare row, §4.4, §5.1,
+§5.2, Fig. 2 and its caption, nine scorings in the abstract, §3.4, §7 and Appendix G, IEEE front matter) and both
+versions rebuilt clean (`f100bcf`). The IEEE main PDF is now 10 pages (references spill onto page 10). The
+recommendation paragraph (§7) is unchanged: whether to name N4Fg there is Laksh's call. The PC shut down after this.
+Everything below is the plan as queued.
+
 Registration: `docs/prereg-ttbn-fulltta-glare-2026-10-12.md` (11:44 PM; Amendment 1 at 11:47 PM: pohang04 runs
 whatever the development verdict, integrity checks still stop the queue). Code: `scripts/ttbn_fulltta_glare.py`.
 
