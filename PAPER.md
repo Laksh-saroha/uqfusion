@@ -995,7 +995,7 @@ A 44-of-93-run IR architecture ladder was stopped early on the basis of an ANOVA
 
 **Sources.** Every number in a table or figure is read from a result record in the repository; Table 20 lists the record behind each. The records hold the per-cell, per-seed and per-draw values, the bootstrap intervals, and the commands that produced them.
 
-**Table 20. Source records for Tables 1–3, 7–12 and 15–18 and Figures 2 and 4–8.** Paths are under `docs/eval/` unless they begin with `docs/`, `scripts/` or `phase1_benchmark/`, in which case they start at the repository root.
+**Table 20. Source records of the tables and figures read from result files.** Paths are under `docs/eval/` unless they begin with `docs/`, `scripts/` or `phase1_benchmark/`, in which case they start at the repository root.
 
 | Item | Source records |
 |---|---|
