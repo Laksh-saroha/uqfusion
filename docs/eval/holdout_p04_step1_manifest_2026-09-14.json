@@ -1,0 +1,104 @@
+{
+  "written_utc": "2026-09-14T11:04:08+00:00",
+  "script": "scripts/holdout_p04_step1.py",
+  "source": {
+    "dir": "D:\\Datasets\\Pohang\\pohang04\\infrared\\images",
+    "n_frames": 22235,
+    "sha256": "bedc7467c02b58c1c6fac4c4a6ee4938e3fd06ea213937bfb2949d0f9e40360d",
+    "timestamp_txt_sha256": "8ba3bbb06df4053d8e9858abe2d5e9e5c7c5caab6d1d74c367d8f46860ef23a2",
+    "meta_ir_txt_sha256": "8ba3bbb06df4053d8e9858abe2d5e9e5c7c5caab6d1d74c367d8f46860ef23a2",
+    "meta_ir_txt_lines": 22235
+  },
+  "conversion": {
+    "rule": "per-frame min-max to uint8 ((x-lo)/(hi-lo)*255+0.5), zero-variance -> all 0; then letterbox 640x512 -> 640x640, pad 114, no resize",
+    "convert_script": "D:\\Datasets\\Pohang\\_scripts\\convert_ir_to_8bit.py",
+    "convert_script_sha256": "6bd29eea5e529be0d51f97a8f55ec1444730911f6a70f91eaafb9f475085ea9d",
+    "letterbox_script_sha256": "c1ddcb349a398c0c0186df7da9887c080dc21d7c17aea68c62cf90981776764b",
+    "reproduced_dev_frames_bit_exact": 60
+  },
+  "converted": {
+    "dir": "A:\\Uncertain\\Pohang_dataset\\infrared\\images\\pohang04",
+    "n_frames": 22235,
+    "sha256": "8f5aa2be916c230923d2041467dd4a1a2dce0021fb9606c50cbd87b4a784f516",
+    "n_degenerate": 0,
+    "degenerate": []
+  },
+  "pairs": {
+    "file": "A:\\Uncertain\\Pohang_dataset\\paired\\pohang04_pairs.csv",
+    "sha256": "c732ccab341884deb116b25f61069a6f032b1db271974ca3f7976edc8547ecbb",
+    "meta_rows": 22385,
+    "in_tolerance": 22214,
+    "with_left_label": 12482,
+    "emitted": 12482,
+    "abs_dt_ms_median": 26.437,
+    "abs_dt_ms_max": 48.951,
+    "rule": "A8.4: in_tolerance==1 AND left stereo label present AND IR frame converted"
+  },
+  "composition": {
+    "rule": "A9.4: solar elevation > 0 deg (geometric, NOAA) at stereo capture time, nearest valid GPS fix",
+    "n_pairs": 12482,
+    "n_day": 12482,
+    "n_night": 0,
+    "elevation_deg": {
+      "min": 55.95554489509388,
+      "max": 62.987632425631205
+    },
+    "capture_utc": {
+      "first": "2021-07-16T05:12:39.163059+00:00",
+      "last": "2021-07-16T05:49:50.547344+00:00"
+    },
+    "gps_gap_s_max": 1.1600275039672852,
+    "sanity": {
+      "pohang00": {
+        "epoch": 1625124349.169323,
+        "elevation_deg": 37.16979509938718
+      },
+      "pohang01": {
+        "epoch": 1625136965.949966,
+        "elevation_deg": -3.0564157966872045
+      }
+    },
+    "crosscheck_ir_p05": {
+      "threshold": 41.5,
+      "n_ir_night": 505,
+      "n_disagree": 505,
+      "n_ir_night_on_solar_day": 505,
+      "note": "disagree = IR flag night on a solar-day frame, or day on a solar-night frame"
+    }
+  },
+  "seconds": 688.0,
+  "composition_superseded": [
+    {
+      "rule": "A9.4: solar elevation > 0 deg (geometric, NOAA) at stereo capture time, nearest GPS fix",
+      "n_pairs": 12482,
+      "n_day": 12455,
+      "n_night": 27,
+      "elevation_deg": {
+        "min": -12.204751362743323,
+        "max": 62.987632425631205
+      },
+      "capture_utc": {
+        "first": "2021-07-16T05:12:39.163059+00:00",
+        "last": "2021-07-16T05:49:50.547344+00:00"
+      },
+      "gps_gap_s_max": 1.0734727382659912,
+      "sanity": {
+        "pohang00": {
+          "epoch": 1625124349.169323,
+          "elevation_deg": 37.16979509938718
+        },
+        "pohang01": {
+          "epoch": 1625136965.949966,
+          "elevation_deg": -3.0564157966872045
+        }
+      },
+      "crosscheck_ir_p05": {
+        "threshold": 41.5,
+        "n_ir_night": 505,
+        "n_disagree": 478,
+        "note": "disagree = IR flag says night on a solar-day frame, or day on a solar-night frame"
+      },
+      "superseded_because": "GPS no-fix rows (quality 0, lat/lon 0,0) were used as positions"
+    }
+  ]
+}

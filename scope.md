@@ -10,7 +10,13 @@
 
 ## 1. One-Paragraph Summary
 
-This project develops a maritime object detector that not only localizes vessels but also estimates, in a single forward pass, *how much its own prediction can be trusted at that moment*. This self-assessed reliability decides, frame by frame, how much to rely on the visible (RGB) camera versus the thermal (infrared) camera — automatically down-weighting whichever sensor is degraded by fog, glare, darkness, or thermal crossover. The core contribution is a **calibrated, single-pass uncertainty signal** driving **adaptive visible–infrared sensor fusion**, with a rigorous demonstration that the uncertainty is genuinely predictive of error. Unlike most prior maritime fusion work, which blends sensors on a fixed schedule, this system blends them based on live, per-frame uncertainty.
+This project develops a maritime object detector that not only localizes vessels but also estimates, in a single forward pass, *how much its own prediction can be trusted at that moment*. This self-assessed reliability is *intended* to decide, frame by frame, how much to rely on the visible (RGB) camera versus the thermal (infrared) camera — automatically down-weighting whichever sensor is degraded by fog, glare, darkness, or thermal crossover. The core contribution is a **controlled maritime uncertainty study**: a calibrated, single-pass uncertainty signal, evaluated on its own terms, together with a pre-registered test of whether it improves visible–infrared sensor fusion — reported whether the answer is yes or no.
+
+Prior work has already applied uncertainty to visible–infrared fusion (R24 UA-CMDet 2022; R25 DICTA 2024) and to single-pass localization variance (R1 Gaussian YOLOv3 2019). The contribution here is not the idea but the measurement: declared metric contracts, a measured noise floor, dependence-aware intervals, and negative results published rather than retried.
+
+**Status as measured, 2026-09-10 (R-D1, [`docs/uq-mechanism-2026-09-10.md`](docs/uq-mechanism-2026-09-10.md)):** under the shipped `crossmodal` preset the fusion weight is a **single constant 0.9930** across all 2,232 paired frames × 4 conditions, and supplying real predicted uncertainty does not beat the same uncertainties attached to the wrong boxes at any floor tested. The gain that is real comes from **image-statistic sensor selection**, not from uncertainty-weighted blending. The paragraph above states the aim; this note states what has been measured, and the two are not yet the same thing. Positioning and the full comparison: [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md).
+
+> *Superseded wording (kept for audit):* “Unlike most prior maritime fusion work, which blends sensors on a fixed schedule, this system blends them based on live, per-frame uncertainty.”
 
 ---
 
@@ -20,10 +26,12 @@ Electro-Optical (EO) sensors (visible + infrared) supplement marine radar but ea
 
 Two gaps from the literature:
 
-1. **Most maritime detectors output no uncertainty at all** (SID-YOLOv5, EG-YOLO, RDSC-YOLOv4, YOLOv7-sea, feature-fusion nets). The one exception, Gaussian-YOLOv3, shows the value of localization-variance modeling but is on a dated backbone and not applied to adaptive multi-modal sensing.
-2. **Existing visible–infrared fusion is static** — fixed rules or learned-but-static attention, never conditioned on a live per-frame reliability estimate.
+1. **Maritime YOLO variants output no uncertainty** (RDSC-YOLOv4, Liu et al. 2021; YOLOv7-Sea, Zhao et al. 2023; both read 2026-10-08. SID-YOLOv5 and EG-YOLO, listed here earlier, could not be traced to any publication and are removed). Single-pass localization variance is established outside maritime work (R1 Gaussian YOLOv3, autonomous driving), and uncertainty-aware cross-modal detection is established outside maritime work too (R24, R25) — so neither the head nor the idea of conditioning fusion on uncertainty is claimed as new here. What is thin is the maritime evidence: whether these uncertainties are *calibrated* on paired VIS+LWIR maritime video, and whether they buy anything once measured against a stated noise floor.
+2. **Calibrated evaluation of uncertainty-conditioned fusion is scarce.** Uncertainty-conditioned visible–infrared fusion exists (R24 UA-CMDet 2022 pairs uncertainty-aware cross-modal learning with illumination-aware NMS *at inference*; R25 DICTA 2024), and learned attention is not “static” merely because its parameters are frozen — attention values depend on the input. The open question is not whether fusion can be conditioned on uncertainty but whether the uncertainty doing the conditioning is itself trustworthy, measured against a stated noise floor with dependence-aware intervals, and reported when the answer is no.
 
-This project sits in that gap: single-pass UQ used to drive *dynamic* visible–infrared fusion, with calibration treated as a first-class result.
+This project sits in that gap: a controlled maritime study of whether single-pass UQ is calibrated and whether it improves visible–infrared fusion, with calibration treated as a first-class result and null results treated as results.
+
+> *Superseded wording (kept for audit):* “Existing visible–infrared fusion is static — fixed rules or learned-but-static attention, never conditioned on a live per-frame reliability estimate.” Retired 2026-09-10 as factually wrong; see [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md).
 
 ---
 
@@ -35,7 +43,8 @@ This project sits in that gap: single-pass UQ used to drive *dynamic* visible–
 - **O2 — Aleatoric UQ (core contribution).** Single-pass probabilistic head predicting a predictive variance per box coordinate, trained with NLL → per-detection aleatoric uncertainty at real-time speed.
 - **O3 — Distributional/epistemic UQ.** Low-cost frame-level estimator (feature-space distance to the training distribution) catching total-sensor-degradation that per-detection uncertainty misses.
 - **O4 — Uncertainty-gated fusion.** Per-modality reliability score from O2 + O3, used to adaptively fuse the two streams so the more reliable modality dominates instant-by-instant.
-- **O5 — Validation.** Evaluate *calibration* (does predicted uncertainty track real error?) and show uncertainty-gated fusion beats single-modality and uncertainty-blind fusion under adverse conditions.
+- **O5 — Validation.** Evaluate *calibration* (does predicted uncertainty track real error?) and **test**, under a rule fixed in advance, whether uncertainty-gated fusion beats single-modality and uncertainty-blind fusion under adverse conditions — reporting the outcome either way.
+  - *Half met, half answered NO.* Gated fusion sits at or above max(VIS, IR) on all eight benchmark cells. But against **uncertainty-blind** fusion, R-D1 (2026-09-10) is a pre-registered NULL at every floor: 0 of 4 conditions. The original wording promised a result the project has since contradicted, so it now names the test, not the verdict.
 
 ---
 
@@ -49,29 +58,31 @@ This project sits in that gap: single-pass UQ used to drive *dynamic* visible–
 
 ## 5. Datasets
 
-### 5.1 Primary Datasets (Paired VIS + IR)
+### 5.1 Datasets (Paired VIS + IR) — one in use, one planned
 
-These are the two primary datasets used for training and evaluating the uncertainty-gated fusion system. Both provide co-registered visible and infrared imagery with detection-level annotations.
+**Pohang Canal + PoLaRIS is the only dataset this project has used.** Everything trained, benchmarked or evaluated to date is Pohang-only; MIT Marine Perception is listed here as the planned Phase 2+ addition (decision D10, 2026-07-07) and is **not onboarded** — see the status note under its row. Neither dataset is spatially co-registered: Pohang VIS–IR pairing is by nearest timestamp, and the residual is measured, not assumed — **3–6 px median** (`runs/eval/x_registration_drift.md`), with within-run horizontal swings approaching 10 px.
 
 | Role | Dataset | Description | Key Stats |
 | --- | --- | --- | --- |
-| **Paired VIS+LWIR fusion testbed** | **Pohang Canal Dataset + PoLaRIS annotations** | Multimodal maritime dataset on a 7.5 km route in the Pohang canal / inner-outer port / near-coastal region (Chung et al., IJRR 2023, KAIST MORIN lab). Stereo visible (2048×1080, 10 Hz) and thermal infrared (640×512, 16-bit, 10 Hz). PoLaRIS provides YOLO-format bounding-box annotations (2 classes: ship, buoy). 5 runs (pohang00–04), with pohang01 being a night run. License: CC BY-NC 4.0. | ~158k images, ~1.22M boxes; ~28k paired VIS↔IR frames with labels in both modalities; VIS: 127k images / IR: 31k images |
-| **Multi-sensor maritime perception** | **MIT Sea Grant AUV Lab Marine Perception Dataset** | Multi-sensor marine perception dataset collected on R/V Philos on the Charles River, Cambridge, MA (MIT Sea Grant). Contains visible video (left/center/right cameras, 12 fps), infrared (left/right, 30 fps), lidar, and radar. Multiple scenarios including close approaches, sailboat crossings, and in-place turns. License: CC BY-NC-SA 4.0. We have manually annotated a subset of images from this dataset ourselves. | Multiple runs across different dates and conditions (2020–2021+); paired VIS+IR with varying weather/lighting; scenarios include busy traffic, crossing vessels, and maneuvering |
+| **Paired VIS+LWIR fusion testbed** | **Pohang Canal Dataset + PoLaRIS annotations** | Multimodal maritime dataset on a 7.5 km route in the Pohang canal / inner-outer port / near-coastal region (Chung et al., IJRR 2023, KAIST MORIN lab). Stereo visible (2048×1080, 10 Hz) and thermal infrared (640×512, 16-bit, 10 Hz). PoLaRIS provides YOLO-format bounding-box annotations (2 classes: ship, buoy). 5 runs (pohang00–04), with pohang01 being a night run. License: CC BY-NC 4.0. | **Measured 2026-09-10** (`scripts/verify_dataset_claims.py`): **158,319 images** (VIS 127,309 / IR 31,010), **1,183,736 boxes** (VIS 962,960 / IR 220,776), **28,388 paired VIS↔IR rows** (pohang00 10,786 / 01 11,990 / 02 3,739 / 03 1,873 / 04 0). These are **local filtered counts for this tree**, not the upstream PoLaRIS release; VIS cross-checks against ledger hash `b92739202127`. Supersedes the earlier “~1.22M boxes”, which predates the 2026-09-02 night-box restore |
+| **Multi-sensor maritime perception** | **MIT Sea Grant AUV Lab Marine Perception Dataset** | Multi-sensor marine perception dataset collected on R/V Philos on the Charles River, Cambridge, MA (MIT Sea Grant). Contains visible video (left/center/right cameras, 12 fps), infrared (left/right, 30 fps), lidar, and radar. Multiple scenarios including close approaches, sailboat crossings, and in-place turns. License: CC BY-NC-SA 4.0. The 12 fps / 30 fps rates mean VIS and IR are **not on a common clock** — any use requires an explicit pairing step, as Pohang does. | **NOT ONBOARDED as of 2026-09-10.** Measured: no `data/` directory exists, `datasets.mit_marine.vis_yaml` / `.ir_yaml` are both `null` in `config.yaml`, and no `.py`/`.yaml`/`.json` in the repo references this dataset. Deferred by **decision D10 (2026-07-07)** to Phase 2+. The fps and licence above are from the source; the scenario counts are **not independently verified here**. *Superseded claim, kept for audit:* “We have manually annotated a subset of images from this dataset ourselves” — retired 2026-09-10, no such annotation exists in this repo ([`docs/bibliography-2026-09-10.md`](docs/bibliography-2026-09-10.md) §3) |
 
 **Pohang Canal dataset details:**
 
 - Runs: pohang00 (day, dense both modalities), pohang01 (night), pohang02–04 (varying IR coverage)
 - pohang04 has **zero IR labels** — VIS-only contribution
-- pohang03 IR is sparse (~1,922 vs ~13k VIS)
+- pohang03 IR is sparse: **1,922 IR images vs 27,085 VIS** (measured 2026-09-10; the earlier “~13k VIS” does not reproduce from the current tree)
 - VIS↔IR pairing by nearest-neighbor timestamp within 50 ms (sensors not on same hardware trigger)
-- No spatial registration between VIS and IR — decision-level fusion (WBF on boxes) tolerates this
+- No spatial registration between VIS and IR. Decision-level fusion does **not** tolerate the residual: at the shipped `iou_thr` 0.85 only 0.05% of VIS boxes find an IR partner, so boxes are not merged across modalities at all; relaxing to 0.55 raises that to ~11% and costs AP (Stage 1 S1-NULL, [`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md))
+  - *Superseded wording (kept for audit):* “No spatial registration between VIS and IR — decision-level fusion (WBF on boxes) tolerates this”
 - Data tree organized as per-modality YOLO format with separate `data_vis.yaml` and `data_ir.yaml`
 
 **MIT Marine Perception dataset details:**
 
-- Provides paired visible + infrared data suitable for fusion experiments
-- Contains multiple encounter scenarios with varying vessel types and densities
-- Raw sensor data requires annotation processing for YOLO-format detection labels
+- **Not onboarded** (see the table above). The bullets below are the plan, not a description of anything in this repo.
+- Visible and infrared run at different rates (12 fps / 30 fps), so pairing must be built explicitly — there is no common trigger and no `pairs.csv` for this dataset
+- Contains multiple encounter scenarios with varying vessel types and densities *per the source*; not independently verified here
+- Raw sensor data requires annotation processing for YOLO-format detection labels — **this work has not been done**; `scripts/make_pairs.py` and the homography estimator named in `dataset_requirement.md` §7 are still unwritten
 
 ### 5.2 Adverse-Condition Generation
 
@@ -86,8 +97,8 @@ These are publicly available maritime datasets that could supplement the primary
 
 | Dataset | Description | Potential Role |
 | --- | --- | --- |
-| **Singapore Maritime Dataset (SMD)** | Both EO and IR videos, ~240k object labels, 10 classes, bounding boxes. Separate annotations for EO and IR streams (Prasad et al., IEEE T-ITS, 2017). | Multi-modal detection benchmark; supplementary fusion evaluation on a geographically different dataset |
-| **MassMIND** (Massachusetts Maritime INfrared Dataset) | ~2,900 LWIR images; segmentation labels convertible to bounding boxes via OpenCV; 7 classes (Nirgudkar et al., IJRR, 2023). | Dedicated IR-only test bed; includes thermal-crossover regime; independent evaluation of IR branch calibration |
+| **Singapore Maritime Dataset (SMD)** | Both EO and IR videos, ~240k object labels, 10 classes, bounding boxes. Separate annotations for EO and IR streams (Prasad et al., IEEE T-ITS, 2017). | Supplementary **single-modality** evaluation on a geographically different dataset. **Not a fusion testbed as-is:** the source provides separate visible and IR material, not synchronized calibrated pairs — presence of both modalities is not evidence of pairing, and a pairing step would have to be built and justified first |
+| **MassMIND** (Massachusetts Maritime INfrared Dataset) | ~2,900 LWIR images; segmentation labels convertible to bounding boxes via OpenCV; 7 classes (Nirgudkar et al., IJRR, 2023). | Dedicated IR-only test bed; includes thermal-crossover regime; independent evaluation of IR branch calibration. **Prerequisite:** the seven categories are *segmentation* classes and are **not** this project's ship/buoy taxonomy — a documented instance-to-class mapping must be written and justified before any box is derived. No such mapping exists in the repo |
 
 ---
 
@@ -144,6 +155,15 @@ Per frame, per modality *m*:
 - **Fusion weights:** $w_m = \bar{R}_m / (\bar{R}_{\text{visible}} + \bar{R}_{\text{infrared}})$, fed into WBF.
 
 **Critical caveat:** every constant (λ, sigmoid μ_d/τ, α, the multiplicative form) is a **tunable design choice to be validated empirically** via ablation + calibration curves — not a settled formula. Both signals are only meaningful **after calibration on held-out data**; combining raw signals lets the larger numeric range dominate.
+
+**Status as measured, 2026-09-14 — the fusion is union aggregation, not consensus.** The formulas above describe the design; the shipped system (`crossmodal26m`) does something narrower, and three pre-registered or measured results pin down what:
+
+- **Weights:** capability prior alone — `w_vis` is one constant across all frames (R-D1, 2026-09-10). The Mahalanobis and box-uncertainty terms do not reach the weight.
+- **Selection:** a stream is dropped per frame by an image-statistic veto (IR says night AND VIS is dark or veiled); a frame with one surviving stream returns that stream.
+- **Merging:** at `iou_thr` 0.85, 0.05% of VIS boxes have an IR partner, so the surviving streams are **concatenated**, with a cross-modal score bonus at IoU 0.30 that never moves a coordinate. Sensor *agreement* is not what the fusion measures.
+- **Stage 1 (Phase 3 prereg §4) closed the obvious repair.** Relaxing correspondence to 0.55 while letting σ arbitrate the merges it creates is non-inferior to the shipped system on 1 of 4 conditions (3 required). σ changes the fused boxes on nearly every frame and moves AP by ≤0.0003. **Declared S1-NULL; the correspondence question is closed permanently** — no lower threshold, no re-opening without a new pre-registration. Record: [`docs/stage1-s1-null-2026-09-14.md`](docs/stage1-s1-null-2026-09-14.md).
+
+Describe the method as *image-statistic sensor selection with union aggregation of detections*. “WBF weighted by R” (the §6.1 diagram) is the design that was tested, not the one that ships.
 
 ---
 
@@ -341,7 +361,7 @@ $$\text{ECE} = \sum_m \frac{|B_m|}{n} \cdot |\text{accuracy}(B_m) - \text{confid
 | MIT dataset needs annotation processing | Raw sensor data may not have detection-ready labels | Extract and convert to YOLO format; QA with FiftyOne |
 | Pohang Canal IR coverage varies per run | pohang04 has zero IR labels; pohang03 IR is sparse | Disclose in manuscript; do not hide distribution skew |
 | Small datasets → unstable variances | UQ can overfit on little data | Augmentation; report variance across seeds |
-| Modality registration imperfect | VIS and IR not on same hardware trigger | Fuse at the decision level (WBF), which tolerates misalignment |
+| Modality registration imperfect | VIS and IR not on same hardware trigger; 3–6 px median residual | **Mitigation failed as stated** (was: “fuse at the decision level (WBF), which tolerates misalignment”). Decision-level fusion avoids the residual by almost never merging across modalities (0.05% partner rate at 0.85); relaxing the threshold costs AP, and σ-arbitrated merging does not recover it (S1-NULL, 2026-09-14). Disclose as union aggregation |
 | Correlated degradation of both sensors | Independence assumption breaks (7.4) | Add both-degraded test row; caveat the reliability combination |
 
 ---
@@ -379,7 +399,8 @@ $$\text{ECE} = \sum_m \frac{|B_m|}{n} \cdot |\text{accuracy}(B_m) - \text{confid
 
 ## 17. Assumptions and Limitations
 
-- **Data pairing:** visible and infrared streams are treated as observing the same scene; where datasets provide unregistered or separately captured modalities, the fusion is at the decision level, which tolerates imperfect spatial registration.
+- **Data pairing:** visible and infrared streams are treated as observing the same scene, paired by nearest timestamp. Decision-level fusion does **not** absorb the resulting registration residual; at this registration quality the fusion aggregates the two streams' detections rather than combining agreeing ones, and a σ-arbitrated relaxed-correspondence alternative was pre-registered and returned S1-NULL (2026-09-14). Any claim about cross-modal *agreement* is out of reach of this system.
+  - *Superseded wording (kept for audit):* “where datasets provide unregistered or separately captured modalities, the fusion is at the decision level, which tolerates imperfect spatial registration.”
 - **Pohang Canal IR gaps:** pohang04 has zero IR labels, pohang03 is sparse — disclosed and not hidden.
 - **MIT dataset annotation status:** may require annotation processing to convert raw sensor data into YOLO-format detection labels.
 - **Adverse conditions are simulated:** fog, glare, and rain are introduced synthetically; results establish the method's behavior under controlled degradation rather than field-collected extreme weather.
@@ -447,21 +468,25 @@ Nothing coded yet. Agreed order:
 | R14 | Solovyev et al. — *Weighted Boxes Fusion* | Image and Vision Computing 2021 | Reliability-weighted decision-level fusion | Core dependency |
 | R15 | Guo et al. — *On Calibration of Modern Neural Networks* (ECE, temperature scaling) | ICML 2017 | Calibration metric + recalibration | Core reference |
 | R16 | Angelopoulos, Bates — *A Gentle Introduction to Conformal Prediction* | 2021 | Optional conformal extension | Optional |
+| R24 | Sun et al. — *UA-CMDet: Drone-based RGB-Infrared Cross-Modality Vehicle Detection via Uncertainty-Aware Learning* (<https://github.com/SunYM2020/UA-CMDet>) | 2022 | **Prior art for uncertainty-conditioned cross-modal fusion**, incl. illumination-aware NMS at inference | Must cite — retires the “fusion is static” claim |
+| R25 | *Uncertainty-Aware Cross-Modality Fusion for Visible-Infrared Object Detection* (<https://doi.org/10.1109/DICTA63115.2024.00029>) | DICTA 2024 | **Prior art for uncertainty-aware VIS–IR fusion** | Must cite — retires the “fusion is static” claim |
+
+R24 and R25 were surfaced by the external architecture review (F17) and marked **externally verified** there; see [`docs/architecture-review-2026-09-09.md`](docs/architecture-review-2026-09-09.md). Their venues and headline mechanisms are recorded from that verification. Their calibration protocols, registration assumptions and compute have **not** been read from the papers — the comparison table in [`docs/positioning-2026-09-10.md`](docs/positioning-2026-09-10.md) leaves those cells explicitly blank, and they must be filled before any manuscript uses it.
 
 ### 19.6 Detector Alternatives (NMS-free, real-time)
 
 | # | Reference | Venue / Year | Role | Status |
 | --- | --- | --- | --- | --- |
 | R17 | Zhao et al. — *DETRs Beat YOLOs on Real-time Object Detection* (RT-DETR) | CVPR 2024 | NMS-free real-time alternative | Optional benchmark row |
-| R18 | Peng et al. — *D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement* | arXiv 2024/2025 | Distribution-native DETR | Optional benchmark row |
+| R18 | Peng et al. — *D-FINE: Redefine Regression Task in DETRs as Fine-grained Distribution Refinement* (<https://proceedings.iclr.cc/paper_files/paper/2025/hash/6cf58a87e3097e7d1f9be3e8693a93de-Abstract-Conference.html>) | **ICLR 2025** | Distribution-native DETR | Optional benchmark row |
 
 ### 19.7 Datasets
 
 | # | Reference | Venue / Year | Dataset | Role |
 | --- | --- | --- | --- | --- |
-| R19 | Chung et al. — *Pohang Canal Dataset* | IJRR 2023 | Pohang Canal | **Primary** — paired VIS+LWIR fusion testbed |
-| R20 | PoLaRIS annotation release | — | PoLaRIS (annotations for Pohang Canal) | **Primary** — YOLO-format annotations |
-| R21 | MIT Sea Grant AUV Lab — *Marine Perception Dataset* | MIT Sea Grant | MIT Marine Perception | **Primary** — paired VIS+IR multi-sensor |
-| R22 | Prasad et al. — *Video Processing From EO Sensors for Object Detection and Tracking in a Maritime Environment: A Survey* | IEEE T-ITS 2017 | Singapore Maritime Dataset (SMD) | Additional — multi-modal benchmark |
-| R23 | Nirgudkar et al. — *MassMIND: Massachusetts Maritime INfrared Dataset* | IJRR 2023 | MassMIND | Additional — IR test bed |
+| R19 | Chung et al. — *Pohang Canal Dataset* (<https://arxiv.org/abs/2303.05555>) | IJRR 2023 | Pohang Canal — **imagery** | **Primary, and the only dataset used** |
+| R20 | Choi, Cho, Lee, Kim, Yang, Kim, Cho — *PoLaRIS Dataset: A Maritime Object Detection and Tracking Dataset in Pohang Canal* (authors read from the preprint 2026-10-08; <https://arxiv.org/abs/2412.06192>, code <https://github.com/sparolab/PoLaRIS>) | **ICRA 2025**, pp. 13626–13632, doi 10.1109/ICRA55743.2025.11128583 | PoLaRIS — **labels** for Pohang Canal | **Primary** — YOLO-format annotations. **A separate, later release from R19**, not the same publication |
+| R21 | MIT Sea Grant AUV Lab — *Marine Perception Dataset* (<https://seagrant.mit.edu/auvlab-datasets-marine-perception-2-3/>) | MIT Sea Grant | MIT Marine Perception | **Deferred — NOT onboarded** (D10, 2026-07-07; measured absent 2026-09-10). Was labelled “Primary” in error |
+| R22 | Prasad et al. — *Video Processing From EO Sensors for Object Detection and Tracking in a Maritime Environment: A Survey* | IEEE T-ITS 2017 | Singapore Maritime Dataset (SMD) | Optional — **separate** EO and IR material, **not** synchronized pairs; unused |
+| R23 | Nirgudkar et al. — *MassMIND: Massachusetts Maritime INfrared Dataset* (<https://journals.sagepub.com/doi/10.1177/02783649231153020>) | IJRR 2023 | MassMIND | Optional — IR test bed; 7 **segmentation** categories require a documented instance/class mapping first; unused |
 

@@ -104,7 +104,7 @@ def main() -> int:
 
     # Recorded under the 2026-08-19 adopted system; pinned so re-runs keep
     # reproducing runs/eval/x_ir_upgrade_p2feat.md.
-    _legacy = dict(capability_sel="all", bright_soft=True, veto_filter=None)
+    _legacy = dict(preset="adopted", capability_sel="all", bright_soft=True, veto_filter=None)
     ctx_old = load_context(**_legacy)
     ctx_new = load_context(cache_dir=f"runs/cache_{args.tag}", verbose=False, **_legacy)
     splits = {"day": ctx_old.sel("day"), "night": ctx_old.sel("night")}

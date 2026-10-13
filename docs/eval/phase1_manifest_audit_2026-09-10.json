@@ -1,0 +1,41 @@
+{
+  "csv": "phase1_benchmark/results.csv",
+  "n_rows": 93,
+  "identity": {
+    "duplicate_rows": {},
+    "duplicate_variant_seed": {},
+    "variants_in_multiple_grids": [],
+    "variants_per_grid": {
+      "main": 9,
+      "pilot": 22
+    },
+    "variants_total_pooled": 31
+  },
+  "manifest": {
+    "unrecoverable_counts": {
+      "git_commit": 83,
+      "trained_on": 66
+    },
+    "data_yaml_shared_across_campaigns": [
+      "runs/derived/data_vis_stride2.yaml"
+    ],
+    "fingerprint_column_present": false
+  },
+  "metric": {
+    "versions": {
+      "8.4.90": 92,
+      "8.4.7+val8.4.90": 1
+    },
+    "scoring_scales": [
+      "8.4.90"
+    ],
+    "retrained_under_other_version": [
+      "main_yolo26m_seed0"
+    ]
+  },
+  "verdict": {
+    "identity": true,
+    "manifest": false,
+    "metric": true
+  }
+}

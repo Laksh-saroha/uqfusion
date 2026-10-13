@@ -32,7 +32,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _ideas_common import (ROOT, ap_of, day_night, fmt, gts_for, lift, load_records,  # noqa: E402
+from _ideas_common import (cls_note, metric, paired_ci,  # noqa: E402
+                           ROOT, ap_of, day_night, fmt, gts_for, lift, load_records,  # noqa: E402
                            loro_folds, md_table, sgn, subsample, write_md)
 
 sys.path.insert(0, str(ROOT / "src"))
@@ -96,7 +97,12 @@ def main() -> int:
     ap.add_argument("--out", default="runs/eval/tta_o2m.md")
     ap.add_argument("--n-boot", type=int, default=300)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP (and screen its boxes) instead of the macro")
+    ap.add_argument("--block-len", type=int, default=None,
+                    help="moving-block bootstrap with this block length instead of iid")
     args = ap.parse_args()
+    K = args.cls
     t0 = time.time()
 
     base, bmeta = load_records(ROOT / args.base_cache)
@@ -107,7 +113,9 @@ def main() -> int:
     pb = frame_parts(base, gts)
     b_ap = ap_of(base, gts, sel=day)
     secs = [f"Base: `{args.base_cache}` (o2o, unaugmented) -- mAP50-95 "
-            f"**{fmt(b_ap['map50_95'])}** on {len(day)} day frames."]
+            f"**{fmt(metric(b_ap, K))}** on {len(day)} day frames."]
+    if cls_note(K, args.block_len):
+        secs.append(cls_note(K, args.block_len))
 
     sources = {}
     for tag, path in (("tta", args.tta_cache), ("o2m", args.o2m_cache)):
@@ -138,6 +146,9 @@ def main() -> int:
     tp50 = np.concatenate([pb[i]["tp"][:, 0] for i in keep])
     tp75 = np.concatenate([pb[i]["tp"][:, 5] for i in keep])
     cf = np.concatenate([np.asarray(base[i]["conf"], float) for i in keep])
+    cm = (np.ones(len(cf), bool) if K is None else
+          np.concatenate([np.asarray(pb[i]["cls"]) == K for i in keep]))
+    tp50, tp75, cf = tp50[cm], tp75[cm], cf[cm]
     rows = []
     for tag, (recs, meta) in sources.items():
         views = {i: split_views(recs[i]) for i in keep}
@@ -147,7 +158,7 @@ def main() -> int:
             vname = vnames[min(vi, len(vnames) - 1)]
             for thr in (0.30, 0.55, 0.75):
                 f = np.concatenate([agrees(base[i], views[i].get(vi, base[i]), thr)
-                                    for i in keep])
+                                    for i in keep])[cm]
                 r50, m50 = lift(f, tp50, cf)
                 r75, m75 = lift(f, tp75, cf)
                 rows.append([tag, vname, f"{thr:.2f}", fmt(f.mean(), 3),
@@ -191,12 +202,12 @@ def main() -> int:
             out = [fn(i) if i in set(day.tolist()) else base[i] for i in range(len(base))]
             parts = frame_parts(out, gts)
             a = ap_of(out, gts, sel=day)
-            bs = bootstrap_delta(parts, pb, sel=day, n_boot=args.n_boot, seed=0) \
-                if args.n_boot else None
-            per_run = [ap_of(out, gts, sel=te)["map50_95"] - ap_of(base, gts, sel=te)["map50_95"]
+            bs = paired_ci(parts, pb, day, args.n_boot, K, args.block_len,
+                           [r["image_path"] for r in base]) if args.n_boot else None
+            per_run = [metric(ap_of(out, gts, sel=te), K) - metric(ap_of(base, gts, sel=te), K)
                        for _h, _tr, te in loro_folds(runs, day)]
-            rows.append([name, fmt(a["map50"]), fmt(a["map50_95"]),
-                         sgn(a["map50_95"] - b_ap["map50_95"]),
+            rows.append([name, fmt(metric(a, K, "ap50")), fmt(metric(a, K)),
+                         sgn(metric(a, K) - metric(b_ap, K)),
                          f"[{sgn(bs['ci_lo'])}, {sgn(bs['ci_hi'])}]" if bs else "--",
                          (sgn(min(per_run)) + " / " + sgn(max(per_run))) if per_run else "--"])
     secs.append("## 2. Arms, day frames\n\n"

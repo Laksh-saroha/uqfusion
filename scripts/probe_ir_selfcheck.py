@@ -93,7 +93,7 @@ def main() -> int:
     print(f"[irself] clean done ({time.time() - t0:.0f}s)", flush=True)
     for kind in args.kinds:
         for s in args.severities:
-            tf = make_corruption(kind, s, args.seed)
+            tf = make_corruption(kind, s, args.seed, version="v1")
             v = stats_of([tf(im, i * args.stride) for i, im in enumerate(ims)])
             out["arms"][f"{kind}|{s}"] = {k: x.tolist() for k, x in v.items()}
             print(f"[irself] {kind} s{s} done ({time.time() - t0:.0f}s)", flush=True)

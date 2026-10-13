@@ -32,12 +32,16 @@ import csv
 import sys
 from pathlib import Path
 
+import yaml
+
 from uqfusion.bench.grid import (
     _append_row,
     _box_metrics,
     _completed,
     _git_commit,
     resolve_device,
+    label_fingerprint,
+    recipe_identity,
     split_fingerprint,
 )
 from uqfusion.config import load_config, resolve_data_yaml
@@ -120,14 +124,40 @@ def main() -> int:
 
     # 1. the run must not already be in the CSV, and the CSV must be this experiment
     fingerprint = split_fingerprint(data_yaml)
+    # R-E1 slice 3: the label state joins the split in the dataset identity, and the
+    # recipe is stamped so this recovered row can be told apart from one trained under
+    # a different budget. `_completed` now returns a dict per row rather than a bare
+    # fingerprint, so the comparison is against the (split, labels) pair.
+    label_fp = label_fingerprint(str(data_yaml))
+    # The recipe must come from the RUN, not from today's config. This script exists to
+    # recover a row for training that already happened, possibly under different
+    # defaults; reconstructing the recipe from `cfg` would stamp a fingerprint for a
+    # recipe that was never run -- the exact defect R-E1 is about. Ultralytics writes
+    # `args.yaml` into every run dir, so read it and refuse if it is missing.
+    args_yaml = run_dir / "args.yaml"
+    if not args_yaml.is_file():
+        raise SystemExit(
+            f"no args.yaml under {run_dir}: the recipe this run actually used cannot be "
+            "recovered, and stamping today's config defaults instead would record a "
+            "recipe that never ran. Recover the run directory or add the row by hand.")
+    with open(args_yaml, "r", encoding="utf-8") as f:
+        ra = yaml.safe_load(f) or {}
+    recipe_fp, recipe_json = recipe_identity(
+        epochs=ra.get("epochs"), imgsz=ra.get("imgsz"), batch=ra.get("batch"),
+        mosaic=ra.get("mosaic"), close_mosaic=ra.get("close_mosaic"),
+        optimizer=ra.get("optimizer"), patience=ra.get("patience"),
+        amp=ra.get("amp"), deterministic=ra.get("deterministic"),
+        weights=ra.get("model"), train_overrides=None)
+    dataset = (fingerprint, label_fp)
     done = _completed(out_csv, classes_tag)
     if (args.variant, str(args.seed)) in done and not (args.no_write or args.replace):
         raise SystemExit(f"{args.variant} seed {args.seed} already has a row in {out_csv} — refusing to duplicate")
-    stale = sorted(k for k, fp in done.items() if fp != fingerprint)
+    stale = sorted(k for k, v in done.items() if v["dataset"] != dataset)
     if stale:
         raise SystemExit(
-            f"{out_csv} holds {len(stale)} row(s) from a different split/class filter "
-            f"(e.g. {stale[0]}); current is '{fingerprint}', classes '{classes_tag}'"
+            f"{out_csv} holds {len(stale)} row(s) from a different split/label state or "
+            f"class filter (e.g. {stale[0]}); current is split '{fingerprint}', labels "
+            f"'{label_fp}', classes '{classes_tag}'"
         )
 
     # 2. the run must have been trained on that same split, at the same imgsz
@@ -198,12 +228,14 @@ def main() -> int:
         **_box_metrics(metrics),
         "params_m": round(params / 1e6, 2),
         "gflops": round(gflops, 1) if gflops == gflops else "",
-        "epochs_cfg": b["epochs"], "train_time_s": round(train_time, 1),
+        "epochs_cfg": ra.get("epochs", b["epochs"]), "train_time_s": round(train_time, 1),
         "run_dir": str(run_dir.resolve()),
         "ultralytics_version": ultralytics.__version__,
         "torch_version": torch.__version__, "git_commit": _git_commit(),
         "data_yaml": str(data_yaml), "split_fingerprint": fingerprint,
         "classes": classes_tag,
+        "label_fingerprint_trainval": label_fp,
+        "recipe_fingerprint": recipe_fp, "recipe": recipe_json,
     }
     if args.no_write:
         print(f"[recover] --no-write: {args.variant} seed {args.seed} measures mAP50 {row['map50']:.4f} "

@@ -1,0 +1,1342 @@
+{
+ "written_utc": "2026-09-19T20:52:42+00:00",
+ "draft": false,
+ "ready": true,
+ "not_ready_because": [],
+ "prereg": "docs/prereg-phase3-retrain-2026-09-10.md, Amendments 8 and 9",
+ "git_head_before_freeze": "fd95a55fd2b05a18dc3614c26098f5a03fcc32b5",
+ "pohang04_label_hash": "c06611a684f4",
+ "pohang04_ir_converted_sha256": "8f5aa2be916c230923d2041467dd4a1a2dce0021fb9606c50cbd87b4a784f516",
+ "rules": {
+  "preset": "crossmodal26m",
+  "systems": "VIS seed k + IR seed k, k=0..4",
+  "draws": {
+   "vis": [
+    941,
+    942,
+    943,
+    944
+   ],
+   "ir": [
+    951,
+    952,
+    953,
+    954
+   ]
+  },
+  "verdict_cell": "clean/clean",
+  "floor": 0.006,
+  "floors_reported": [
+   0.0014,
+   0.0031,
+   0.006,
+   0.01
+  ],
+  "bootstrap": {
+   "block_len": 20,
+   "n_boot": 1000,
+   "reference_seed": 0,
+   "pohang04_seed": 1
+  },
+  "AP_ref": {
+   "group": "pohang02+pohang03",
+   "AP_ref": 0.28978364906888066,
+   "replicates_bootstrap_seed": 0
+  }
+ },
+ "environment": {
+  "scoring_interpreter": "C:\\Users\\lasa2\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+  "scoring": {
+   "numpy": "2.1.3",
+   "torch": "2.7.1+cu118",
+   "ultralytics": "8.4.90",
+   "opencv-python-headless": "4.10.0.84",
+   "opencv-python": "5.0.0.93"
+  },
+  "frame_stats_venv": "2.4.6 5.0.0"
+ },
+ "files": {
+  "checkpoints": {
+   "runs/phase3_stage2/p3_vis_seed0/weights/best.pt": {
+    "sha256": "887e374f0ff119f1c56bf8e30442c1906a08b998114a88a1fa07f22a8a068731",
+    "bytes": 45741959
+   },
+   "runs/phase3_stage2/p3_ir_seed0/weights/best.pt": {
+    "sha256": "7b7c5f163f93f2d9ff5097fdfb063c72208f178583e31ecc4a5f5d047087ed27",
+    "bytes": 47114459
+   },
+   "runs/phase3_stage2/p3_vis_seed1/weights/best.pt": {
+    "sha256": "c5704916cbca9b210da90237b4e9fb48dc1e860b32dfd8dc5dd41a04b401339a",
+    "bytes": 45740807
+   },
+   "runs/phase3_stage2/p3_ir_seed1/weights/best.pt": {
+    "sha256": "1344889b88d8a58fa14def0b3f44800d5728aa9fad5df993d0c211f0f49a0c9c",
+    "bytes": 47114779
+   },
+   "runs/phase3_stage2/p3_vis_seed2/weights/best.pt": {
+    "sha256": "b0c2131f805466885eacab59080be24e907f671da31d8be7f7f61c516de1f0f4",
+    "bytes": 45744839
+   },
+   "runs/phase3_stage2/p3_ir_seed2/weights/best.pt": {
+    "sha256": "d77a888ac148b396932ba5d3477d8a931f2273e9c4886cdd3f57c75345b8557d",
+    "bytes": 47115163
+   },
+   "runs/phase3_stage2/p3_vis_seed3/weights/best.pt": {
+    "sha256": "fa5b5781e9a475436f5ea51bc909453d94451d4ecb9bb0b7d2c118f7103a02ec",
+    "bytes": 45741575
+   },
+   "runs/phase3_stage2/p3_ir_seed3/weights/best.pt": {
+    "sha256": "325748c810d7bc49cc6acc3f5bc4541b06b44c96ffb9face6aa61cc3ebec7c84",
+    "bytes": 47114139
+   },
+   "runs/phase3_stage2/p3_vis_seed4/weights/best.pt": {
+    "sha256": "809c65609b334435ad168bfc7b769bdc547b9745621dfd1b06bfeaf111c9c8a8",
+    "bytes": 45743943
+   },
+   "runs/phase3_stage2/p3_ir_seed4/weights/best.pt": {
+    "sha256": "7f9385f3b81154bfabcfd6ab430cc907ca3762da50e49a3d4b0b282e02b19ea7",
+    "bytes": 47111515
+   }
+  },
+  "mahalanobis_references": {
+   "runs/cache_p3/seed0/gauss_vis_train_clean.pkl": {
+    "sha256": "2fa29d6e92958f80b2f5909bb40b9e0f413598d613beac0d6b166359f5be3f29",
+    "bytes": 19686856
+   },
+   "runs/cache_p3/seed0/gauss_ir_train_clean.pkl": {
+    "sha256": "239ef669d345210e8bbd864e1ca7dd86bcc2ae44d0f017d268f81144f3bcd1b5",
+    "bytes": 28006075
+   },
+   "runs/cache_p3/seed1/gauss_vis_train_clean.pkl": {
+    "sha256": "f77b9037b86c8b3110d614b4cb0ee3064fa325cfe50c8baff95b4be2717392fd",
+    "bytes": 20067202
+   },
+   "runs/cache_p3/seed1/gauss_ir_train_clean.pkl": {
+    "sha256": "7db70f9c694352c94bf59afba83c33b2bb29bcb12a817cd6418ca970d8fdfd1d",
+    "bytes": 27473255
+   },
+   "runs/cache_p3/seed2/gauss_vis_train_clean.pkl": {
+    "sha256": "2db8bae5eca032076dd4a75a3c94271587d2c405a108317670292e3e2f2d3309",
+    "bytes": 19471031
+   },
+   "runs/cache_p3/seed2/gauss_ir_train_clean.pkl": {
+    "sha256": "d2a12d3e6875d76bd8deabe76c221d77874fecc90e5eb8148f3802f0594791b8",
+    "bytes": 27674932
+   },
+   "runs/cache_p3/seed3/gauss_vis_train_clean.pkl": {
+    "sha256": "1e120620300c506f009eb231ee1ad62f653cc10e89dfbe7c36fb122e73324201",
+    "bytes": 19787986
+   },
+   "runs/cache_p3/seed3/gauss_ir_train_clean.pkl": {
+    "sha256": "52a2e5d5750ea41c3e3df905c4ee3b27a12ea6687b9aa9dd50b3173642109e2b",
+    "bytes": 28760913
+   },
+   "runs/cache_p3/seed4/gauss_vis_train_clean.pkl": {
+    "sha256": "63b85e2eb92472f30b75c88585019ddcdfb5a1562c294c7a13ffc9083e7983d7",
+    "bytes": 19465326
+   },
+   "runs/cache_p3/seed4/gauss_ir_train_clean.pkl": {
+    "sha256": "a789d81417b310608286fcfc5bb7e57c2e4f8a165d2a58512b01ea7cdea8e01e",
+    "bytes": 30461324
+   }
+  },
+  "development_caches": {
+   "runs/cache_p3/seed0/gauss_vis_paired_clean.pkl": {
+    "sha256": "4b73141c5f3e8ce9882109677af382a7f80789fb0851d7446b273bf2e2e36894",
+    "bytes": 13626230
+   },
+   "runs/cache_p3/seed0/gauss_ir_paired_clean.pkl": {
+    "sha256": "068de9372db2b2c99779ed2ad2a4dc4a70cac806c6372bd7abc81f4fe1a34cc9",
+    "bytes": 16186557
+   },
+   "runs/cache_p3/seed1/gauss_vis_paired_clean.pkl": {
+    "sha256": "d4c2eb0479ebbf0145d4c4497a4954e53363b4b89c304bc58019bcb31b7fc205",
+    "bytes": 13796716
+   },
+   "runs/cache_p3/seed1/gauss_ir_paired_clean.pkl": {
+    "sha256": "ed05d292e4391ad277045277a7aab840c1bb3bb9c7de53e0eb70b73066d0eafb",
+    "bytes": 15232962
+   },
+   "runs/cache_p3/seed2/gauss_vis_paired_clean.pkl": {
+    "sha256": "b6257fa9520eaf197191b839974d50ab1f8bc504d75d3ed2667e0c2f9ec305f8",
+    "bytes": 13493806
+   },
+   "runs/cache_p3/seed2/gauss_ir_paired_clean.pkl": {
+    "sha256": "e47473a63af188c9c2e19b1842dffeb000c9a3d3c524af079ba80be1c11fda55",
+    "bytes": 15241261
+   },
+   "runs/cache_p3/seed3/gauss_vis_paired_clean.pkl": {
+    "sha256": "f23e57774d40a0aa713964a677f02b7a92b19acd1c25a68ffcb91bb1d1213625",
+    "bytes": 13699825
+   },
+   "runs/cache_p3/seed3/gauss_ir_paired_clean.pkl": {
+    "sha256": "509f0cb51e3a47f728d44d873f96d61747415e433e3d33951e6e2d7b20672287",
+    "bytes": 16348569
+   },
+   "runs/cache_p3/seed4/gauss_vis_paired_clean.pkl": {
+    "sha256": "a0a033eaeb134946b01cc640fae2ae861b47e9ffe6da80ad5407c1689a4e315c",
+    "bytes": 13550248
+   },
+   "runs/cache_p3/seed4/gauss_ir_paired_clean.pkl": {
+    "sha256": "68bf65af4492caa5e25040498075342ce1dd3622285a3fd7e31efc4b6fcc6afa",
+    "bytes": 17552675
+   }
+  },
+  "pohang04_caches": {
+   "runs/holdout_p04/caches/seed0/clean/gauss_vis_paired_clean.pkl": {
+    "sha256": "3b2867ea3383bd0571e3698d8aaca69cccfedfa1d13c37d5d013abf79a3b0ffe",
+    "bytes": 79969047
+   },
+   "runs/holdout_p04/caches/seed0/clean/gauss_ir_paired_clean.pkl": {
+    "sha256": "b61e6e6c3d1da025482cdb4ca5609826491f68c36168d75cb7dfabedddeb8306",
+    "bytes": 92568537
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "2d4fe6093b3cfe30478b11853f2047cd2071fde10ebc105b49c00c33d167c0c2",
+    "bytes": 77387104
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "0d0def28f1bbbdc2aaa53962f4b0a6efd43471f0a2646f5506e2e6a83441df9c",
+    "bytes": 68471632
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "da9dee3c57fcc207470e87a10640e733c3cae3fe662210a9f76796754110e829",
+    "bytes": 79916694
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_vis_paired_fog.pkl": {
+    "sha256": "9b0fab44cab004061c8ad01d374b6246d4d9c333d7e8c9a72a264a3c1e56b6c4",
+    "bytes": 90205797
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "6c966c858873f94e487256ceef263edb28cbd0d7c8e1f795695472c5eb179175",
+    "bytes": 69908613
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "761400bc099de1f4de0aef4bdf3221507bd9ef69fbb1a5fc5e7f7e0ef2331f56",
+    "bytes": 86440747
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "16abd6c5d213e3d0499314aaab4276ce8d2a299f363dbe7fe01195ed5e069136",
+    "bytes": 102197544
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "d407a3ed74ae070ab62384e71d5c8072c7fd5b27a8a6fbdca580b02265b2baad",
+    "bytes": 95729135
+   },
+   "runs/holdout_p04/caches/seed0/draw941_951/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "7240b64b03c47d90f7db182a32ecc1da05dde825cdc52e2106cacf2181b972d0",
+    "bytes": 71586485
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "a16e2a4289cebc073f5b945f20dd9adcbe70130562404078d44e00a308435a60",
+    "bytes": 77359908
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "274e77ef1d13408dce6767784c43e67cd9ac39d64fd853e385c848cbe6347387",
+    "bytes": 68476520
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "48698e584f9268069e0ba47f82004e6400b0ccb0a2336108c3c8d3c66b0ff976",
+    "bytes": 79895341
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_vis_paired_fog.pkl": {
+    "sha256": "053fc67836416c6c6e6344aa91ca2583e26d96b65f497803c923bff66cf153f3",
+    "bytes": 90257345
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "bf1b4a643c1193696af8c8d777702731a3a841ca137e6b60c11f70bc54c4311a",
+    "bytes": 69909141
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "fdfb08fc9702d6497c216ea3314db328861c9eb68f8ca0838967d2a9528a478c",
+    "bytes": 86332753
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "3ce7b740f995c6c6a61a14107e79b372e0c1d00be67a09828ca51aa0a6977eeb",
+    "bytes": 102206287
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "482fa37dbe4ff34893e6bcb371de0e6210d68c568ef3a502c029d3fd2cb29686",
+    "bytes": 96371040
+   },
+   "runs/holdout_p04/caches/seed0/draw942_952/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "56879d1b140d4e4c2195adb028e0b30a702500fb9efe1ec60e2b295bb21e6f28",
+    "bytes": 71564241
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "13880a769354dc9d0436100d3fdb8ee515f3e961d20063276358c0e206da7056",
+    "bytes": 77371576
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "318df6372f10f0a36cd62459e847efebc85a50a45ad5383a2a378c11deea47f6",
+    "bytes": 68477832
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "1e70d7515643547d3689f88eca5174f512db21193d099bdca641e3e81068c073",
+    "bytes": 79942133
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_vis_paired_fog.pkl": {
+    "sha256": "5c8f1e3b2142f616c3fce2fe09af44df3806b1d47220e394fa20954d82a2296b",
+    "bytes": 90196725
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "0e9328c5ac31931887d667f4a77d57fc287142abf4eacab64a2f1c9a7bcda7ca",
+    "bytes": 69925914
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "5109214ceeae1b94e9dc6a92868c33b32f2c9853da90e5199b7614d5ab3790de",
+    "bytes": 86299314
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "0601f36a527bcd2820c6e192345cbe7dd11dae5b2c7a45576ad238d28a4e027a",
+    "bytes": 102222225
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "d3dbfeab980883e855f625f10d749e949e587e30b386edcc6a7ade1ca076b217",
+    "bytes": 96327066
+   },
+   "runs/holdout_p04/caches/seed0/draw943_953/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "85008be169050f0457c722293c4495ebecbb7202505f4b3b9bdf84a73a3df90c",
+    "bytes": 71557791
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "27f60f6ac29a97073ae127a8cf315fa3bf48ce5caca98ecfcc57606ba52f6b0f",
+    "bytes": 77435537
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "dc741aa141f790f7fae5cf442c1aeeaf9bf3f3284b870696703d2f4f947409c8",
+    "bytes": 68475356
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "3c112b5ee8b388462170ad3f0c455a537820e5cd84d7c7dd57dfa5204f656c4e",
+    "bytes": 79936811
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_vis_paired_fog.pkl": {
+    "sha256": "cbb676ecabdb19ca34f10072bbd736eabd5477abb9560b8fd9ef8c6eaeeb23a8",
+    "bytes": 90092704
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "493b9eab84f00845263f7039a5b48f5b012071f96e5427aacbc84a9d535d4ea3",
+    "bytes": 69912711
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "2fa09e2f8400e299d2006c328fdd1148b275f84c871802a44dfe4b200f4ebbdf",
+    "bytes": 86352317
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "e41c75b79510034064fb8e2696c5858f193dd5d6b4c2892386b9e50209d6ce84",
+    "bytes": 102236410
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "b6b5c2879f2935eaa77355088fd386cfdc6fbaf7e54f1d0896bddb75c22eae84",
+    "bytes": 96106170
+   },
+   "runs/holdout_p04/caches/seed0/draw944_954/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "0a863c3f1e0c3a00a1748944ef114285253811335d26a50695eb2d73da4403e8",
+    "bytes": 71530352
+   },
+   "runs/holdout_p04/caches/seed1/clean/gauss_vis_paired_clean.pkl": {
+    "sha256": "dc6657f15c518dbdf705dd1521d1b4d6c172e806db358de81c7b1d2ecd3e6dcc",
+    "bytes": 80296415
+   },
+   "runs/holdout_p04/caches/seed1/clean/gauss_ir_paired_clean.pkl": {
+    "sha256": "104c4c67a227b1a0f536b44234681a06dd08e413c5ad1120f5e6d3c95bb450f6",
+    "bytes": 85589069
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "5e6476f10676e957ddf55e8548d04f030ab4893ada34ac59967c0a2887246cfa",
+    "bytes": 78466030
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "0c351ed83413c8925a0f4f4b2dc5fe1a63d0ea34fdb8c572d3c801a85091ce54",
+    "bytes": 68597533
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "13607aeea6651a8cd84fa44cc96503cb6171d273d937c0a1c5f9a64e3a45adb4",
+    "bytes": 82150846
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_vis_paired_fog.pkl": {
+    "sha256": "94261e2e6fff24ad71743d1f5461939472506f8ba90571f48991d27f4f1f1e4d",
+    "bytes": 87547021
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "3a2630dffb52ce4ef0a76b1a95e505e88ceb9eaa5f8511c302e314fc571d5fe3",
+    "bytes": 69434850
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "4656dedc468187c52be04f87480cbd67bddaf644dc5e9cfc6bf828f5590a38fa",
+    "bytes": 80923209
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "1d92e90e5d97f48102a14906179aab4d8a66858f3495a3431bbe2bceae533cb7",
+    "bytes": 91236548
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "db7aed86a14d69c807d848bd73b68033d6fb6b05c344adee2be3f201cb644fca",
+    "bytes": 70034089
+   },
+   "runs/holdout_p04/caches/seed1/draw941_951/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "37b06ca74792170193b108b338f278a066f81e21f70c3368f3015f24ae73950b",
+    "bytes": 77876856
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "fcf78e950b3c1728497d3cd23710df5d1599b97c6f7bd4b6abbba0b0a162bda1",
+    "bytes": 78417085
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "38c380492b2e7ccf265d9ab95a3b8c2e692862ce06cb332f0dbe5a08660cff3e",
+    "bytes": 68623152
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "53de00cacdbffd53087d376655befe8085059fffd6634bb8c8aed9ce016bf77b",
+    "bytes": 82162835
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_vis_paired_fog.pkl": {
+    "sha256": "e4caeb17280e3e728b4ab11703352b1e743ce9de837902ee66190aa1205c2df8",
+    "bytes": 87775039
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "0ac9131eb53babe3be9b1af49dbb01fda481541a7cc78364d632346106e3255e",
+    "bytes": 69429738
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "3d98e1bac0790e535669cfb95830b024ce6acd9cc8bfe2446ddd80da95ae594d",
+    "bytes": 80733068
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "805d6c5410d344234143a7b19e78b7707beb82ba410e444293556c64b2a6374e",
+    "bytes": 91299174
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "cecf0bd80b765498835c0b1bd66fa9773e4bf2dd488dee147022752607d88aaa",
+    "bytes": 70044334
+   },
+   "runs/holdout_p04/caches/seed1/draw942_952/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "74cbc2d13ce3899cc02290f95d6ab5b203369ec14421ea26f3825bb856c5b7d7",
+    "bytes": 77779093
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "436cddec596c72c7ae75dbe0a88bf4bd31c7a24bd77c1fd5e4ced55a06c2f9a8",
+    "bytes": 78458541
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "235a0dfeccb9ae6c85c52eee9b632c83dc79adff7b7d4575f786c5639813bebf",
+    "bytes": 68617798
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "7fdbdf8c1935ade72c58b00ad95c87ed71de430b575361c3fdd2c47c12eb47bf",
+    "bytes": 82183656
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_vis_paired_fog.pkl": {
+    "sha256": "29b5567633ed118fd9c3cfbb0ffa9232836f0eb1808916aca0c0b8984818aa84",
+    "bytes": 87884376
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "0516a90d482ab52940808f80693fb4ed15f7f1ca6b8400114e7d904b76ced0ca",
+    "bytes": 69433834
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "fc82179b3ed5e6dfa67597753a7ac06df084a9b84c72ff8f64eaf3f0f2305217",
+    "bytes": 80768262
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "78cacc543ca8eba17fc632fe547f6bfd61e23e252171cdc0c9614aa3d82f3684",
+    "bytes": 91224667
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "92bb844f0c60f618ce9b4b86da288a2e2a9832686fb4d8184dbcb77c335c3fd6",
+    "bytes": 70088628
+   },
+   "runs/holdout_p04/caches/seed1/draw943_953/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "25a7d7cf3a11e0996eaab54caed18fc8c5240a055f01412a273f51ffd1c4c30d",
+    "bytes": 77875540
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "affda0d993449967c0c7d55a12f22b2899906ada97a0a9169392fe4e185b4741",
+    "bytes": 78523563
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "53f305744eb95a59e8037a5018491f76239a292864ebb2ce28637e3c0108e218",
+    "bytes": 68611979
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "d314b0203a5594bf55cc58b9ce92bb5a625434829d5a775f74b9d02bf34a96c7",
+    "bytes": 82175937
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_vis_paired_fog.pkl": {
+    "sha256": "c0afeb4412ac71476730428f732db087d842074e56af1cf45672753582516dad",
+    "bytes": 87450154
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "16890e5c40e9ec4f1996269fc01fc4376679aff0c5a860eac6f4a92cc243fbf3",
+    "bytes": 69433790
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "8ec5388fcaf95754f96070d87adc8bb28288dffecfe0a8bc6695510e40df2931",
+    "bytes": 80824863
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "b1a810df8ef7333124d547dcff9d8f9a9b7947e5f93f63f6cf70a0a344ff1f6e",
+    "bytes": 91187870
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "74847189ebb4c38e13b1c84e782babc77446a09e34bdff7ae21f6a9c85eb3097",
+    "bytes": 70051402
+   },
+   "runs/holdout_p04/caches/seed1/draw944_954/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "16a26fb93fd4d2f68add9defc2d1e615328a3793a9914e4b058e70c9e267803b",
+    "bytes": 77791779
+   },
+   "runs/holdout_p04/caches/seed2/clean/gauss_vis_paired_clean.pkl": {
+    "sha256": "c68251a954356830d8ad034a89c2d93268bbcfe176524fa74a941f8b8c1047b9",
+    "bytes": 77799052
+   },
+   "runs/holdout_p04/caches/seed2/clean/gauss_ir_paired_clean.pkl": {
+    "sha256": "03fba6bbec48d55b65455996319f850c2edfc35de87683f799aceb212af8b6df",
+    "bytes": 89407611
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "f39b3fb99320af15050be8798f7608839e02036f7a19da8bc7ff9044ac24093f",
+    "bytes": 77589721
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "c7afab01a06ea5feeda4fdcc9b003194b67a2c60f8378bfd5cba3017493846db",
+    "bytes": 68459472
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "347823471e9fc32788ce187eca68e825e7cd3c7a420525ed1f5b162035151dc4",
+    "bytes": 76433615
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_vis_paired_fog.pkl": {
+    "sha256": "50e580cc9529d819a42618bb211366b65f45fdcab9b7ae7d8f7b1ba794f9b2e1",
+    "bytes": 88549350
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "3e11a26d4c42e2a0787ef5abca87959e750f37eadd44fa3472e3536509f447b2",
+    "bytes": 69165431
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "fa566e7178757a8cb26da2fd4490ae1af42538818a81dc31d45482cf89c24412",
+    "bytes": 84051584
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "21a4dff79ab974f8d9736ec2be5dfa5068afaaf646edcc8120dbc27dbcefdbdb",
+    "bytes": 93676257
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "19f7e02021296713d08298af28844d0e42b18559a0dd0395cefa1f58a392caa2",
+    "bytes": 99239534
+   },
+   "runs/holdout_p04/caches/seed2/draw941_951/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "a0a75658fd1afcec9532719ee969a30dabb7456034d094ff6a2615912cd8b856",
+    "bytes": 69373180
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "e349c521138ce9e5ba4cd595bec7406cceb458ef9cd50f2b6396dccad70e0ce1",
+    "bytes": 77537649
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "c5e580344b947f627667904c885034675e3ba6148e56c8643a10ba1f143aa4d0",
+    "bytes": 68461032
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "ea901c6f24a7d9a75a0ea4f2a233bc329b19833d09e89083e1763057a05ec729",
+    "bytes": 76459704
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_vis_paired_fog.pkl": {
+    "sha256": "87fa842a5860ea578a23b57ae29e5e5c52dd77cfc45d948e78221cddc0698261",
+    "bytes": 88893391
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "c8f34b93815334882db7ce553132ea527f84f7a9068f836961c1855df2ad2e87",
+    "bytes": 69150599
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "5113dd01e3ef6f3a1be853cdc017ea4ef1585cf8598f1e21f0c0e13dfb2b5a54",
+    "bytes": 83972752
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "7a90b58a4d576019ab060183f0ca6292c3cf9b50e39132ef87ea32eea0d651ca",
+    "bytes": 93630116
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "df5dcc6a9579ad943395bf06a186141ff34e5890d65ca7c7f527adb42adb9b4f",
+    "bytes": 99148171
+   },
+   "runs/holdout_p04/caches/seed2/draw942_952/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "b730b88e0301c768218c2e1d2bb0010a32fb333b44c6d89ed108eb1ee1cd4458",
+    "bytes": 69348583
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "a45f00ba30393e5fdf8c166cea4f332788bd8b16d863839178fde0c8e291203d",
+    "bytes": 77581808
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "93f56151dda466fa9d358ba5f7b003140d2bae4a7ba2b7546ea0d56e21726183",
+    "bytes": 68461712
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "02584f31a9801267b304921bee09fd4e3fb84f803295885483f04ab6824ecddf",
+    "bytes": 76463660
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_vis_paired_fog.pkl": {
+    "sha256": "280cbce8565b6d0b8e1d1f0e3b9c4ec0d665523e51a04e2fea694535da4c0cca",
+    "bytes": 88865165
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "dc3460fd1df8604f36a748c0abdbda624d6200d200d52c1ddba371cb342b8fcf",
+    "bytes": 69162323
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "68bb8b29f276b1027a4ee7618ca48cbc1b59b6f67ee910ecf926cc5f2a46e548",
+    "bytes": 83887116
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "09cb693d5515c40d38d332c33c281c4b6e252a7987f3bd66c69a9d234f6f739e",
+    "bytes": 93582175
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "582453cf0fca60957b82bc77f2872a63c7d54715480d31e85cc519d408f10e40",
+    "bytes": 99044691
+   },
+   "runs/holdout_p04/caches/seed2/draw943_953/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "b799524dfa78721f80b7b3dd0819c394abb5377a7deb971e30c69c6d2d511976",
+    "bytes": 69353375
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "dcc6162d0b802fb0bbb3c52a43cb0ac435d8387b4dfcc29b55d117b8fac5b82c",
+    "bytes": 77757224
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "b55cd57217ad94a4701567c019dadef578f853899f02263d201d39388c373ee1",
+    "bytes": 68460568
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "13a215005b5c97673a713e6cfa8cc486acb6c02e616c4fd26c9b5959a78e778a",
+    "bytes": 76433113
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_vis_paired_fog.pkl": {
+    "sha256": "a42219c9460469950eff51847995bd8a1a213ba5035b92d9820c94ad79924ab3",
+    "bytes": 88714330
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "9d5c37d027ffcbceae95eb542c142f752bbcb4529d8d6536c0b8a1a0a6899611",
+    "bytes": 69157435
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "81d6e88f7506023e54e102b48daa9a0455ad9dfff7142090015c429f83770d66",
+    "bytes": 84004439
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "c3d5e93ae31206201afc73cb776f83ce9ec3a8743e52c95e9aa5c32468d8c0af",
+    "bytes": 93643586
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "911a97a17093d79d93c2255b87276272c5bd8ce1bb7745852b366405615c6b3e",
+    "bytes": 99069272
+   },
+   "runs/holdout_p04/caches/seed2/draw944_954/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "74c95082c8cfe16e17f45f79ac0d308abc9c812b3061e6f20880a5b52f3185e7",
+    "bytes": 69372405
+   },
+   "runs/holdout_p04/caches/seed3/clean/gauss_vis_paired_clean.pkl": {
+    "sha256": "969437f13d8f0a24da1057c08dfd35b182f43397db4ae058f346f647b85100d3",
+    "bytes": 78759221
+   },
+   "runs/holdout_p04/caches/seed3/clean/gauss_ir_paired_clean.pkl": {
+    "sha256": "d02d45c31fd5b60cf593d8cf2473591b01d8481b8cc6173463ec1c3fdda7624d",
+    "bytes": 92425659
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "2f7c420c2df1cac2f226494e37d9345aa03391d5f684b1d6933ebf67c1a80ace",
+    "bytes": 81281066
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "3e60c2f120c1c4ee8862fa8fbfbd89ff47225641bf1e0049cbc3760f3bcf78a8",
+    "bytes": 68463086
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "578696ce2ab62a667340dcccaaef145305ef6c00f3de1131a71872bfaaf63127",
+    "bytes": 76218538
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_vis_paired_fog.pkl": {
+    "sha256": "0359ae0463372f22ce2414eed0782bca7f5f95bdf2894a073c8f9cc61fb0aaa4",
+    "bytes": 120421562
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "14844e01dd6f5f187b25e50b4e05effa6ade816ce4a0c5c6120c34270653aaec",
+    "bytes": 69472324
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "65ef3c9ac428039b0c4cfe465780a223b0646db5c9afa69fdf570daabbd9151f",
+    "bytes": 89696817
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "9a2c2418360801670709999be9f558edc74460c8388a225e0dee0dae563503af",
+    "bytes": 105844983
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "77f5b5b15d7e9c10075933508182d8439fdec2a5f4728de05b55a7b09431c956",
+    "bytes": 72519679
+   },
+   "runs/holdout_p04/caches/seed3/draw941_951/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "f3cb6b7896cb6f3731d0acab2c65e5cc33cd9d79acbc3489e9b5025cc66d41a9",
+    "bytes": 82112665
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "e7a308371c612e1cda5f59d530274104d7fa713018c3cb50356c476a7bd259a9",
+    "bytes": 81160296
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "2f74f646ec8558236e5e0095111e8ab0beabee00b90a8cd56a3ad5418bf8289f",
+    "bytes": 68465692
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "7b72595f4faca39f7f20bce236a27701f22a04516c326cd4edff119d305a96b0",
+    "bytes": 76244873
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_vis_paired_fog.pkl": {
+    "sha256": "fff6491c32c254aed0d34ec07c3d547d6bdf3e61d22c74aea3b4fa9473c52258",
+    "bytes": 120722445
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "06e4d28d4e3ef8a38a411c7bf6a5143284a72cdb49b5e845e634ed4c56a52f66",
+    "bytes": 69483557
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "6a9e546fe1d7160c7113a31243ac4084a32d7867581e426b9dbb13b60a49a1dc",
+    "bytes": 89615063
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "868978693452af13771fced54f91d21e57ce6329dbb003f60d24cd0648500398",
+    "bytes": 106101504
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "64a830837956696328be5a94b6c997faa2ca1399441a91a906e9e25fe55bf313",
+    "bytes": 72409811
+   },
+   "runs/holdout_p04/caches/seed3/draw942_952/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "136420474c4dc17e5f2fda9dabd91209a28233f357eae41c177b45e8c00d7eaa",
+    "bytes": 82120704
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "c1d9a88d2257e6ff29fd0d5d08347d5b5e1e789c9cce2072ea2390f6ab40f746",
+    "bytes": 81319709
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "2ee01468149107a6948d73a7e11f1e41644af4b6eb7cb46b25d7a639b606f886",
+    "bytes": 68465628
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "782972bc1983f75cca3497d2eae89a692573a7db5f4415030d1c4e8a72b95338",
+    "bytes": 76221691
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_vis_paired_fog.pkl": {
+    "sha256": "a566afd2a73bf5479f64237c766cee310e405c0a6a2fc95a6b0bd696d35499c8",
+    "bytes": 120733728
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "f132d9e93dec07799df67750b157c4d6d05940e74d359b2b635e17dfe7385997",
+    "bytes": 69481219
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "6eb56e72467a8913c6a1d3d9641eb0003badeeace72a9c107dbc7c5938a43535",
+    "bytes": 89610643
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "f1d353165dd3a0aecdd084fa378fdead594578ca0d0ea26033d455557e51e310",
+    "bytes": 105839874
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "0d32d39308e365f8ef1986d2f3405fd3191fc1966a934005618258801a8f4042",
+    "bytes": 72510770
+   },
+   "runs/holdout_p04/caches/seed3/draw943_953/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "91de1bd8df2b0183a4c20832c24b8949cf32f794114cbbeed7f57167ef89e9b0",
+    "bytes": 82183228
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "9cc93ab5360524c73bd296c06b788faca102da45eb2ab2f6ff30ba761da2e2ab",
+    "bytes": 81395203
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "28bb163dd9b06893e72b260600414c684ded80cc2868e43bd267aa29ff5ac709",
+    "bytes": 68464296
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "b35315b6b2810d2784c1ed68bfd6638ac9df9e8595ee0eb3260cf6f8527bf6e7",
+    "bytes": 76237533
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_vis_paired_fog.pkl": {
+    "sha256": "4410e403345fe18e07f8cca6897ddf4c45a8807a9512aa6f593109df4239d646",
+    "bytes": 120505244
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "020e1db652a43b61683ca5bfc9765e563ff4499ef99aa83a4aafc5508dafea31",
+    "bytes": 69489934
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "c760147580293ff44d92ea8fd8cf2a4f3cab0b0a0e1c3755fa865ae6fb02d086",
+    "bytes": 89530801
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "f03818612358edb49e519cb13962aa9134da886015fbff511db4e2631674c6d1",
+    "bytes": 106284935
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "f30b6fc4ab87ec0fb146916682e82c1b0bfae5ef431fa59d72f762d519862993",
+    "bytes": 72475998
+   },
+   "runs/holdout_p04/caches/seed3/draw944_954/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "a8192786246a6802d76ec86edc4841ff5af9839cf78e46dc51ed5ed6710d3d73",
+    "bytes": 82107707
+   },
+   "runs/holdout_p04/caches/seed4/clean/gauss_vis_paired_clean.pkl": {
+    "sha256": "acd4e3e2b1763a5125f1f085f2b9813db6ec336f79adc850f39057d16e8f489c",
+    "bytes": 78157030
+   },
+   "runs/holdout_p04/caches/seed4/clean/gauss_ir_paired_clean.pkl": {
+    "sha256": "6ef23996f8982639d887cb7db1b08d13e55c2d2350f927501f6edb331120a882",
+    "bytes": 102164727
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "a735bc3888b1cd5089d49793d69c914d8d8b9b539c07c51f21999c3888f8f0aa",
+    "bytes": 76089542
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "5aff2445ba735e4e1a5c6cce270027a6fcc928b0ce7d248de53072e05df5a7b1",
+    "bytes": 68538816
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "8d10336869a7ce24fe199f492d076e256c7e46d4df194deddf81c28a76118e21",
+    "bytes": 75927483
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_vis_paired_fog.pkl": {
+    "sha256": "fd50a863ebcb346926a47c08a3337caa7a94c9f7606a36b987f4a26910ef42b2",
+    "bytes": 91768416
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "3975cf88968b9e3e5d03d821902dd16c64836af18b8baf0d037145b27566d29e",
+    "bytes": 69233416
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "4abda52190bd5ee9751020961f33dd3ac8e126e519a1ddcf0f0ed0412999ddcc",
+    "bytes": 95870811
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "fc710e95eadaf11f417dc63274aaf341e014cafacdd1415848f36ebb76756903",
+    "bytes": 98390954
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "4fa8b59fd7df2108ddda7f737c0bcd9f5954f188798b1990979f839660546f67",
+    "bytes": 72413894
+   },
+   "runs/holdout_p04/caches/seed4/draw941_951/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "0c61ab1c3c3456ee78af6475fafa8c6a75b50fc1819bdc9a623b73ef834406b9",
+    "bytes": 71977561
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "bf208bc015af47e7ea8e08ef0afdaf6bc6c38fe60b0552990831dd223b67fd95",
+    "bytes": 76053503
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "c1f063218d13a84362d3d72f5d3ce6bca87fe90dcb9532c4f61cd8be82e6bc4b",
+    "bytes": 68534900
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "3527eaed2037a90114f2490abb981e7851eb1ed04adc843c2a01d9c4bf2a5d21",
+    "bytes": 75941809
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_vis_paired_fog.pkl": {
+    "sha256": "9137af72e5965a27bb7062a0c88856739c8839af1f94a0b20eede5737e078901",
+    "bytes": 91802475
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "be3ffb4e5603e08b037d42dd52c48cb2b9abd24948957496434eea06fb765cf4",
+    "bytes": 69230626
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "69109ac64d2bd9107cf75170dcabc32b2eb376781b39fb7194001fdebd9a49d6",
+    "bytes": 95696124
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "d0613d60cb474eb0183cd3042dca43052a078822dd4aa444e1070f824417c0e1",
+    "bytes": 98353121
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "8be8586977648af0f59e6ad39df7d2ab3783f6148947195e93c28f2024d959d0",
+    "bytes": 72409795
+   },
+   "runs/holdout_p04/caches/seed4/draw942_952/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "0884ee6cda78b54b5cfc4b581b258e89c9b78693e6ead61a974f9c5b5cde7c8d",
+    "bytes": 71986023
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "c1e1b937faea22ec57ea5f431bc8e97c726ce5a6704d183e19c1a2e2d57346ad",
+    "bytes": 76172750
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "c2a0870c7fcaa58d6bfe1915ba9c5e2e41e78d1772801785cbf05d2b6679f3e2",
+    "bytes": 68542576
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "ba10135566c1654a92eb126160b1ac8b6a2680921173f8ee0a49d69354473886",
+    "bytes": 75955893
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_vis_paired_fog.pkl": {
+    "sha256": "266373e7011bdb7ae1d206e4d1bf40e749d7608f7a25bbc70c8894ec5e2cc6a3",
+    "bytes": 91806860
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "324e030840e4a70347359c0c6e388e0469e21740e3eae92ea4740d42cf732c07",
+    "bytes": 69233870
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "5355377b58d619751e979329f9e44e5b1bd02fc6bfce12e6657e832bf926b1d1",
+    "bytes": 95619324
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "34e0c1ad9bc4e31f33ff8573d2c13eb691c0c2fb72c13903bbeb1920f69ae71c",
+    "bytes": 98409920
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "d62555a9da30e7f3ae3496424b1aec42f570c201ea12612463ff48191471994f",
+    "bytes": 72348055
+   },
+   "runs/holdout_p04/caches/seed4/draw943_953/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "a0e9fa539858a7db560ff0ddd4d352cde000b142168d68004cbfc8e8967ef600",
+    "bytes": 71945839
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_vis_paired_blur_s3.pkl": {
+    "sha256": "77bc25a4714f1844a73b4ca795b9201cc4c0345aa0f53a016e43c907c277bca6",
+    "bytes": 76233753
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_vis_paired_noise_s2.pkl": {
+    "sha256": "0e9a9d2e08cbaddb70ecbddbdbf8278ca4fecf913fca216286eaf7d0fbc1c0a2",
+    "bytes": 68534380
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_vis_paired_rain_s2.pkl": {
+    "sha256": "871208226e55f3c4320e6805ea54000af309577bdbd02e524392cd1b80959f6f",
+    "bytes": 75943009
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_vis_paired_fog.pkl": {
+    "sha256": "986a3c31493088b1136d1f233cab3b993e6b4eb80cc0e0f7ed29e57ebf4865c8",
+    "bytes": 91798604
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_vis_paired_lowlight.pkl": {
+    "sha256": "8b1f0f0205f1c5992f7c3387d576c280708602a10a3a0dde9de737b747d610cb",
+    "bytes": 69237294
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_ir_paired_glare_s2.pkl": {
+    "sha256": "5f3ec1b7f094d0827dbe058a4b18b0aa0b78c785232c80272067d2baff690e18",
+    "bytes": 95677452
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_ir_paired_blur_s2.pkl": {
+    "sha256": "ca8521c8816ece674025c551c1f9fd455fd18709d00bb34adbf0491ef461cd3f",
+    "bytes": 98326413
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_ir_paired_noise_s2.pkl": {
+    "sha256": "1ffec99f9b7a42607a425c9c083146f4b6804ef501bbbf49e1be71656402abe2",
+    "bytes": 72397185
+   },
+   "runs/holdout_p04/caches/seed4/draw944_954/gauss_ir_paired_fog_s2.pkl": {
+    "sha256": "d5972b72d1844f663784fd9f488979193ee5163255a275a44b513a793dba5a25",
+    "bytes": 71979415
+   }
+  },
+  "pohang04_frame_stats": {
+   "runs/holdout_p04/derived/brightness/clean/gauss_vis_paired_clean.json": {
+    "sha256": "9709f224fc784a4cdbb5c40743f1995de41aa60602e4a8ea22806c46ccff787a",
+    "bytes": 3636446
+   },
+   "runs/holdout_p04/derived/structure/clean/gauss_vis_paired_clean.json": {
+    "sha256": "79c6bb342757483522cbb4e7035490796a9e1b8eac7c0b633c2b5a40cf915623",
+    "bytes": 7059622
+   },
+   "runs/holdout_p04/derived/brightness/clean/gauss_ir_paired_clean.json": {
+    "sha256": "2d024e19437f26832d4f4419f4cdfb21ee94a363a351ef90a6124273327f9f11",
+    "bytes": 3599057
+   },
+   "runs/holdout_p04/derived/structure/clean/gauss_ir_paired_clean.json": {
+    "sha256": "dcb59b4a71f0d6de48ec88d35c8cfdb62aaa322350d0b74160222a97d230dced",
+    "bytes": 6908441
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_vis_paired_blur_s3.json": {
+    "sha256": "7c3eb38987a29b27572b6083f0e16a977773777459d689a24802df6bbe693229",
+    "bytes": 3656332
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_vis_paired_blur_s3.json": {
+    "sha256": "1116f65b512043726e05419867ce9fe075b654b226a3c760ec270c97fa6e73d8",
+    "bytes": 7105078
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_vis_paired_noise_s2.json": {
+    "sha256": "aa849a32e8c53b2806c003f10f007dbf2f44a50c18dee8a242a7b3577f8690ef",
+    "bytes": 3597676
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_vis_paired_noise_s2.json": {
+    "sha256": "eec0df9e6bffc1a946b0be967f18eea7b22cde1c81825d0fb20e7706e4de91db",
+    "bytes": 6832560
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_vis_paired_rain_s2.json": {
+    "sha256": "baf34453eec93c60c41933053c6efa27604912f9ab99190864e6b792a5c8e888",
+    "bytes": 3614128
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_vis_paired_rain_s2.json": {
+    "sha256": "a03e7af0961b66fe8d7ab40b50f70cae8f4578b7e921da809ce59701ea92dad2",
+    "bytes": 7024550
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_vis_paired_fog.json": {
+    "sha256": "cc2100e89b4c6328a4528488a096159100cd6aea51ae1a3bba1d60f5a4b99a1a",
+    "bytes": 3651342
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_vis_paired_fog.json": {
+    "sha256": "0d24ebabe8f131022d527a691272304ea8f70641b835b577db1b86d0b9371b46",
+    "bytes": 7114311
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_vis_paired_lowlight.json": {
+    "sha256": "d1f9bc6b6b5fd4b1865bec8a655ea7a265f6a9df90bae8878e6ab9a651777117",
+    "bytes": 3578613
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_vis_paired_lowlight.json": {
+    "sha256": "1662141f906b460eda588f90aa4451aa8f499baef599626cf72f6beaa3ea4663",
+    "bytes": 6814470
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_ir_paired_glare_s2.json": {
+    "sha256": "69fec91271a6aea623342b34e0f187e4a08c929c110e80fb493554ad63e99d00",
+    "bytes": 3600941
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_ir_paired_glare_s2.json": {
+    "sha256": "75fe547eef150241edbfa20bc697242529a3d803d311b7eed46601ea7ff2520a",
+    "bytes": 6909747
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_ir_paired_blur_s2.json": {
+    "sha256": "acba95bf890c3919877ccd5a63ca3da36a4ae3ca63c4ebb32aefcb85bed9ae12",
+    "bytes": 3596783
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_ir_paired_blur_s2.json": {
+    "sha256": "fad3040ff531231b3dd59011b46ee3669e06e3ced4e696560d2542c5988e3229",
+    "bytes": 6908335
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_ir_paired_noise_s2.json": {
+    "sha256": "876060d40aec0a7b4bb0ffad8c3a07db8a688baa3671426e7b73c43675b12a16",
+    "bytes": 3547880
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_ir_paired_noise_s2.json": {
+    "sha256": "95ad089d287cdaa7608e232675c91d60c11e78537d417fb1cdb6f3eee33b28fa",
+    "bytes": 6759015
+   },
+   "runs/holdout_p04/derived/brightness/draw941_951/gauss_ir_paired_fog_s2.json": {
+    "sha256": "3645527cf2f6f25075c22e01ecbdbb177f954ff432cfdb16e35dfaaca44adba8",
+    "bytes": 3611974
+   },
+   "runs/holdout_p04/derived/structure/draw941_951/gauss_ir_paired_fog_s2.json": {
+    "sha256": "1d10b91be4b06b4f826c0013378e47a0011698a60c34d7bcb02965ff814d9329",
+    "bytes": 6933379
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_vis_paired_blur_s3.json": {
+    "sha256": "53cec0983b6bbb7bf90610cf14fdc22608d111189a5d82285116b9e0bf937375",
+    "bytes": 3656063
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_vis_paired_blur_s3.json": {
+    "sha256": "80a12c53fa71e0291bbcf6d16e8ead6f56fe09d3f4d31e427a765c880cce4088",
+    "bytes": 7105864
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_vis_paired_noise_s2.json": {
+    "sha256": "ab5beb09ae37c1d21e680265cd9143794130db511ea7b114eb55caea970f3eff",
+    "bytes": 3598782
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_vis_paired_noise_s2.json": {
+    "sha256": "454ca34e773e023867b7ddf42e79a4b911fcea2be3328953d037c0fdc4c72969",
+    "bytes": 6834059
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_vis_paired_rain_s2.json": {
+    "sha256": "943be16f4543a6fdfe1cde3ec983c0f4c0e3fb3b484b93489f285cff078198b4",
+    "bytes": 3614309
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_vis_paired_rain_s2.json": {
+    "sha256": "2e32c3b45e9161de8b8a828fddc4bea59d29f74002a1c5edb0e4cea5c6d701c1",
+    "bytes": 7025508
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_vis_paired_fog.json": {
+    "sha256": "2b0bd2104058e8b088dcf98de85bd25d4be83a4ee1f77c4d9ca07b0c4c606a72",
+    "bytes": 3651680
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_vis_paired_fog.json": {
+    "sha256": "fa342fef37a4c635ec4288bd3e092ade4d2ef2acfa65ba92a80c482a26a1111d",
+    "bytes": 7114831
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_vis_paired_lowlight.json": {
+    "sha256": "176e70a8a078b79fd69d854b56224444676c574de1ad8c6685b1694eafc93afe",
+    "bytes": 3578065
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_vis_paired_lowlight.json": {
+    "sha256": "fa18dcdae565fd59fcd9d77f996f9eb401a0be45d84e84fc567a7b4086dde61c",
+    "bytes": 6814245
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_ir_paired_glare_s2.json": {
+    "sha256": "ff203e546aacc4113addb2e0ba4d69a79e103853afdff7810ffd45f23d45bf8f",
+    "bytes": 3600486
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_ir_paired_glare_s2.json": {
+    "sha256": "8210a83e4a634176b59f87799cc5e2e7b99d1ef45a037979a12cc32ccbb63bac",
+    "bytes": 6908902
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_ir_paired_blur_s2.json": {
+    "sha256": "dc379db8d655632dca5033cbd9647a0551bf3610b320f41e71a6fba01b603b43",
+    "bytes": 3596449
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_ir_paired_blur_s2.json": {
+    "sha256": "9d546f07d1a27859d33ec17298935a139061a7c953651fc64fb9737af826cfb1",
+    "bytes": 6908043
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_ir_paired_noise_s2.json": {
+    "sha256": "14578cc35b47ed193249a58e22fe0f585fa478bd37ef75bb8a0b0d22e86d86a0",
+    "bytes": 3547847
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_ir_paired_noise_s2.json": {
+    "sha256": "f185cb9e5439bbf5ff498b18e14f9d174238afc573499d60b66c75e6848097e9",
+    "bytes": 6758690
+   },
+   "runs/holdout_p04/derived/brightness/draw942_952/gauss_ir_paired_fog_s2.json": {
+    "sha256": "fb2891fda3edf198eb19345c2d960eb53d61bac5cedd75478e0c9009edbe71fd",
+    "bytes": 3612323
+   },
+   "runs/holdout_p04/derived/structure/draw942_952/gauss_ir_paired_fog_s2.json": {
+    "sha256": "118ffc2d97ecff2e5b4c072c71065e5555f29affb110f7e381fbe2684fafad17",
+    "bytes": 6934800
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_vis_paired_blur_s3.json": {
+    "sha256": "f28a0df2241bb44a3b87780364faf6fc67d3b0d1408d51c5e090f1a81a29e2e0",
+    "bytes": 3656127
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_vis_paired_blur_s3.json": {
+    "sha256": "738fc25dddace3b8e4d35f0fb5f4364847aa9fd19abc47f8f2bed9d26a33b928",
+    "bytes": 7105865
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_vis_paired_noise_s2.json": {
+    "sha256": "82997c2422b41dceecd5ad4db228ea6237d253bb5157319810881d6ab52015fb",
+    "bytes": 3598429
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_vis_paired_noise_s2.json": {
+    "sha256": "e03fc5d082f71aa630194ee215cc74a125a8351e851f583081099398a7c2e261",
+    "bytes": 6833513
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_vis_paired_rain_s2.json": {
+    "sha256": "ca7b65cf9d3b66b64ad6ac78a08ce93332cdb555d2f222cf31b1d3f5a58a80a3",
+    "bytes": 3614352
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_vis_paired_rain_s2.json": {
+    "sha256": "821dc29322ec0bcd3cd8e62746b01822c365291fe388bc3c315970a8de9f5db0",
+    "bytes": 7024613
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_vis_paired_fog.json": {
+    "sha256": "e9f67e253be46ef492363ca600a6d57f7003a2d79e28e430603c5a61b61e2c14",
+    "bytes": 3651245
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_vis_paired_fog.json": {
+    "sha256": "4b938f7f99958d06efcb93968fd5c4bc52c02bc44f098d05378518c11a014273",
+    "bytes": 7114434
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_vis_paired_lowlight.json": {
+    "sha256": "a0754d449c2aa2fde50dc3198f9dd7c0f26c7ed2c6b36fc801ec35d47ac70c42",
+    "bytes": 3578165
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_vis_paired_lowlight.json": {
+    "sha256": "92e49303eec365d6387189e5fa53245877f8b57698173da85c275609dbd6c0d3",
+    "bytes": 6813474
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_ir_paired_glare_s2.json": {
+    "sha256": "26eff8fae125b75130c7b783b21d3faaddf1ce74dbb4f63016e77396d5b121b6",
+    "bytes": 3600381
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_ir_paired_glare_s2.json": {
+    "sha256": "aaad0c45f6a186beee70a6a66f3a52ff82ae71ea61e42cfbc9f069b4271e50d9",
+    "bytes": 6909526
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_ir_paired_blur_s2.json": {
+    "sha256": "5dea7e2f167d29618945f97c8565b62e3994b9ab7cc557065cc6df5e36c8e4f0",
+    "bytes": 3597261
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_ir_paired_blur_s2.json": {
+    "sha256": "0d2054a40da523272a979ac1158d03659a51438409492cfce987918241636682",
+    "bytes": 6908648
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_ir_paired_noise_s2.json": {
+    "sha256": "93732a74705471f959c3e6c1d18c4f35df00acadf15b69393d23554e932c64a9",
+    "bytes": 3548260
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_ir_paired_noise_s2.json": {
+    "sha256": "308f68ccd753909642eb1be514b10fe76d8e1c012ea015c3ac830d7ca70fc3bf",
+    "bytes": 6758887
+   },
+   "runs/holdout_p04/derived/brightness/draw943_953/gauss_ir_paired_fog_s2.json": {
+    "sha256": "c8e1683cf3123698711e86212e5ac8024a0b8990a84f3e1df9030fa74d1ccade",
+    "bytes": 3612081
+   },
+   "runs/holdout_p04/derived/structure/draw943_953/gauss_ir_paired_fog_s2.json": {
+    "sha256": "fa406e3b8442af202ebb90e0218eafd4a3391dcc253c66748a7ca71624674fc3",
+    "bytes": 6933990
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_vis_paired_blur_s3.json": {
+    "sha256": "f49efbc62e1e69a82f08cca8d0e6cdaf99e154c6f7606f4d7fd3399939775e69",
+    "bytes": 3656618
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_vis_paired_blur_s3.json": {
+    "sha256": "667511d6ea0844f1849c5c8bc3f63d3c46ee7238c0544012ce2484a36d0454da",
+    "bytes": 7106358
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_vis_paired_noise_s2.json": {
+    "sha256": "062ab8c8d64a2435b06b5e31af66e2f7949729e66b8a5bc0cbe3495e6539cc29",
+    "bytes": 3597531
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_vis_paired_noise_s2.json": {
+    "sha256": "dbbdcc66f8ea390e253173500869ad54edac03b91599e26b4e0a183b76803ac5",
+    "bytes": 6832613
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_vis_paired_rain_s2.json": {
+    "sha256": "b7521618f9832c493f9c43df627489030e02833add58624281d18a7170102d2b",
+    "bytes": 3613634
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_vis_paired_rain_s2.json": {
+    "sha256": "60b221194569171b64195ac982b4ea76d518bf0164a39b5427d06ccadb4b5c7b",
+    "bytes": 7023996
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_vis_paired_fog.json": {
+    "sha256": "7be90c3afe74570b96e635ca93cad6c5f709bb9709f1f6bb198d3d4356c8ff01",
+    "bytes": 3650705
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_vis_paired_fog.json": {
+    "sha256": "51b6cd5fcc898728a8dd93aa51d845c4549417f3d016dd4f8a52aa5239437ed3",
+    "bytes": 7112767
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_vis_paired_lowlight.json": {
+    "sha256": "b1c482844d09e628b28d12b891a409688e2186f12050ebc6968f2438fb3d010d",
+    "bytes": 3578617
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_vis_paired_lowlight.json": {
+    "sha256": "cd9c329d5c3a0b14041153e917c0d3d4be998f61414cd9860bd9ba332ba97bc6",
+    "bytes": 6813990
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_ir_paired_glare_s2.json": {
+    "sha256": "1a43b5a6a24f57a897f4b78f7f2e2f912c049291d6a120da4584f52ef205aa2a",
+    "bytes": 3600918
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_ir_paired_glare_s2.json": {
+    "sha256": "feddfd22b5a7f7abb4a597fe0a347ae001d262d367ad7d880c8d7363c44bc427",
+    "bytes": 6909450
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_ir_paired_blur_s2.json": {
+    "sha256": "8179be41a5faca28f71ffda9fe54917e3ae4ce6eba59136c74c27003e024cc1f",
+    "bytes": 3596828
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_ir_paired_blur_s2.json": {
+    "sha256": "5b56d7e9401109fb8c8ed0b3587b9f7e9b8fe90a1aa0f6997afb30d177ce9de5",
+    "bytes": 6908271
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_ir_paired_noise_s2.json": {
+    "sha256": "cc472cd51ef38f167e08194601c29eaa46e94eef1eb0b26f573a8b138b902fbf",
+    "bytes": 3548523
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_ir_paired_noise_s2.json": {
+    "sha256": "63508cd4f90a98750b5769f70ec20dbb9d198a4868cd20c944d53147aa9312ab",
+    "bytes": 6759638
+   },
+   "runs/holdout_p04/derived/brightness/draw944_954/gauss_ir_paired_fog_s2.json": {
+    "sha256": "d6ea397dbfe3a19b38e213abbf957f7976ed1051ad2c421071692ea639424f51",
+    "bytes": 3612309
+   },
+   "runs/holdout_p04/derived/structure/draw944_954/gauss_ir_paired_fog_s2.json": {
+    "sha256": "0b99eafc5f4ddeb1fed9908850bf9430b765cc14a002912e7d4b2654baecb360",
+    "bytes": 6934477
+   }
+  },
+  "calibration_and_geometry": {
+   "runs/eval/reliability_constants.json": {
+    "sha256": "4cc418fcfc4b020a9d2e901f9c457f0b183ec2b45064a0d574178d17b9011786",
+    "bytes": 11033
+   },
+   "runs/eval/brightness_constants.json": {
+    "sha256": "55d815fa27e9d24c76783323e97cf138885e7b71f95242726c9f02fb224572d6",
+    "bytes": 2237
+   },
+   "runs/eval/structure_constants.json": {
+    "sha256": "a1023caf8e0cdc84ed349abd6b6fb845698e51bcff3d89352316f636a23c169a",
+    "bytes": 14891
+   },
+   "runs/derived/homography_ir_to_vis.json": {
+    "sha256": "5b7327a38de5e04344fb8fd37a808b2ac62c1bbe3283dee66efa12760cbceed1",
+    "bytes": 4556
+   },
+   "config.yaml": {
+    "sha256": "f70d146335c5fbe8e8cbfdbab6b1d4a41d634ed00a034381099bbb1dee294bfc",
+    "bytes": 6091
+   }
+  },
+  "development_substrate": {
+   "runs/derived/paired_val_vis.txt": {
+    "sha256": "05a30badf4c483556f4222f9d63630fe103ff1f5419d5f6dc9dbfa1ac7c962e6",
+    "bytes": 167400
+   },
+   "runs/derived/paired_val_ir.txt": {
+    "sha256": "628614a2a6848838b83e1385bfda830b4346513fc25f4907e477cc4822b465ae",
+    "bytes": 165168
+   },
+   "runs/derived/paired_val_manifest.csv": {
+    "sha256": "9afbf7e624e31e3ea9f28ce105900c830c4d2166f8f93782b2dc46f3cf719382",
+    "bytes": 376131
+   },
+   "runs/derived/brightness/gauss_vis_paired_clean.json": {
+    "sha256": "fed914a08a6aeb079d6770401810b2515f59c1e164cf8a74cc9cd40b8f5ac5b1",
+    "bytes": 645997
+   },
+   "runs/derived/brightness/gauss_ir_paired_clean.json": {
+    "sha256": "a5befee9207189e0f7dd1281043f857d43875cdc2fc03b4b0de8aa5d5f0b9baf",
+    "bytes": 576741
+   },
+   "runs/derived/structure/gauss_vis_paired_clean.json": {
+    "sha256": "40fe4dc90c5a5e484a808beb17742acdcd5fd44e6d66e08116ffc89ace0b1e1a",
+    "bytes": 1259646
+   },
+   "runs/derived/structure/gauss_ir_paired_clean.json": {
+    "sha256": "3a0a863700a8f5f46cd371e2532bdf1177836c2cda3d17f2d40f8d0758dd31f7",
+    "bytes": 1234921
+   },
+   "runs/eval/stage1_crossing_2026-09-14.json": {
+    "sha256": "6dd7bd23dbb4e6769145edefbc547ba7c2e78a3bb05154d180064c41f5853749",
+    "bytes": 8332
+   }
+  },
+  "pohang04_substrate": {
+   "runs/holdout_p04/p04_pairs_vis.txt": {
+    "sha256": "e2c2097bf70e67677af2352f4e08fa2d3d2ccdba7490fee692e573e495384197",
+    "bytes": 936150
+   },
+   "runs/holdout_p04/p04_pairs_ir.txt": {
+    "sha256": "a50f7939dcead66960d9a35917056252db63cdb6b654dcd815748b7bcb037abf",
+    "bytes": 923668
+   },
+   "runs/holdout_p04/p04_pairs_manifest.csv": {
+    "sha256": "6948146c96e93ba260c8d1eb1f44b26ac6256b50b9a3d3023b007b802020ce0f",
+    "bytes": 2107642
+   },
+   "runs/holdout_p04/step1_manifest.json": {
+    "sha256": "ec8bfa46caf377e54530d25d0b5918c6c17381b61b618774cd76bac9ffec8dfe",
+    "bytes": 3788
+   },
+   "Pohang_dataset/paired/pohang04_pairs.csv": {
+    "sha256": "c732ccab341884deb116b25f61069a6f032b1db271974ca3f7976edc8547ecbb",
+    "bytes": 1007867
+   }
+  },
+  "committed_reference": {
+   "docs/eval/holdout_p04_devref_2026-09-14.json": {
+    "sha256": "33d4a224ce2421d9c7324ef6c9d5320fd2b8b9d1f72484c3604ec7198d5398ef",
+    "bytes": 76401
+   },
+   "docs/eval/holdout_p04_step1_manifest_2026-09-14.json": {
+    "sha256": "ec8bfa46caf377e54530d25d0b5918c6c17381b61b618774cd76bac9ffec8dfe",
+    "bytes": 3788
+   }
+  }
+ }
+}

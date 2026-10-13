@@ -1,0 +1,22 @@
+run          vis_img    vis_box    ir_img     ir_box
+pohang00       21768     164689     10918      82541
+pohang01       24473     134579     11995      85340
+pohang02       27795     275259      6175      38460
+pohang03       27085     231781      1922      14435
+pohang04       26188     156652         0          0
+
+claim (scope.md 5.1)                   claimed      measured
+total images                             ~158k       158,319
+total boxes                             ~1.22M     1,183,736
+VIS images                                127k       127,309
+IR images                                  31k        31,010
+paired VIS<->IR rows                      ~28k        28,388
+pohang03 IR images                      ~1,922         1,922
+pohang03 VIS images                       ~13k        27,085
+pohang04 IR labels                        zero             0
+
+VIS boxes 962,960   IR boxes 220,776
+pairs per run: pohang00=10,786  pohang01=11,990  pohang02=3,739  pohang03=1,873  pohang04=0
+
+These are LOCAL FILTERED counts for this tree, not the upstream PoLaRIS
+release. Cross-check the VIS tree hash with scripts/label_hash_ledger.py.

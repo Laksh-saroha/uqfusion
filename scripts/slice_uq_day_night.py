@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -117,6 +119,87 @@ class Arm:
         gts = [self.gts[j] for j in frames]
         return map50_95(recs, gts)
 
+    def __getstate__(self) -> dict:
+        """Drop `records`/`gts` when shipping this arm to a bootstrap worker.
+
+        They are by far the heaviest part of the object and `metrics()` -- the only
+        thing a worker calls -- never touches them; `maps()` runs main-process only,
+        on the point estimate. Without this the per-worker pickle is tens of MB of
+        raw prediction records for no gain.
+        """
+        d = self.__dict__.copy()
+        d["records"] = None
+        d["gts"] = None
+        return d
+
+
+def arm_range(vals: dict[str, float]) -> tuple[float, list[str]]:
+    """Rule 5's `max_a - min_a`, with an EXPLICIT policy for arms that have no value.
+
+    Python's builtin `max`/`min` mis-handle NaN, and *which way* depends on where the
+    NaN sits, because every comparison against NaN is False and the builtins simply
+    keep their running candidate::
+
+        max([3.9, nan, 1.2]) -> 3.9     max([nan, 3.9, 1.2]) -> nan
+        max([3.9, nan, nan]) -> 3.9     min([3.9, nan, nan]) -> 3.9   (range 0.0)
+
+    So the same three arm values yield a range of 2.7, nan or 0.0 depending purely on
+    the order the arms happen to appear in `ARMS`. That is what produced the
+    `nll  sep 0.0000` rows in the 2026-09-04 and 2026-09-09 reports: two of three arms
+    have no NLL at all (an M-member sample std is exactly 0 when members agree, and
+    `gaussian_nll` returns NaN rather than clipping since `runs/eval/nll_floor.md`),
+    and the surviving arm was silently differenced against itself. It reads as an exact
+    tie between arms. It is not a measurement.
+
+    **The policy.** Rule 5 quantifies over *all* arms, so if any arm has no value the
+    range is undefined: return NaN. That fails rule 7's floor and reports NO-SIGNAL,
+    which is what NO-SIGNAL already means -- "carries no arm-ranking information at
+    all". Ranging over the finite subset instead would answer a different question (a
+    two-arm separation presented as a three-arm one) without saying so; that number is
+    still computed by `finite_range` and reported, but it never enters a band.
+
+    No past verdict moves: `nll` was NO-SIGNAL in all three prior runs of this slice.
+    """
+    bad = sorted(lab for lab, v in vals.items() if not np.isfinite(v))
+    if bad:
+        return float("nan"), bad
+    return max(vals.values()) - min(vals.values()), []
+
+
+def finite_range(vals: dict[str, float]) -> float:
+    """`arm_range` over only the arms that have a value -- a disclosed secondary.
+
+    Reported so the information is not destroyed, never used for a band. NaN when
+    fewer than two arms have a value, since a range needs two.
+    """
+    fin = [v for v in vals.values() if np.isfinite(v)]
+    return (max(fin) - min(fin)) if len(fin) >= 2 else float("nan")
+
+
+def _boot_one(arms: list[Arm], is_night: np.ndarray, draw: np.ndarray) -> dict:
+    """One bootstrap draw -> {metric: (sep, spread)}. Pure; no shared state."""
+    dnight = is_night[draw]
+    bpt = {a.label: {"pooled": a.metrics(draw), "day": a.metrics(draw[~dnight])}
+           for a in arms}
+    out = {}
+    for m in DECISION:
+        day = {lab: bpt[lab]["day"][m] for lab in bpt}
+        pull = {lab: bpt[lab]["pooled"][m] - day[lab] for lab in bpt}
+        out[m] = (arm_range(day)[0], arm_range(pull)[0])
+    return out
+
+
+_BOOT_CTX: tuple = ()
+
+
+def _boot_init(arms: list[Arm], is_night: np.ndarray) -> None:
+    global _BOOT_CTX
+    _BOOT_CTX = (arms, is_night)
+
+
+def _boot_task(draw: np.ndarray) -> dict:
+    return _boot_one(_BOOT_CTX[0], _BOOT_CTX[1], draw)
+
 
 def _load(path: Path):
     obj = load_cache(path)
@@ -156,8 +239,15 @@ WORST = {"CLEAN": 0, "SUSPECT": 1, "CONTAMINATED": 2}
 
 
 def order(vals: dict[str, float]) -> tuple[str, ...]:
-    """Arm ordering, best first. All five decision metrics are lower-is-better."""
-    return tuple(k for k, _ in sorted(vals.items(), key=lambda kv: kv[1]))
+    """Arm ordering, best first. All five decision metrics are lower-is-better.
+
+    Arms with no value sort last, as a block, in input order. NaN compares False
+    against everything, so leaving it in the sort key made the printed ordering depend
+    on the order arms were fed in rather than on the metric.
+    """
+    return tuple(k for k, _ in sorted(
+        vals.items(),
+        key=lambda kv: (0, kv[1]) if np.isfinite(kv[1]) else (1, 0.0)))
 
 
 def flips(day: dict[str, float], pooled: dict[str, float], floor: float) -> dict:
@@ -182,7 +272,7 @@ def flips(day: dict[str, float], pooled: dict[str, float], floor: float) -> dict
     return {"resolved": resolved, "unresolved": unresolved}
 
 
-def analyse(modality: str, arms: list[Arm]) -> dict:
+def analyse(modality: str, arms: list[Arm], jobs: int = 1) -> dict:
     n = len(arms[0].paths)
     is_night = np.array([NIGHT_RUN in str(p) for p in arms[0].paths])
     all_f = np.arange(n)
@@ -199,39 +289,61 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
             day = {lab: pt[lab]["day"][m] for lab in pt}
             pool = {lab: pt[lab]["pooled"][m] for lab in pt}
             pull = {lab: pool[lab] - day[lab] for lab in pt}
-            dv, pv = list(day.values()), list(pull.values())
-            o[m] = {"sep": max(dv) - min(dv), "spread": max(pv) - min(pv),
+            sep, sep_bad = arm_range(day)
+            spr, spr_bad = arm_range(pull)
+            o[m] = {"sep": sep, "spread": spr,
+                    "nan_arms": sorted(set(sep_bad) | set(spr_bad)),
+                    "sep_finite_only": finite_range(day),
+                    "spread_finite_only": finite_range(pull),
                     "pull": pull, "day": day, "pooled": pool,
                     "order_day": order(day), "order_pooled": order(pool)}
         return o
 
     obs = stats(point)
 
+    # Rule 6 pins 2,000 frame-level resamples at seed 0, paired across arms. The draws
+    # are generated up front from that one seeded stream, in the same order the original
+    # serial loop consumed it, so evaluating them across processes is **bit-identical**
+    # to evaluating them in a loop -- not merely equivalent. Nothing about the registered
+    # statistic changes; only who computes which draw. `executor.map` preserves order.
     rng = np.random.default_rng(BOOT_SEED)
-    boot = {m: {"sep": [], "spread": []} for m in DECISION}
-    for _ in range(N_BOOT):
-        draw = rng.integers(0, n, n)                      # rule 6: paired across arms
-        dnight = is_night[draw]
-        bpt = {a.label: {"pooled": a.metrics(draw), "day": a.metrics(draw[~dnight])}
-               for a in arms}
-        for m in DECISION:
-            day = {lab: bpt[lab]["day"][m] for lab in bpt}
-            pull = {lab: bpt[lab]["pooled"][m] - day[lab] for lab in bpt}
-            dv, pv = list(day.values()), list(pull.values())
-            boot[m]["sep"].append(max(dv) - min(dv))
-            boot[m]["spread"].append(max(pv) - min(pv))
+    draws = [rng.integers(0, n, n) for _ in range(N_BOOT)]
+    if jobs > 1:
+        chunk = max(1, len(draws) // (jobs * 4))
+        with ProcessPoolExecutor(max_workers=jobs, initializer=_boot_init,
+                                 initargs=(arms, is_night)) as ex:
+            rows = list(ex.map(_boot_task, draws, chunksize=chunk))
+    else:
+        rows = [_boot_one(arms, is_night, d) for d in draws]
+    boot = {m: {"sep": [r[m][0] for r in rows], "spread": [r[m][1] for r in rows]}
+            for m in DECISION}
 
     for m in DECISION:
-        se_sep = float(np.nanstd(boot[m]["sep"], ddof=1))
-        se_spr = float(np.nanstd(boot[m]["spread"], ddof=1))
-        scale = float(np.mean([abs(v) for v in obs[m]["pooled"].values()]))
-        floor = max(2.0 * se_sep, FLOOR_REL * scale)      # rule 7
+        # Under the `arm_range` NaN policy a metric with an arm that has no value gives
+        # NaN on every draw, and nanstd over an all-NaN slice warns and returns NaN.
+        # Say "undefined" explicitly instead of emitting a RuntimeWarning per metric.
+        def _se(xs: list[float]) -> float:
+            fin = np.asarray([x for x in xs if np.isfinite(x)], dtype=float)
+            return float(fin.std(ddof=1)) if fin.size >= 2 else float("nan")
+
+        se_sep, se_spr = _se(boot[m]["sep"]), _se(boot[m]["spread"])
+        vals = [abs(v) for v in obs[m]["pooled"].values()]
+        scale = float(np.nanmean(vals)) if any(np.isfinite(v) for v in vals) else float("nan")
+        # rule 7. Guarded rather than left to `max`, which has the same NaN
+        # position-dependence documented on `arm_range`: max(nan, 0.02) is nan but
+        # max(0.02, nan) is 0.02, so an unguarded floor would silently vary with
+        # argument order exactly as `sep` did.
+        floor = (max(2.0 * se_sep, FLOOR_REL * scale)
+                 if np.isfinite(se_sep) and np.isfinite(scale) else float("nan"))
         sep, spr = obs[m]["sep"], obs[m]["spread"]
         # sep > 0 is required, not just sep >= floor: floor degenerates to 0 when both
         # se_sep and scale are 0 (e.g. a metric ties exactly across arms on the day
         # subset), and sep >= 0 alone let that count as "passing" with an undefined
         # r = spread/0 -- a NO-SIGNAL band that then broke the WORST lookup in `verdict`.
-        passes = sep >= floor and sep > 0
+        # NaN anywhere here means the quantity is undefined, not small: an arm with no
+        # value (see `arm_range`) makes rule 5's max_a/min_a undefined, and NO-SIGNAL is
+        # the registered destination for a metric carrying no arm-ranking information.
+        passes = bool(np.isfinite(sep) and np.isfinite(floor) and sep >= floor and sep > 0)
         r = spr / sep if passes else float("nan")
         fl = flips(obs[m]["day"], obs[m]["pooled"], floor)     # rule 9, floored
         flip = bool(fl["resolved"])
@@ -261,6 +373,35 @@ def analyse(modality: str, arms: list[Arm]) -> dict:
             "n_night": int(is_night.sum()), "point": point, "maps": maps,
             "stats": obs, "verdict": verdict, "verdict_as_registered": verdict_asreg,
             "arms": [a.label for a in arms]}
+
+
+def night_detection_diagnostic(modality: str, arms: list[Arm]) -> str:
+    """Detections emitted on the night subset, per arm. **Not a decision input.**
+
+    U2 §4 registers this in advance so it cannot later be presented as though it had
+    moved a band. It exists only to confirm a retrained arm actually sees at night: a
+    checkpoint trained on the emptied night labels emits almost nothing there
+    (`gauss_vis_seed0_ft`: 2 detections / 1,032 frames; `mc_vis_seed0_ft_refit`: 28),
+    and every calibration metric computed over ~zero detections is hollow rather than
+    good. Both prior runs of this slice were decided partly by that artefact.
+    """
+    rows = []
+    for a in arms:
+        is_night = np.array([NIGHT_RUN in str(p) for p in a.paths])
+        n_night = int(is_night.sum())
+        det_n = int(a.counts[is_night].sum())
+        det_d = int(a.counts[~is_night].sum())
+        rows.append([a.label, f"{n_night:,}", f"{det_n:,}",
+                     f"{det_n / max(n_night, 1):.1f}", f"{det_d:,}",
+                     Path(str((a.meta.get("weights") or ["?"])[0])).parts[-3]
+                     if a.meta.get("weights") else "?"])
+    return ("### Night detection counts — diagnostic, **not a decision input** (U2 §4)\n\n"
+            + md_table(["arm", "night frames", "night detections", "per frame",
+                        "day detections", "checkpoint"], rows)
+            + "\n\nAn arm emitting near-zero detections at night produces calibration "
+              "numbers that are hollow rather than good, which is how both prior runs of "
+              "this slice were partly decided. This table enters no band and moves no "
+              "verdict.")
 
 
 def section(res: dict) -> str:
@@ -295,6 +436,22 @@ def section(res: dict) -> str:
         stat += ("\n\nOrdering changes, and whether they clear the floor in **both** "
                  "orderings (rule 9):\n\n" + "\n".join(detail))
 
+    # An arm with no value makes rule 5's max_a/min_a undefined. Say so, and say what
+    # the surviving arms would have given, rather than printing a range silently taken
+    # over a subset -- which is what the pre-fix builtin max/min did.
+    nanrows = [[m, ", ".join(res["stats"][m]["nan_arms"]),
+                str(len(res["arms"]) - len(res["stats"][m]["nan_arms"])),
+                fmt(res["stats"][m]["sep_finite_only"]),
+                fmt(res["stats"][m]["spread_finite_only"])]
+               for m in DECISION if res["stats"][m]["nan_arms"]]
+    if nanrows:
+        stat += ("\n\n**Arms with no value on a metric** — `sep` and `spread` are "
+                 "reported as undefined (NaN -> NO-SIGNAL), not as a range over "
+                 "whoever is left. The finite-subset columns are a **disclosed "
+                 "secondary and enter no band**:\n\n"
+                 + md_table(["metric", "arms with no value", "arms remaining",
+                             "sep (finite only)", "spread (finite only)"], nanrows))
+
     prows = [[m] + [sgn(res["stats"][m]["pull"][lab]) for lab in res["arms"]]
              for m in DECISION]
     pull = md_table(["metric", *res["arms"]], prows)
@@ -314,18 +471,39 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default="runs/eval/uq_day_night_slice.md")
     ap.add_argument("--boot", type=int, default=N_BOOT)
+    ap.add_argument("--jobs", type=int, default=0,
+                     help="processes for the bootstrap. 0 = auto (cores-2, capped at 16), "
+                          "1 = serial. The draws are pre-generated from the single rule-6 "
+                          "seed-0 stream in the serial loop's own order, so any --jobs "
+                          "gives bit-identical sep/spread -- this is a speed knob, not a "
+                          "statistical one. Verified against --jobs 1; see the report's "
+                          "reproduction line.")
     ap.add_argument("--vis-sigma-cache", default=None,
                      help="override the VIS sigma-head arm's cache filename (relative to "
                           "runs/cache_uqslice/). Only for a declared amendment -- see "
                           "docs/prereg-uq-day-night-slice-amendment-nightfull.md. Leaves "
                           "every other arm, rule and band untouched.")
+    ap.add_argument("--vis-mc-cache", default=None,
+                     help="override the VIS MC-Dropout arm's cache filename. Declared in "
+                          "docs/prereg-uq-day-night-slice-u2-stageb.md.")
+    ap.add_argument("--vis-ens-cache", default=None,
+                     help="ADD the VIS ensemble(n=5) arm from this cache filename. This is "
+                          "the Stage A -> Stage B switch: it makes sep/spread three-arm "
+                          "quantities on VIS and makes a CLEAN verdict reachable, which "
+                          "U1's staging rule forbids at Stage A. Declared in "
+                          "docs/prereg-uq-day-night-slice-u2-stageb.md.")
     args = ap.parse_args()
     globals()["N_BOOT"] = args.boot
+    jobs = args.jobs if args.jobs > 0 else max(1, min(16, (os.cpu_count() or 2) - 2))
     arms_spec = {mod: dict(spec) for mod, spec in ARMS.items()}
+    if args.vis_mc_cache:
+        arms_spec["VIS"]["MC-Dropout"] = args.vis_mc_cache
+    if args.vis_ens_cache:
+        arms_spec["VIS"]["ensemble(n=5)"] = args.vis_ens_cache
     if args.vis_sigma_cache:
         arms_spec["VIS"]["sigma-head"] = args.vis_sigma_cache
 
-    results, notes = [], []
+    results, notes, diags = [], [], []
     for modality, spec in arms_spec.items():
         paths = {lab: CACHE / f for lab, f in spec.items()}
         missing = [str(p) for p in paths.values() if not p.is_file()]
@@ -334,29 +512,45 @@ def main() -> int:
             continue
         arms = [Arm(lab, p) for lab, p in paths.items()]
         notes.append(f"**{modality}** — " + ", ".join(verify(arms, modality)))
-        print(f"[{modality}] scoring {len(arms)} arms x 3 subsets + {args.boot} bootstrap draws")
-        res = analyse(modality, arms)
+        diags.append(night_detection_diagnostic(modality, arms))
+        print(f"[{modality}] scoring {len(arms)} arms x 3 subsets + {args.boot} "
+              f"bootstrap draws on {jobs} process(es)")
+        res = analyse(modality, arms, jobs=jobs)
         print(f"[{modality}] verdict {res['verdict']}")
         results.append(res)
 
     vis = next((r for r in results if r["modality"] == "VIS"), None)
     ir = next((r for r in results if r["modality"] == "IR"), None)
+    # Stage A vs Stage B is decided by the VIS arm count, not by a flag, so the report
+    # cannot claim a stage the arms do not support. U1's staging rule caps a two-arm VIS
+    # run at CONTAMINATED; CLEAN needs all three.
+    stage_b = bool(vis) and len(vis["arms"]) >= 3
     head = [
         "Scored by `scripts/slice_uq_day_night.py` against the bands fixed in "
         "`docs/prereg-uq-day-night-slice.md` (commit `a4f9364`), written before any "
         "cache in `runs/cache_uqslice/` existed. No weight was trained and no label "
         "was touched.",
-        "**Stage A.** The VIS ensemble arm is absent: seeds 1–4 weights are on "
-        "`dgxanode01` and are not in the archive. Per the prereg, Stage A can return "
-        "CONTAMINATED but **cannot** return CLEAN — two arms agreeing says nothing "
-        "about the third.",
+        ("**Stage B.** All three VIS arms are present, so `sep` and `spread` are "
+         "three-arm quantities on VIS as they always were on IR, and a **CLEAN verdict "
+         "is reachable** — which U1's staging rule forbids at Stage A. Registered in "
+         "`docs/prereg-uq-day-night-slice-u2-stageb.md`."
+         if stage_b else
+         "**Stage A.** The VIS ensemble arm is absent: seeds 1–4 weights are on "
+         "`dgxanode01` and are not in the archive. Per the prereg, Stage A can return "
+         "CONTAMINATED but **cannot** return CLEAN — two arms agreeing says nothing "
+         "about the third."),
     ]
-    if args.vis_sigma_cache:
+    overrides = [(f, v) for f, v in (("--vis-sigma-cache", args.vis_sigma_cache),
+                                     ("--vis-mc-cache", args.vis_mc_cache),
+                                     ("--vis-ens-cache", args.vis_ens_cache)) if v]
+    if overrides:
+        which = ", ".join(f"`{f} {v}`" for f, v in overrides)
+        doc = ("docs/prereg-uq-day-night-slice-u2-stageb.md" if stage_b
+               else "docs/prereg-uq-day-night-slice-amendment-nightfull.md")
         head.insert(0, (
-            f"> **Amendment in effect** (`--vis-sigma-cache {args.vis_sigma_cache}`): the VIS "
-            "sigma-head arm is scored from a different checkpoint than the U1 registration — "
-            "see `docs/prereg-uq-day-night-slice-amendment-nightfull.md`. The VIS MC-Dropout "
-            "arm, the IR control, and every rule/band below are unchanged."))
+            f"> **Declared override in effect** ({which}): one or more VIS arms are scored "
+            f"from checkpoints other than the U1 registration's — see `{doc}`. The IR "
+            "control and every rule and band below are unchanged."))
     if vis and ir:
         # The prereg registered only two readings -- "IR clean, VIS dirty" and "both the
         # same band" -- and an earlier version of this function collapsed everything else
@@ -391,7 +585,10 @@ def main() -> int:
             "verdicts are reported and the registered one is never dropped. The unfloored "
             "rule is the same sign-test-on-noise this project has already been burned by "
             "twice, which is why the amendment was made rather than the result accepted."))
-    secs = head + ["## Cache verification\n\n" + "\n\n".join(notes)] + [section(r) for r in results]
+    secs = (head
+            + ["## Cache verification\n\n" + "\n\n".join(notes)]
+            + ["## Detector sanity, before any band is read\n\n" + "\n\n".join(diags)]
+            + [section(r) for r in results])
     secs.append("---\n\n_Rules: bands CLEAN < 0.25 ≤ SUSPECT < 1.0 ≤ CONTAMINATED on "
                 "`r = spread/sep`; a metric enters the verdict only if "
                 "`sep ≥ max(2·se_sep, 0.02·scale)`; an ordering flip forces CONTAMINATED "

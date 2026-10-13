@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import subprocess
 import time
+from functools import lru_cache
 from pathlib import Path
 
 RESULT_FIELDS = [
@@ -19,6 +21,12 @@ RESULT_FIELDS = [
     "params_m", "gflops", "epochs_cfg", "train_time_s", "run_dir",
     "ultralytics_version", "torch_version", "git_commit",
     "data_yaml", "split_fingerprint", "classes",
+    # R-E1 slice 3 (F14). `split_fingerprint` hashes frame NAMES, so every label edit
+    # this project has ever made is invisible to it; `epochs_cfg` was recorded but
+    # never consulted, and imgsz/batch/weights/overrides were not recorded at all.
+    # Both defects were reproduced before these columns existed -- see
+    # docs/recipe-identity-2026-09-10.md.
+    "label_fingerprint_trainval", "recipe_fingerprint", "recipe",
 ]
 
 
@@ -56,17 +64,105 @@ def split_fingerprint(data_yaml: str | Path) -> str:
     return h.hexdigest()[:12]
 
 
-def _completed(csv_path: Path, classes_tag: str) -> dict[tuple[str, str], str]:
-    """{(variant, seed): split_fingerprint} for rows already in the CSV.
-    Rows whose class filter differs from the current run — or that predate
-    fingerprint/classes stamping — get '' so the mix-refusal trips on them."""
+@lru_cache(maxsize=4)
+def label_fingerprint(data_yaml: str | Path) -> str:
+    """Content identity of the train+val LABELS. What `split_fingerprint` cannot see.
+
+    `split_fingerprint` hashes sorted `run/filename` ids, so it answers "which frames?"
+    and nothing about what is written in them. Reproduced on the real function: deleting
+    a box and changing a class id both leave it at `c3354ed2f2b1`. That is exactly the
+    edit this project made twice -- the night cut removed 132,688 boxes and the
+    restoration put 94,553 back -- and a results CSV could not tell the two apart.
+
+    **The scope is in the name on purpose.** `label_content_hash` is the ledger's
+    algorithm unchanged, so this number is directly comparable to
+    `runs/label_hash_ledger.csv` and `verify_dataset_state.py --expect-label-hash`
+    -- but only to rows of the SAME scope. The ledger's `train` row (`8ed69b5974ed`
+    on the restored tree) is over train alone and its `all` row over train+val+test;
+    this is train+val, matching `split_fingerprint`, and equals neither. The ledger
+    doc already records what happens when two such numbers are compared as if they
+    were the same quantity.
+
+    Cost: ~15 s over the 107,627 VIS label files with a warm cache, paid once per
+    grid launch against runs measured in hours. `lru_cache` keeps it to once.
+    """
+    from uqfusion.data.labels import label_content_hash
+    from uqfusion.data.lists import load_data_yaml, split_image_list
+
+    data = load_data_yaml(data_yaml)
+    images: list[Path] = []
+    for split in ("train", "val"):
+        images.extend(split_image_list(data, split))
+    return label_content_hash(images)
+
+
+def _sha256_file(path: str | Path, chunk: int = 1 << 20) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(chunk), b""):
+            h.update(block)
+    return h.hexdigest()[:16]
+
+
+# Knobs that change the EXPERIMENT. Anything absent from this list is either already a
+# key (variant, seed), already its own column (classes, the two fingerprints), or
+# machine-local. `workers` and `device` are deliberately excluded: they can perturb
+# nondeterminism but they are properties of the host, and including them would make a
+# fingerprint that never matches across machines -- which would break resume, the one
+# thing this lookup exists to do.
+RECIPE_KEYS = ("epochs", "imgsz", "batch", "mosaic", "close_mosaic", "optimizer",
+               "patience", "amp", "deterministic", "weights", "weights_sha256",
+               "train_overrides")
+
+
+def recipe_identity(**knobs) -> tuple[str, str]:
+    """(fingerprint, canonical json) for the training recipe.
+
+    R-E1: *"the grid's completed-run lookup omits the recipe, so changing epochs,
+    imgsz, initial weights or overrides can silently skip a different experiment."*
+    Reproduced: with one row for (yolo26m, 0) at `epochs_cfg` 25, a re-run at 50 and at
+    100 both skip as "already done" and the CSV keeps reporting the 25-epoch number.
+
+    `weights_sha256` is the CONTENT hash of the starting checkpoint, not its path --
+    R-E1 asks for a checkpoint content hash, and a path is not one: `best.pt` is
+    overwritten by every run that produces it.
+    """
+    w = knobs.get("weights")
+    knobs = dict(knobs)
+    knobs["weights"] = str(w) if w is not None else None
+    knobs["weights_sha256"] = (_sha256_file(w) if w is not None and Path(w).is_file()
+                               else None)
+    ordered = {k: knobs.get(k) for k in RECIPE_KEYS}
+    blob = json.dumps(ordered, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(blob.encode()).hexdigest()[:12], blob
+
+
+def _completed(csv_path: Path, classes_tag: str) -> dict[tuple[str, str], dict]:
+    """{(variant, seed): {dataset, recipe}} for rows already in the CSV.
+
+    `dataset` is the (split, labels, classes) triple that says WHICH EXPERIMENT this
+    CSV belongs to; two different datasets must never share a file. `recipe` is the
+    hash of how the model was trained, which may legitimately differ between rows of
+    the same CSV and must therefore never be used to refuse a mix -- only to decide
+    whether a given row already answers the run being requested.
+
+    Rows whose class filter differs, or that predate a stamping, get '' in the
+    corresponding slot so the mix-refusal trips on them. That is the behaviour
+    `split_fingerprint` already had; `label_fingerprint_trainval` now joins it.
+    """
     if not csv_path.is_file():
         return {}
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
-        return {(row["variant"], row["seed"]):
-                ((row.get("split_fingerprint") or "")
-                 if (row.get("classes") or "all") == classes_tag else "")
-                for row in csv.DictReader(f)}
+        out = {}
+        for row in csv.DictReader(f):
+            same_classes = (row.get("classes") or "all") == classes_tag
+            out[(row["variant"], row["seed"])] = {
+                "dataset": ((row.get("split_fingerprint") or "",
+                             row.get("label_fingerprint_trainval") or "")
+                            if same_classes else ("", "")),
+                "recipe": row.get("recipe_fingerprint") or "",
+            }
+        return out
 
 
 def _append_row(csv_path: Path, row: dict) -> None:
@@ -126,6 +222,36 @@ def _retarget_checkpoint(ckpt_path: Path, run_dir: Path) -> None:
     args["project"], args["name"], args["save_dir"] = str(run_dir.parent), run_dir.name, str(run_dir)
     torch.save(ck, ckpt_path)
     print(f"[grid] checkpoint save_dir retargeted -> {run_dir}")
+
+
+def plan_grid(done: dict, dataset: tuple, recipe_fp: str,
+              variants: list, seeds: list) -> tuple[list, list]:
+    """(stale, conflict) for a CSV's existing rows. Pure, so it can be tested.
+
+    **stale** — rows from a different split fingerprint, LABEL STATE or class filter.
+    Two different datasets must never share a CSV, so any of these refuses the whole
+    run. `label_fingerprint_trainval` is new in R-E1 slice 3, so pre-existing rows
+    carry '' and trip this: those rows were produced against a label tree that has
+    since changed twice and the CSV cannot say which state each one saw.
+
+    **conflict** — rows for a (variant, seed) THIS grid is about to run, on the same
+    dataset but under a different recipe. Deliberately NOT part of the stale check:
+    one CSV may legitimately hold rows trained under different budgets, and refusing
+    to mix those would be wrong. What it must not do is let a different recipe be
+    skipped as already done, which is R-E1's case and was reproduced: a CSV holding
+    (yolo26m, 0) at 25 epochs skipped a re-request at 50 and at 100 and went on
+    reporting the 25-epoch number.
+
+    Conflicts refuse rather than re-run, because the run directory and the CSV row are
+    both keyed by `name`: re-running would overwrite a different experiment's outputs,
+    which is the failure this item is about.
+    """
+    stale = sorted(k for k, v in done.items() if v["dataset"] != dataset)
+    wanted = {(str(v), str(s)) for v in variants for s in seeds}
+    conflict = sorted(k for k, v in done.items()
+                      if (str(k[0]), str(k[1])) in wanted
+                      and v["dataset"] == dataset and v["recipe"] != recipe_fp)
+    return stale, conflict
 
 
 def run_grid(
@@ -190,25 +316,46 @@ def run_grid(
     device = resolve_device(cfg)
     commit = _git_commit()
     fingerprint = split_fingerprint(data_yaml)
+    label_fp = label_fingerprint(str(data_yaml))
     classes_tag = " ".join(str(c) for c in classes) if classes else "all"
+    recipe_fp, recipe_json = recipe_identity(
+        epochs=epochs, imgsz=imgsz, batch=batch, mosaic=mosaic,
+        close_mosaic=close_mosaic, optimizer=b.get("optimizer", "auto"),
+        patience=b["patience"], amp=b["amp"], deterministic=b["deterministic"],
+        weights=weights, train_overrides=train_overrides)
     done = _completed(out_csv, classes_tag)
 
-    # A row from a different (or unstamped) split — or a different class
-    # filter — must never be silently skipped as "done" or averaged into the
-    # same CSV: refuse to mix.
-    stale = sorted(k for k, fp in done.items() if fp != fingerprint)
+    # Dataset identity = which frames AND which labels AND which class filter.
+    # `label_fingerprint_trainval` is new in R-E1 slice 3, so every row written
+    # before it carries '' and trips the stale check. That is the intended reading:
+    # those rows were produced against a label tree that has since changed twice.
+    dataset = (fingerprint, label_fp)
+    stale, conflict = plan_grid(done, dataset, recipe_fp, variants, seeds)
     if stale:
         raise RuntimeError(
-            f"{out_csv} holds {len(stale)} row(s) whose split_fingerprint/classes "
-            f"!= current ('{fingerprint}', classes '{classes_tag}') (e.g. {stale[0]}): "
-            f"the CSV belongs to a different experiment. "
-            f"Quarantine it (mv) or pass a fresh --out-csv before running this grid."
+            f"{out_csv} holds {len(stale)} row(s) whose split/label fingerprint or "
+            f"classes != current (split '{fingerprint}', labels '{label_fp}', classes "
+            f"'{classes_tag}') (e.g. {stale[0]}): the CSV belongs to a different "
+            f"experiment. Quarantine it (mv) or pass a fresh --out-csv before running "
+            f"this grid."
+        )
+    if conflict:
+        raise RuntimeError(
+            f"{out_csv} already holds {len(conflict)} row(s) for this grid's "
+            f"(variant, seed) under a DIFFERENT recipe (e.g. {conflict[0]}: recipe "
+            f"'{done[conflict[0]]['recipe']}' vs current '{recipe_fp}'). Skipping them "
+            f"would report the other recipe's numbers as this one's; re-running them "
+            f"would overwrite its run directory, since both are keyed by name. "
+            f"Pass a fresh --out-csv and --run-prefix/--run-name for this recipe. "
+            f"Current recipe: {recipe_json}"
         )
 
     for variant in variants:
         for seed in seeds:
-            if done.get((variant, str(seed))) == fingerprint:
-                print(f"[grid] skip {variant} seed {seed} — already in {out_csv.name}")
+            prev = done.get((variant, str(seed)))
+            if prev is not None and prev["dataset"] == dataset and prev["recipe"] == recipe_fp:
+                print(f"[grid] skip {variant} seed {seed} — already in {out_csv.name} "
+                      f"under the same dataset and recipe ({recipe_fp})")
                 continue
             name = run_name or f"{run_prefix}_{variant}_seed{seed}"
             # An interrupted run leaves weights/last.pt behind; the row is absent from the
@@ -331,6 +478,8 @@ def run_grid(
                 "torch_version": torch.__version__, "git_commit": commit,
                 "data_yaml": str(data_yaml), "split_fingerprint": fingerprint,
                 "classes": classes_tag,
+                "label_fingerprint_trainval": label_fp,
+                "recipe_fingerprint": recipe_fp, "recipe": recipe_json,
             }
             _append_row(out_csv, row)
             print(f"[grid] {name} done in {train_time / 60:.1f} min -> {out_csv}")

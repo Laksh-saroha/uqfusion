@@ -112,7 +112,7 @@ def main() -> int:
               f"runs/eval/brightness_constants.json")
 
     # ---- evaluate downstream effect on the guard + target cells --------------
-    base_ctx = load_context(conditions=EVAL_CONDITIONS, verbose=False)
+    base_ctx = load_context(preset="adopted", conditions=EVAL_CONDITIONS, verbose=False)
     splits = {"day": base_ctx.sel("day"), "night": base_ctx.sel("night")}
 
     base_parts = {}

@@ -101,7 +101,13 @@ def aligned_homographies(vis_records, ir_records, h_frames, **kw):
     clusters. Applying it on the right would translate in the IR canvas and pick up
     the homography's scale and shear on the way out.
     """
+    from uqfusion.eval.identity import assert_paired
     from uqfusion.uq.fusion import apply_homography
+
+    # R-E1 slice 2: this measures a VIS<->IR registration residual, so a mis-paired
+    # cache does not produce a wrong number here -- it produces a residual measured
+    # between two different instants, which is not a registration quantity at all.
+    assert_paired(vis_records, ir_records, where="aligned_homographies")
 
     out, dxs, dys, npairs = [], [], [], []
     for rv, ri, h in zip(vis_records, ir_records, h_frames):

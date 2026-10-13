@@ -62,7 +62,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from uqfusion.config import load_config          # noqa: E402
 from uqfusion.eval.cache import load_cache       # noqa: E402
-from uqfusion.eval.corruptions import make_corruption  # noqa: E402
+from uqfusion.eval.corruptions import corruption_from_meta  # noqa: E402
 
 NATIVE = {"vis": (2048, 1080), "ir": (640, 512)}
 _EPS = 1e-9
@@ -185,7 +185,7 @@ def main() -> int:
 
     transform = None
     if meta.get("corrupt"):
-        transform = make_corruption(meta["corrupt"], meta["severity"], meta["corrupt_seed"])
+        transform = corruption_from_meta(meta, [r["image_path"] for r in recs], args.modality)
         print(f"[struct] replaying {meta['corrupt']} s{meta['severity']} "
               f"seed {meta['corrupt_seed']} — the file on disk is clean, the cache is not")
 
@@ -210,6 +210,7 @@ def main() -> int:
         "cache": str(args.cache), "modality": args.modality, "content_rows": [lo, hi],
         "corrupt": meta.get("corrupt"), "severity": meta.get("severity"),
         "corrupt_seed": meta.get("corrupt_seed"), "n_frames": len(rows), "frames": rows,
+        **({"corrupt_version": meta["corrupt_version"]} if meta.get("corrupt_version") else {}),
     }), encoding="utf-8")
     print(f"[struct] {len(rows)} frames -> {out_path}")
     return 0

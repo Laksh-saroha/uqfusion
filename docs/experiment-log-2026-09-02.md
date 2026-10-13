@@ -1,35 +1,30 @@
 # Experiment log — 2026-09-02, the ideas queue and what survived it
 
-Sixteen jobs generated from `docs/architecture-ideas-2026-09-01.md`, run as a
-parallel queue, plus the adoption gate for the one arm that looked live. What each
-asked, what it found, and where the numbers live — including the seven nulls, the
-two ideas that came back unmeasured rather than refuted, and the two bugs I found
-(one in a probe, one in my own gate script).
+Sixteen jobs generated from `docs/architecture-ideas-2026-09-01.md`, run as a parallel queue, plus
+the adoption gate for the one arm that looked live. What each asked, what it found, and where the
+numbers live — including the seven nulls, the two ideas that came back unmeasured rather than
+refuted, and the two bugs I found (one in a probe, one in my own gate script).
 
-**Ground rules held throughout.** Nothing under `runs/cache/`, `runs/derived/`,
-`runs/eval/` or `archive/` was overwritten. `Test_1/` untouched. Every new result
-went to a new filename. `preset="crossmodal"` and `preset="crossmodal26m"` still
-reproduce every published number bit-for-bit (`smoke_crossmodal_gate.py` 14/14;
-`smoke_vis_soft_nms.py` check E compares the VIS stream against `load_cache` output
-element by element).
+**Ground rules held throughout.** Nothing under `runs/cache/`, `runs/derived/`, `runs/eval/` or
+`archive/` was overwritten. `Test_1/` untouched. Every new result went to a new filename.
+`preset="crossmodal"` and `preset="crossmodal26m"` still reproduce every published number
+bit-for-bit (`smoke_crossmodal_gate.py` 14/14; `smoke_vis_soft_nms.py` check E compares the VIS
+stream against `load_cache` output element by element).
 
-**Headline: nothing shipped.** The one arm that passed a screen — VIS soft-NMS —
-failed its own pre-registered adoption bar by −0.0004 on one cell. Re-drawing that
-cell's corruptions at five more seeds showed the −0.0004 was the *seed*, not the
-system (§4.5) — which indicts the gate itself, not just this arm. A second,
-draw-averaged bar was pre-registered and run; the day arm passed every cell and the
-**night arm failed at −1.03e-5 on 4 of 4 draws**, so it still does not adopt
-(§4.6). §4.7 records that the bar I wrote had no magnitude floor, and why I am not
-fixing that after the fact.
+**Headline: nothing shipped.** The one arm that passed a screen — VIS soft-NMS — failed its own
+pre-registered adoption bar by −0.0004 on one cell. Re-drawing that cell's corruptions at five more
+seeds showed the −0.0004 was the *seed*, not the system (§4.5) — which indicts the gate itself, not
+just this arm. A second, draw-averaged bar was pre-registered and run; the day arm passed every cell
+and the **night arm failed at −1.03e-5 on 4 of 4 draws**, so it still does not adopt (§4.6). §4.7
+records that the bar I wrote had no magnitude floor, and why I am not fixing that after the fact.
 
-**Second headline, added 2026-09-03 — the largest result here (§7.2).** The night
-label restore came back **ALIVE**: VIS-only night `mAP@50-95` goes **0.0000 →
-0.2520** [0.2473, 0.2567], twelve and a half times the pre-registered band, with the
-day guard passing. The shipped VIS detector was never blind at night — it was
-*untrained* at night, by a filter that deleted 132,688 boxes. Nothing about the
-shipped preset moves in this run (§7.3), but the justification for a 100% night
-`veto_vis` no longer holds, and per the pre-registration that consequence needs its
-own pre-registration before a parameter changes.
+**Second headline, added 2026-09-03 — the largest result here (§7.2).** The night label restore came
+back **ALIVE**: VIS-only night `mAP@50-95` goes **0.0000 → 0.2520** [0.2473, 0.2567], twelve and a
+half times the pre-registered band, with the day guard passing. The shipped VIS detector was never
+blind at night — it was *untrained* at night, by a filter that deleted 132,688 boxes. Nothing about
+the shipped preset moves in this run (§7.3), but the justification for a 100% night `veto_vis` no
+longer holds, and per the pre-registration that consequence needs its own pre-registration before a
+parameter changes.
 
 ---
 
@@ -64,20 +59,17 @@ own pre-registration before a parameter changes.
 
 ## 1. Setup — two substrates, and why the second one exists
 
-Every number before today came from `runs/cache_m/gauss_vis_paired_clean.pkl`:
-1,200 day frames drawn from three runs, and drawn *unevenly* — pohang00:836,
-pohang02:247, pohang03:117. A leave-one-run-out fold on that substrate holds out
-117 frames in the worst case.
+Every number before today came from `runs/cache_m/gauss_vis_paired_clean.pkl`: 1,200 day frames from
+three runs, drawn *unevenly* — pohang00:836, pohang02:247, pohang03:117. A leave-one-run-out fold on
+that substrate holds out 117 frames in the worst case.
 
-`scripts/build_day_substrate.py` (I0, GPU, 347 s) produced
-`runs/cache_day/gauss_vis_day_clean.pkl`: **9,284 day frames over four runs** —
-pohang00:1672, pohang02:2690, pohang03:2579, **pohang04:2343**. `pohang04` had
-never appeared in any measurement in this project.
+`scripts/build_day_substrate.py` (I0, GPU, 347 s) produced `runs/cache_day/gauss_vis_day_clean.pkl`:
+**9,284 day frames over four runs** — pohang00:1672, pohang02:2690, pohang03:2579, **pohang04:2343**.
+`pohang04` had never appeared in any measurement in this project. It is VIS-only. There is no
+matching IR cache, which matters in §9.1.
 
-It is VIS-only. There is no matching IR cache, which matters in §9.1.
-
-The between-run spread on that substrate is the honest scale of a "held-out"
-difference, and it is enormous:
+The between-run spread on that substrate is the honest scale of a "held-out" difference, and it is
+enormous:
 
 | run | frames | actual mAP50-95 | oracle | headroom |
 |---|---:|---:|---:|---:|
@@ -86,26 +78,24 @@ difference, and it is enormous:
 | pohang03 | 2579 | 0.1970 | 0.2856 | +0.0886 |
 | pohang04 | 2343 | 0.2030 | 0.3277 | +0.1248 |
 
-A run-to-run gap of **0.179 mAP** on the same detector and the same conditions.
-Any arm worth less than that has not been shown to generalise by a fold that
-happens to land well. This table is the single most useful thing the queue produced.
+A run-to-run gap of **0.179 mAP** on the same detector and the same conditions. Any arm worth less
+than that has not been shown to generalise by a fold that happens to land well. This table is the
+single most useful thing the queue produced.
 
 ---
 
 ## 2. I1 — the re-ranker died when it got more data
 
-The 2026-09-01 pilot reported **+0.0419** for a learned IoU-aware re-ranker. §1.3
-of that log had already established the pilot reported a fit-set number. This
-session re-fitted it properly, twice.
+The 2026-09-01 pilot reported **+0.0419** for a learned IoU-aware re-ranker. §1.3 of that log had
+already established the pilot reported a fit-set number. This session re-fitted it properly, twice.
 
-`score = conf^(1−λ) · predIoU^λ`; coordinates are never touched. Folds are
-leave-one-run-out, so every frame is scored by a model that never saw its run.
+`score = conf^(1−λ) · predIoU^λ`; coordinates are never touched. Folds are leave-one-run-out, so
+every frame is scored by a model that never saw its run.
 
 ### 2.1 On the paired substrate — it looked alive
 
-`runs/eval/rerank_loro.md`. Baseline 0.3233, oracle ceiling 0.4293 (headroom
-+0.1060). Best out-of-fold arm: 4 features, monotone, λ 0.30, **+0.0037**, winning
-on 2 of 3 held-out runs.
+`runs/eval/rerank_loro.md`. Baseline 0.3233, oracle ceiling 0.4293 (headroom +0.1060). Best
+out-of-fold arm: 4 features, monotone, λ 0.30, **+0.0037**, winning on 2 of 3 held-out runs.
 
 Small, but positive out of fold, and the fit/held-out split behaved as expected:
 
@@ -115,13 +105,13 @@ Small, but positive out of fold, and the fit/held-out split behaved as expected:
 | 8 | 0.50 | +0.0403 | +0.0003 |
 | 18 | 0.50 | +0.0450 | +0.0030 |
 
-The 18-feature model gains 15× more on data it saw than on data it didn't. That is
-the pilot's +0.0419 in one line.
+The 18-feature model gains 15× more on data it saw than on data it didn't. That is the pilot's
++0.0419 in one line.
 
 ### 2.2 On the day substrate — every non-zero λ is negative
 
-`runs/eval/rerank_loro_day.md`. Baseline 0.2771, oracle 0.4059 (headroom
-**+0.1288** — larger than on the paired substrate, so the ceiling did not shrink).
+`runs/eval/rerank_loro_day.md`. Baseline 0.2771, oracle 0.4059 (headroom **+0.1288** — larger than on
+the paired substrate, so the ceiling did not shrink).
 
 **Best out-of-fold arm: 4 features, λ = 0.00, Δ +0.0000.** Do nothing wins.
 
@@ -131,20 +121,18 @@ the pilot's +0.0419 in one line.
 | 8 | yes | −0.0077 | −0.0107 | −0.0127 | −0.0581 |
 | 18 | yes | −0.0101 | −0.0144 | −0.0172 | −0.0737 |
 
-The fit/held-out gap is still there (18 feat, λ 0.50: **+0.0428** fit vs **+0.0070**
-held out), so the signal inside a run is real. It just does not transfer across
-runs, and with four runs instead of three there is nowhere for a lucky fold to hide.
+The fit/held-out gap is still there (18 feat, λ 0.50: **+0.0428** fit vs **+0.0070** held out), so the
+signal inside a run is real. It just does not transfer across runs, and with four runs instead of
+three there is nowhere for a lucky fold to hide.
 
-**This is the important negative result of the session.** More data did not rescue
-the arm, it killed it — which means both the pilot's +0.0419 *and* my +0.0037 were
-run-selection luck. The +0.1288 oracle headroom is real and is *not reachable by
-re-scoring these boxes with these features*.
+**This is the important negative result of the session.** More data did not rescue the arm, it killed
+it — which means both the pilot's +0.0419 *and* my +0.0037 were run-selection luck. The +0.1288
+oracle headroom is real and is *not reachable by re-scoring these boxes with these features*.
 
-The feature screen (§3 of that doc) is consistent with this and was never evidence
-otherwise: `sigma_mean_norm` has Spearman **−0.630** against IoU-with-GT and `conf`
-+0.549, pooled and in-sample. Strong in-sample correlation, zero out-of-fold
-transfer. Recorded so the next person does not read the correlation table as a
-result.
+The feature screen (§3 of that doc) is consistent with this and was never evidence otherwise:
+`sigma_mean_norm` has Spearman **−0.630** against IoU-with-GT and `conf` +0.549, pooled and
+in-sample. Strong in-sample correlation, zero out-of-fold transfer. Recorded so the next person does
+not read the correlation table as a result.
 
 ---
 
@@ -160,9 +148,9 @@ result.
 | 0.80 | 6,010 | 0.302 |
 | 0.90 | 3,858 | 0.194 |
 
-Nearly a fifth of the VIS stream is a near-exact duplicate of another VIS box.
-`iou_thr` is 0.85 and `single_passthrough` skips WBF entirely on one-stream frames,
-so nothing in the shipped system was removing them.
+Nearly a fifth of the VIS stream is a near-exact duplicate of another VIS box. `iou_thr` is 0.85 and
+`single_passthrough` skips WBF entirely on one-stream frames, so nothing in the shipped system was
+removing them.
 
 ### 3.2 Merging loses; suppression wins
 
@@ -174,26 +162,25 @@ Every arm below is against the shipped VIS baseline 0.3233, paired bootstrap n=5
 | hard NMS | @0.90 by conf | 0.7895 | 0.3248 | +0.0016 | [+0.0008, +0.0018] | +0.0011 / +0.0037 |
 | **soft-NMS** | **σ 0.5** | **0.7912** | **0.3258** | **+0.0025** | **[+0.0021, +0.0029]** | **+0.0010 / +0.0045** |
 
-Every single WBF merge arm is negative, at every threshold, with and without
-σ-weighting — and σ-weighted differs from plain by less than the CI, so the
-inverse-variance argument does not apply here either. That is the fourth
-independent confirmation that **moving coordinates in this system loses**
-(C4 registration, C5 align-and-forbid, I8 §3.4, and now this).
+Every single WBF merge arm is negative, at every threshold, with and without σ-weighting — and
+σ-weighted differs from plain by less than the CI, so the inverse-variance argument does not apply
+here either. That is the fourth independent confirmation that **moving coordinates in this system
+loses** (C4 registration, C5 align-and-forbid, I8 §3.4, and now this).
 
-Suppression, which only decays scores, is the only family that gains. Soft-NMS at
-σ 0.5 is positive on **all three** held-out runs, and it is the only arm all
-session with a CI that clears zero on both ends.
+Suppression, which only decays scores, is the only family that gains. Soft-NMS at σ 0.5 is positive
+on **all three** held-out runs, and it is the only arm all session with a CI that clears zero on both
+ends.
 
 ### 3.3 Sorting by `conf/(1+σ)` changes nothing
 
-NMS @0.60/0.70/0.80 scored **identically** to four decimal places whether ranked by
-`conf` or by `conf/(1+σ)`. σ does not reorder the duplicates. Consistent with
-2026-09-01 F3 and with [[project-redundancy-independence]].
+NMS @0.60/0.70/0.80 scored **identically** to four decimal places whether ranked by `conf` or by
+`conf/(1+σ)`. σ does not reorder the duplicates. Consistent with 2026-09-01 F3 and with
+[[project-redundancy-independence]].
 
 ### 3.4 I9b — `iou_thr` 0.85 is not doing anything
 
-`runs/eval/merge_support_split.md`. Merge threshold and support threshold varied
-independently for the first time:
+`runs/eval/merge_support_split.md`. Merge threshold and support threshold varied independently for
+the first time:
 
 | merge iou | support iou / γ | day | Δ day | TUNE | TEST |
 |---|---|---:|---:|---:|---:|
@@ -202,62 +189,56 @@ independently for the first time:
 | **0.85** | **0.30 / 0.5 (shipped)** | **0.3286** | — | 0.3894 | 0.3173 |
 | 0.95 | 0.30 / 0.5 | 0.3284 | **−0.0001** | 0.3888 | 0.3176 |
 
-`merge iou` 0.95 means WBF effectively never clusters anything. It costs
-**−0.0001**, and it is *better* than the shipped value on TEST. Merging is worth
-nothing.
+`merge iou` 0.95 means WBF effectively never clusters anything. It costs **−0.0001**, and it is
+*better* than the shipped value on TEST. Merging is worth nothing.
 
-So the honest name for this architecture is **score-modulated concatenation**: two
-detection lists pooled, the cross-modal `support` term re-weighting one of them,
-and no coordinate ever combined. That confirms [[project-fusion-mechanism]] from
-the parameter side rather than the geometry side — C1 found the streams meet on
-0.05% of boxes at IoU 0.85; this finds that removing the merge step costs nothing.
+So the honest name for this architecture is **score-modulated concatenation**: two detection lists
+pooled, the cross-modal `support` term re-weighting one of them, and no coordinate ever combined.
+That confirms [[project-fusion-mechanism]] from the parameter side rather than the geometry side —
+C1 found the streams meet on 0.05% of boxes at IoU 0.85; this finds that removing the merge step
+costs nothing.
 
-`merge_iou` should become an explicit preset parameter set to "off" rather than
-staying an implicit consequence of the value 0.85, so a future detector swap
-re-prices it deliberately. Not done in this session.
+`merge_iou` should become an explicit preset parameter set to "off" rather than staying an implicit
+consequence of the value 0.85, so a future detector swap re-prices it deliberately. Not done in this
+session.
 
 ### 3.5 I3 — TTA is a 4× bill for a CI that spans zero
 
 `runs/eval/tta_o2m.md`. Four views (`id`, `flip`, `s0.8`, `s1.25`), 34.6 bx/fr.
 
-The matched-lift screen (bin by confidence quantile first, per the F1 instrument)
-gives `flip` @IoU 0.55 **1.65×** and `s1.25` @0.30 **0.42×** — a signal that is
-*below* 1.00× in some bins, i.e. actively anti-correlated once confidence is
-controlled for. Raw lift reads 2.4–6.1×; that is confidence's own 4.8× leaking in.
+The matched-lift screen (bin by confidence quantile first, per the F1 instrument) gives `flip` @IoU
+0.55 **1.65×** and `s1.25` @0.30 **0.42×** — a signal that is *below* 1.00× in some bins, i.e.
+actively anti-correlated once confidence is controlled for. Raw lift reads 2.4–6.1×; that is
+confidence's own 4.8× leaking in.
 
-Best arm, WBF@0.85 σ-weighted: **+0.0031, CI [−0.0001, +0.0071], worst run
-−0.0125.** Reject: the CI touches zero, one held-out run loses four times what the
-mean gains, and it costs 4× inference.
+Best arm, WBF@0.85 σ-weighted: **+0.0031, CI [−0.0001, +0.0071], worst run −0.0125.** Reject: the CI
+touches zero, one held-out run loses four times what the mean gains, and it costs 4× inference.
 
-The score-only `support` arms — the form that has worked before — are **exactly
-0.0000** at every IoU and γ. View agreement carries nothing the score does not
-already have.
+The score-only `support` arms — the form that has worked before — are **exactly 0.0000** at every IoU
+and γ. View agreement carries nothing the score does not already have.
 
 ---
 
 ## 4. The adoption gate, and the selection rule I got wrong
 
-Soft-NMS was measured on the **bare VIS stream** (mAP 0.3233). The system ships
-`fused_gated` under `crossmodal26m` (clean day 0.3286), and five of eight benchmark
-cells run `single_passthrough`. `scripts/sweep_vis_soft_nms.py` re-measures it where
-it would actually live, against the project's standing bar: **at or above the
-shipped constant on every cell, day and night.**
+Soft-NMS was measured on the **bare VIS stream** (mAP 0.3233). The system ships `fused_gated` under
+`crossmodal26m` (clean day 0.3286), and five of eight benchmark cells run `single_passthrough`.
+`scripts/sweep_vis_soft_nms.py` re-measures it where it would actually live, against the project's
+standing bar: **at or above the shipped constant on every cell, day and night.**
 
 ### 4.1 Run 1 — passed the bar, failed the methodology
 
-`runs/eval/vis_soft_nms_adoption.md` (811.5 s). Section 2 ran at **σ 0.7**, and
-every one of the 11 cells came out at or above shipped (worst cell +0.0000 day and
-night).
+`runs/eval/vis_soft_nms_adoption.md` (811.5 s). Section 2 ran at **σ 0.7**, and every one of the 11
+cells came out at or above shipped (worst cell +0.0000 day and night).
 
-σ 0.7 was chosen by `max(by_test)` — **the best number on the held-out TEST half.**
-That is my own bug, and it is exactly the C8 failure with a new label. C7 used TEST
-to *reject* `iou_thr` 0.75 and 0.95; it never used it to pick among survivors. The
-364 TEST frames are the only held-out day data this project has, and selecting on
-them spends them.
+σ 0.7 was chosen by `max(by_test)` — **the best number on the held-out TEST half.** That is my own
+bug, and it is exactly the C8 failure with a new label. C7 used TEST to *reject* `iou_thr` 0.75 and
+0.95; it never used it to pick among survivors. The 364 TEST frames are the only held-out day data
+this project has, and selecting on them spends them.
 
-Fixed in `scripts/sweep_vis_soft_nms.py`: `--ship-sigma` defaults to **0.5**, the
-value `probe_within_modality.py` measured before this split was ever looked at, with
-a guard that raises if that width is negative on TEST. TEST rejects; it does not select.
+Fixed in `scripts/sweep_vis_soft_nms.py`: `--ship-sigma` defaults to **0.5**, the value
+`probe_within_modality.py` measured before this split was ever looked at, with a guard that raises if
+that width is negative on TEST. TEST rejects; it does not select.
 
 ### 4.2 Run 1's own table shows why the width is not resolvable
 
@@ -268,13 +249,13 @@ a guard that raises if that width is negative on TEST. TEST rejects; it does not
 | σ 0.5 | 0.3298 | +0.0012 | [−0.0001, +0.0029] | 0.3915 | 0.3193 | 0.0850 |
 | σ 0.7 | 0.3300 | +0.0015 | [+0.0002, +0.0027] | 0.3909 | **0.3196** | 0.0850 |
 
-TUNE prefers 0.3. TEST prefers 0.7. They disagree monotonically across the whole
-range, and the total spread is 0.0011. That disagreement is evidence the width is
-**not resolvable on 364 frames** — not a licence to trust whichever half is larger.
+TUNE prefers 0.3. TEST prefers 0.7. They disagree monotonically across the whole range, and the total
+spread is 0.0011. That disagreement is evidence the width is **not resolvable on 364 frames** — not a
+licence to trust whichever half is larger.
 
-Night is 0.0850 on every row including "off", to four decimals. Soft-NMS is inert at
-night, as it must be: VIS scores 0.0000 there, so there are no duplicate VIS boxes
-to decay. Consistent with [[project-maha-night-blindspot]].
+Night is 0.0850 on every row including "off", to four decimals. Soft-NMS is inert at night, as it
+must be: VIS scores 0.0000 there, so there are no duplicate VIS boxes to decay. Consistent with
+[[project-maha-night-blindspot]].
 
 ### 4.3 Run 2 — at the pre-registered width, the bar is not met
 
@@ -294,60 +275,52 @@ to decay. Consistent with [[project-maha-night-blindspot]].
 | lowlight/glare_s2 | 0.0235 | 0.0235 | +0.0000 | [−0.0001, +0.0000] | +0.0000 |
 | **blur_s3/glare_s2** | 0.0268 | 0.0264 | **−0.0004** | [−0.0009, +0.0023] | −0.0000 |
 
-**Worst cell: day −0.0004.** The pre-registered bar is "at or above on every cell".
-It is not met.
+**Worst cell: day −0.0004.** The pre-registered bar is "at or above on every cell". It is not met.
 
 ### 4.4 The call: held, not adopted
 
-The tempting move is to declare −0.0004 noise. Its CI is [−0.0009, +0.0023] —
-*centred positive* while the point estimate is negative, which is itself a sign the
-cell cannot resolve ±0.001 — and the same cell scored **+0.0004** at σ 0.7, so the
-sign flips with the width. On a cell where the system scores 0.0268 in the first
-place, this is very likely nothing.
+The tempting move is to declare −0.0004 noise. Its CI is [−0.0009, +0.0023] — *centred positive*
+while the point estimate is negative, which is itself a sign the cell cannot resolve ±0.001 — and the
+same cell scored **+0.0004** at σ 0.7, so the sign flips with the width. On a cell where the system
+scores 0.0268 in the first place, this is very likely nothing.
 
-That argument is exactly the one A2 refused for `cap_ir_scale` and the one D2 wishes
-had been applied to the veil veto. The bar was written into the script before the
-run. Loosening it *after* seeing which side the number fell on is how the veil veto
-shipped a −0.0632 regression. **So: not adopted.**
+That argument is exactly the one A2 refused for `cap_ir_scale` and the one D2 wishes had been applied
+to the veil veto. The bar was written into the script before the run. Loosening it *after* seeing
+which side the number fell on is how the veil veto shipped a −0.0632 regression. **So: not adopted.**
 
 What is in the tree, and what is not:
 
-- `soft_nms_record` / `soft_nms_records` in `src/uqfusion/eval/irdedup.py` — placed
-  next to `nms_record`, whose docstring already frames that module as *"a
-  DETECTOR-side post-process on one stream, not a fusion operation."* Soft-NMS is
-  the same kind of thing and belongs in the same place. Unlike the probe's version
-  it re-indexes `sigma_ltrb`, which is required because `compute_reliability`
-  indexes σ against `boxes_xyxy`.
-- `vis_soft_nms` parameter in `load_context`, applied at the same point and for the
-  same reason as `ir_nms` on the IR side.
-- `preset="crossmodal26m_snms"` — a **separate** preset defaulting σ 0.5. It exists,
-  it is measured, and it is not the default.
-- **`preset="crossmodal26m"` is unchanged and remains the shipped system.** The
-  +0.0106 headline and all of `final_26m_grid_v2.md` still reproduce.
+- `soft_nms_record` / `soft_nms_records` in `src/uqfusion/eval/irdedup.py` — placed next to
+  `nms_record`, whose docstring already frames that module as *"a DETECTOR-side post-process on one
+  stream, not a fusion operation."* Soft-NMS is the same kind of thing and belongs in the same place.
+  Unlike the probe's version it re-indexes `sigma_ltrb`, which is required because
+  `compute_reliability` indexes σ against `boxes_xyxy`.
+- `vis_soft_nms` parameter in `load_context`, applied at the same point and for the same reason as
+  `ir_nms` on the IR side.
+- `preset="crossmodal26m_snms"` — a **separate** preset defaulting σ 0.5. It exists, it is measured,
+  and it is not the default.
+- **`preset="crossmodal26m"` is unchanged and remains the shipped system.** The +0.0106 headline and
+  all of `final_26m_grid_v2.md` still reproduce.
 
 Two ways forward, both legitimate, neither taken unilaterally:
 
-1. **Buy a decision.** The bar cannot be adjudicated on 1,200 paired frames. Re-run
-   the gate on a corrupted-condition day substrate at `pohang04` scale; a −0.0004
-   either becomes a real cost or vanishes.
-   **This option does not exist — see §10 item 6.** IR val is 2,234 frames total and
-   `pohang04` has no IR at all; the 1,200 paired day frames are every paired day
-   frame there is. §4.5 takes the axis that *was* available instead.
-2. **Ship the narrow form.** Adopt soft-NMS only where it is unambiguous — the
-   `single_passthrough` frames, and the clean-VIS cells where it gains +0.0012 to
-   +0.0026 — and leave both-degraded cells alone. That is a new pre-registration,
-   not a loosened one, and needs its own gate.
+1. **Buy a decision.** The bar cannot be adjudicated on 1,200 paired frames. Re-run the gate on a
+   corrupted-condition day substrate at `pohang04` scale; a −0.0004 either becomes a real cost or
+   vanishes. **This option does not exist — see §10 item 6.** IR val is 2,234 frames total and
+   `pohang04` has no IR at all; the 1,200 paired day frames are every paired day frame there is. §4.5
+   takes the axis that *was* available instead.
+2. **Ship the narrow form.** Adopt soft-NMS only where it is unambiguous — the `single_passthrough`
+   frames, and the clean-VIS cells where it gains +0.0012 to +0.0026 — and leave both-degraded cells
+   alone. That is a new pre-registration, not a loosened one, and needs its own gate.
 
 ### 4.5 The redraw — the bar was measuring the seed
 
-`runs/eval/snms_cell_redraw.md`. §4.4 named two ways forward. Before either, one
-question had to be answered: is −0.0004 a property of *soft-NMS*, or of *one
-corruption draw*? Every gate this project has run rests on a single realisation of
-each corruption — blur(s3, seed 1) over VIS, glare(s2, seed 7) over IR. The
-bootstrap resamples **frames**, so it is structurally blind to this.
+`runs/eval/snms_cell_redraw.md`. §4.4 named two ways forward. Before either, one question had to be
+answered: is −0.0004 a property of *soft-NMS*, or of *one corruption draw*? Every gate this project
+has run rests on a single realisation of each corruption — blur(s3, seed 1) over VIS, glare(s2, seed
+7) over IR. The bootstrap resamples **frames**, so it is structurally blind to this.
 
-Re-drawing that cell's two corruptions at five further seeds, kind and severity
-fixed:
+Re-drawing that cell's two corruptions at five further seeds, kind and severity fixed:
 
 | vis/ir seed | shipped day | soft-NMS day | delta |
 |---|---:|---:|---:|
@@ -358,26 +331,25 @@ fixed:
 | 904/914 | 0.0289 | 0.0301 | +0.0012 |
 | 905/915 | 0.0264 | 0.0285 | +0.0020 |
 
-Mean +0.0010, sd 0.0011, negative on 2 of 6. The `clean/clean` control is **+0.0012
-on all six rows, identical to four decimals** — no corruption, no movement, so the
-spread above is the seed and nothing else.
+Mean +0.0010, sd 0.0011, negative on 2 of 6. The `clean/clean` control is **+0.0012 on all six rows,
+identical to four decimals** — no corruption, no movement, so the spread above is the seed and
+nothing else.
 
-The decisive number is not the mean. It is that the **shipped baseline itself swings
-0.0260–0.0289** across draws — roughly seven times the −0.0004 that tripped the bar.
+The decisive number is not the mean. It is that the **shipped baseline itself swings 0.0260–0.0289**
+across draws — roughly seven times the −0.0004 that tripped the bar.
 
-**This is a finding about the instrument, not about soft-NMS.** A single-draw
-every-cell test applied to cells scoring ~0.027 cannot resolve ±0.001, and will
-accept and reject arms by coin flip *in both directions*. That indicts every
-adoption decision this project has made on the low-scoring corrupted cells — not
-only this one.
+**This is a finding about the instrument, not about soft-NMS.** A single-draw every-cell test applied
+to cells scoring ~0.027 cannot resolve ±0.001, and will accept and reject arms by coin flip *in both
+directions*. That indicts every adoption decision this project has made on the low-scoring corrupted
+cells — not only this one.
 
 ### 4.6 The draw-averaged gate — and it still does not adopt
 
-So the bar was re-specified, pre-registered at `docs/prereg-snms-draw-averaged-gate.md`
-and committed at `1fbf735` **before the run existed**: 4 draws (shipped + seeds
-901/902/903), σ held at 0.5, adopt iff the draw-averaged delta is ≥ 0 on every cell
-day *and* night, TEST rejects but never selects, and sd / neg-counts / per-draw
-tables / bootstrap CIs named in advance as **diagnostics, not decision inputs**.
+So the bar was re-specified, pre-registered at `docs/prereg-snms-draw-averaged-gate.md` and committed
+at `1fbf735` **before the run existed**: 4 draws (shipped + seeds 901/902/903), σ held at 0.5, adopt
+iff the draw-averaged delta is ≥ 0 on every cell day *and* night, TEST rejects but never selects, and
+sd / neg-counts / per-draw tables / bootstrap CIs named in advance as **diagnostics, not decision
+inputs**.
 
 `runs/eval/snms_gate_draw_avg.md`, 6,858 s, 21 caches rebuilt.
 
@@ -395,9 +367,9 @@ tables / bootstrap CIs named in advance as **diagnostics, not decision inputs**.
 | lowlight/glare_s2 | +0.0000 | 0.0000 | 0/4 | +0.0000 |
 | blur_s3/glare_s2 | +0.0006 | 0.0013 | 2/4 | **−0.0000** |
 
-The redraw was right about the day arm: `blur_s3/glare_s2` averages **+0.0006**, and
-the −0.0004 was one draw of a cell whose sd is 0.0013. TEST is +0.0020 on clean, so
-rule 5 does not reject. **Every day cell passes.**
+The redraw was right about the day arm: `blur_s3/glare_s2` averages **+0.0006**, and the −0.0004 was
+one draw of a cell whose sd is 0.0013. TEST is +0.0020 on clean, so rule 5 does not reject. **Every
+day cell passes.**
 
 The arm fails on **night**, and it fails somewhere I was not looking.
 
@@ -410,62 +382,54 @@ The arm fails on **night**, and it fails somewhere I was not looking.
 
 Mean **−1.03e-5**, negative on **4 of 4**, over 1,032 night frames.
 
-This is a different animal from the day failure. The day −0.0004 flipped sign across
-draws; this does not. It is 40× smaller in magnitude and *perfectly sign-stable* —
-the corruption seed moves the night baseline by 2.6e-3 between draws, yet the delta
-stays negative every time. That is a mechanical effect, not noise: VIS is near-dead
-at night, and soft-NMS decays the few VIS scores that survive into the fused list.
-Averaging cannot rescue it, because there is nothing random to average.
+A different animal from the day failure. The day −0.0004 flipped sign across draws; this does not. It
+is 40× smaller in magnitude and *perfectly sign-stable* — the corruption seed moves the night
+baseline by 2.6e-3 between draws, yet the delta stays negative every time. That is a mechanical
+effect, not noise: VIS is near-dead at night, and soft-NMS decays the few VIS scores that survive
+into the fused list. Averaging cannot rescue it, because there is nothing random to average.
 
-**DO NOT ADOPT.** `vis_soft_nms` stays off; `crossmodal26m` remains the shipped
-preset, `crossmodal26m_snms` remains available and measured.
+**DO NOT ADOPT.** `vis_soft_nms` stays off; `crossmodal26m` remains the shipped preset,
+`crossmodal26m_snms` remains available and measured.
 
 ### 4.7 What I got wrong writing the bar, and what I am not doing about it
 
-Two things to put on the record, in the right order.
+**First, the honest verdict stands.** The rule was fixed and committed before the number existed. It
+says night ≥ 0 on every cell. Night is −1.03e-5 on one cell, on every draw. Arguing now that 1e-5 is
+*too small to count* is the identical move §4.4 refused and the veil veto made — loosening a bar
+after seeing which side the number fell on. The answer is no.
 
-**First, the honest verdict stands.** The rule was fixed and committed before the
-number existed. It says night ≥ 0 on every cell. Night is −1.03e-5 on one cell, on
-every draw. Arguing now that 1e-5 is *too small to count* is the identical move
-§4.4 refused and the veil veto made — loosening a bar after seeing which side the
-number fell on. The answer is no.
+**Second, the bar was badly written, and I wrote it.** It has no magnitude floor. A 1e-5 sign-stable
+difference and a 1e-2 regression fail it identically, which is not a bar that expresses anything
+anyone believes. I wrote it with *day* noise in mind — the whole document argues about ±0.001 on
+cells scoring 0.027 — and never asked what the night arm would do, where VIS contributes almost
+nothing and the delta is consequently deterministic and tiny.
 
-**Second, the bar was badly written, and I wrote it.** It has no magnitude floor. A
-1e-5 sign-stable difference and a 1e-2 regression fail it identically, which is not
-a bar that expresses anything anyone believes. I wrote it with *day* noise in mind
-— the whole document argues about ±0.001 on cells scoring 0.027 — and never asked
-what the night arm would do, where VIS contributes almost nothing and the delta is
-consequently deterministic and tiny.
+The correct fix is an **equivalence margin**: a band around zero inside which a cell counts as
+unchanged, fixed in advance from the measured draw-to-draw sd of that cell. Under any margin wider
+than 1e-5 — and the day sd on the same cell is 1.3e-3, *two orders of magnitude* larger — this arm
+passes.
 
-The correct fix is an **equivalence margin**: a band around zero inside which a cell
-counts as unchanged, fixed in advance from the measured draw-to-draw sd of that
-cell. Under any margin wider than 1e-5 — and the day sd on the same cell is 1.3e-3,
-*two orders of magnitude* larger — this arm passes.
-
-I am not applying that retroactively. A margin invented after seeing that it flips
-this verdict is not a pre-registration, it is a rationalisation with a formula
-attached. If soft-NMS is worth re-gating, it is worth a third pre-registration
-written before the fourth run, and this section is the evidence for what that
-document should contain.
+I am not applying that retroactively. A margin invented after seeing that it flips this verdict is
+not a pre-registration, it is a rationalisation with a formula attached. If soft-NMS is worth
+re-gating, it is worth a third pre-registration written before the fourth run, and this section is
+the evidence for what that document should contain.
 
 ### 4.8 Where the gain actually lands
 
-The two largest cells are `clean/noise_s2` (+0.0026) and `clean/fog_s2` (+0.0024) —
-**the cells where IR is destroyed and VIS carries the whole load**. That is the
-mechanism, and it is consistent: soft-NMS cleans up the VIS stream, and it matters
-most exactly when the VIS stream is all there is. It is a detector post-process that
-shows up in the fusion metric, not a fusion improvement.
+The two largest cells are `clean/noise_s2` (+0.0026) and `clean/fog_s2` (+0.0024) — **the cells where
+IR is destroyed and VIS carries the whole load**. That is the mechanism, and it is consistent:
+soft-NMS cleans up the VIS stream, and it matters most exactly when the VIS stream is all there is. A
+detector post-process that shows up in the fusion metric, not a fusion improvement.
 
 ### 4.9 What the bar should have been — the noise floor, measured
 
-§4.7 said the missing piece was an equivalence margin sized from real variance,
-and refused to invent one after the fact. This measures it, so a future
-pre-registration has a number to quote instead of a judgement call.
-`runs/eval/metric_noise_floor.md` and `runs/eval/delta_noise_floor.md`, shipped
+§4.7 said the missing piece was an equivalence margin sized from real variance, and refused to invent
+one after the fact. This measures it, so a future pre-registration has a number to quote instead of a
+judgement call. `runs/eval/metric_noise_floor.md` and `runs/eval/delta_noise_floor.md`, shipped
 system, day frames only (buoy has no night GT).
 
-**The metric is macro over two very unequal classes.** Day GT is ship **10,663**
-boxes and buoy **600** — buoy is 5.3% of the boxes carrying **50%** of the number.
+**The metric is macro over two very unequal classes.** Day GT is ship **10,663** boxes and buoy
+**600** — buoy is 5.3% of the boxes carrying **50%** of the number.
 
 | clean cell | sd ship | sd buoy | buoy/ship | buoy share of macro variance |
 |---|---:|---:|---:|---:|
@@ -473,21 +437,18 @@ boxes and buoy **600** — buoy is 5.3% of the boxes carrying **50%** of the num
 
 Three structural facts follow, and none of them are statistical:
 
-* **Buoy AP is 0.2780 with sd 0.0000 on all five `clean/*` cells.** Those cells
-  corrupt IR only, and IR is `nc=1`, so corrupting IR cannot move buoy at all.
-  Half the metric is inert on five of eleven cells.
-* **Buoy AP is exactly 0.0000 on `noise_s2/clean` and `lowlight/glare_s2`.** Macro
-  there is precisely `ship/2`. Any gain on those cells is a ship-only effect
-  wearing a macro disguise.
-* Both cells also have a *measured delta floor of 0.0000* — they carry no
-  information for any gate and should be stated as such rather than counted as
-  two of eleven passing cells.
+* **Buoy AP is 0.2780 with sd 0.0000 on all five `clean/*` cells.** Those cells corrupt IR only, and
+  IR is `nc=1`, so corrupting IR cannot move buoy at all. Half the metric is inert on five of eleven
+  cells.
+* **Buoy AP is exactly 0.0000 on `noise_s2/clean` and `lowlight/glare_s2`.** Macro there is precisely
+  `ship/2`. Any gain on those cells is a ship-only effect wearing a macro disguise.
+* Both cells also have a *measured delta floor of 0.0000* — they carry no information for any gate
+  and should be stated as such rather than counted as two of eleven passing cells.
 
-**And a correction to my own first pass.** `metric_noise_floor.md` §3 reported
-`2 × sd(AP)` as a "smallest resolvable effect" and landed on **0.0120** for the
-clean cell. That is the uncertainty in the metric's *level* and it is the wrong
-yardstick: a gate scores both arms **on the same frames**, so the resample is
-common and almost all of it cancels. Taken literally it would have put the shipped
+**And a correction to my own first pass.** `metric_noise_floor.md` §3 reported `2 × sd(AP)` as a
+"smallest resolvable effect" and landed on **0.0120** for the clean cell. That is the uncertainty in
+the metric's *level* and it is the wrong yardstick: a gate scores both arms **on the same frames**, so
+the resample is common and almost all of it cancels. Taken literally it would have put the shipped
 **+0.0106 crossmodal gate inside the noise**, which is false. Measured directly:
 
 | cell | sd unpaired | sd paired | pairing buys |
@@ -514,40 +475,35 @@ The real per-cell floor, corruption draw and paired bootstrap in quadrature:
 
 What this settles:
 
-1. **The shipped +0.0106 clears its cell's floor by 6.6×.** The crossmodal gate is
-   not in question and never was.
-2. **The −0.0004 that failed run 2 sat 8× inside its own cell's floor** (0.0031).
-   §4.5 argued that from sign instability; this is the same conclusion with a
-   number attached.
-3. **Where to spend is now cell-dependent.** On the five clean cells the *frames*
-   bind, not the draw — and §10 item 6 shows there are no more paired day frames
-   in existence, so those cells are permanently at their floor. On the
-   both-degraded cells the *draw* binds, and draws are cheap. More draws is the
-   right purchase on exactly the cells §4.5 was about.
-4. **The margin a third pre-registration should quote** is the `2×total` column,
-   fixed per cell in advance. It is between 0.0014 and 0.0031 on the cells that
-   carry information — two to three orders of magnitude above the −1.03e-5 night
-   delta that rejected soft-NMS.
+1. **The shipped +0.0106 clears its cell's floor by 6.6×.** The crossmodal gate is not in question
+   and never was.
+2. **The −0.0004 that failed run 2 sat 8× inside its own cell's floor** (0.0031). §4.5 argued that
+   from sign instability; this is the same conclusion with a number attached.
+3. **Where to spend is now cell-dependent.** On the five clean cells the *frames* bind, not the draw
+   — and §10 item 6 shows there are no more paired day frames in existence, so those cells are
+   permanently at their floor. On the both-degraded cells the *draw* binds, and draws are cheap. More
+   draws is the right purchase on exactly the cells §4.5 was about.
+4. **The margin a third pre-registration should quote** is the `2×total` column, fixed per cell in
+   advance. It is between 0.0014 and 0.0031 on the cells that carry information — two to three orders
+   of magnitude above the −1.03e-5 night delta that rejected soft-NMS.
 
-That last point is stated as a fact about the instrument, **not** as grounds to
-re-open §4.7. The rejection stands; what changes is that the next gate has a
-defensible margin to pre-register instead of an implicit zero.
-
----
+That last point is stated as a fact about the instrument, **not** as grounds to re-open §4.7. The
+rejection stands; what changes is that the next gate has a defensible margin to pre-register instead
+of an implicit zero.
 
 ### 4.10 Re-pricing the three inherited constants — all three stand
 
-§4.9 supplied the margin §4.7 said a gate needs, so the three constants selected
-under the single-draw bar could finally be judged against a number.
-`docs/prereg-reprice-inherited-constants.md`, committed at `6b49ca0` **before the
-script existed** → `runs/eval/reprice_constants.md`. Single-axis arms, 4 draws,
-margin measured **per cell and per arm** as `2 × hypot(sd_draw, sd_paired_boot)`
-rather than imported, because the paired sd depends on how much the arm moves.
+§4.9 supplied the margin §4.7 said a gate needs, so the three constants selected under the
+single-draw bar could finally be judged against a number.
+`docs/prereg-reprice-inherited-constants.md`, committed at `6b49ca0` **before the script existed** →
+`runs/eval/reprice_constants.md`. Single-axis arms, 4 draws, margin measured **per cell and per arm**
+as `2 × hypot(sd_draw, sd_paired_boot)` rather than imported, because the paired sd depends on how
+much the arm moves.
 
-Arms were built with `dataclasses.replace` on one context per (draw, IR
-condition) — all three constants are read at `run_systems` time. The run asserts
-this rather than assuming it: a replace-built `cap_ir_scale = 1.0` matched a
-genuinely loaded one at **0.0e+00** on both `cap_ir` and end-to-end AP.
+Arms were built with `dataclasses.replace` on one context per (draw, IR condition) — all three
+constants are read at `run_systems` time. The run asserts this rather than assuming it: a
+replace-built `cap_ir_scale = 1.0` matched a genuinely loaded one at **0.0e+00** on both `cap_ir` and
+end-to-end AP.
 
 | arm | cells BETTER | cells WORSE | TEST delta | result |
 |---|---:|---:|---:|---|
@@ -558,69 +514,61 @@ genuinely loaded one at **0.0e+00** on both `cap_ir` and end-to-end AP.
 | `iou_thr` = 0.95 | 0 | 1 | +0.0002 | worse somewhere |
 | veil repair = off | 0 | 7 | +0.0000 | worse somewhere |
 
-**No alternative dominates. All three constants STAND** — which by rule 5 means
-*not shown wrong*, never *optimal*.
+**No alternative dominates. All three constants STAND** — which by rule 5 means *not shown wrong*,
+never *optimal*.
 
-**The veil repair is the emphatic one.** Turning it off costs **−0.0416 on
-`fog/clean`** against a margin of 0.0054 — 7.7× — plus −0.0141 on the night arm
-of two cells and −0.0036 on both `blur_s3` cells, with **zero** cells better. The
-repair that §4 of the 2026-09-01 log adopted was not a close call and does not
-depend on the instrument that was in doubt.
+**The veil repair is the emphatic one.** Turning it off costs **−0.0416 on `fog/clean`** against a
+margin of 0.0054 — 7.7× — plus −0.0141 on the night arm of two cells and −0.0036 on both `blur_s3`
+cells, with **zero** cells better. The repair that §4 of the 2026-09-01 log adopted was not a close
+call and does not depend on the instrument that was in doubt.
 
-**`iou_thr` 0.85 is unresolvable against 0.95.** Ten of eleven cells come back
-`same`; the eleventh is −0.0007 against a margin of 0.0006. 0.95 is merging
-switched off, so this is §3.4 confirmed with a margin attached: **cross-modal
-merging does essentially nothing, and 0.85 is not doing work.** 0.70 *is* clearly
-worse (6 cells, TEST −0.0017), so the constant is not free — it just has a flat
-top between 0.85 and 1.0.
+**`iou_thr` 0.85 is unresolvable against 0.95.** Ten of eleven cells come back `same`; the eleventh
+is −0.0007 against a margin of 0.0006. 0.95 is merging switched off, so this is §3.4 confirmed with a
+margin attached: **cross-modal merging does essentially nothing, and 0.85 is not doing work.** 0.70
+*is* clearly worse (6 cells, TEST −0.0017), so the constant is not free — it just has a flat top
+between 0.85 and 1.0.
 
-**`cap_ir_scale` 4.0 sits on a plateau.** 1.0 and 2.0 are clearly worse (TEST
-−0.0023 and −0.0010). 8.0 is the only near-miss in the whole run — 5 cells better,
-TEST +0.0006 — but it is worse on `blur_s3/clean` (−0.0002) and on the night arm of
-`blur_s3/glare_s2` (−0.0009), so it does not dominate. ×4 stands; ×8 is the one
-alternative worth naming.
+**`cap_ir_scale` 4.0 sits on a plateau.** 1.0 and 2.0 are clearly worse (TEST −0.0023 and −0.0010).
+8.0 is the only near-miss in the whole run — 5 cells better, TEST +0.0006 — but it is worse on
+`blur_s3/clean` (−0.0002) and on the night arm of `blur_s3/glare_s2` (−0.0009), so it does not
+dominate. ×4 stands; ×8 is the one alternative worth naming.
 
 #### The rule degenerated again, in exactly the way §4.7 diagnosed
 
-**8 of the 39 non-`same` verdicts rest on a delta of |Δ| < 1e-4 against a margin
-that also rounds to 0.0000.** Two of `cap_ir_scale = 8.0`'s five `BETTER` cells
-are deltas of +0.0000. When the measured margin collapses toward zero the rule
-stops being an equivalence test and becomes a sign test on numerical noise — the
-**identical** no-magnitude-floor flaw that rejected soft-NMS at −1.03e-5.
+**8 of the 39 non-`same` verdicts rest on a delta of |Δ| < 1e-4 against a margin that also rounds to
+0.0000.** Two of `cap_ir_scale = 8.0`'s five `BETTER` cells are deltas of +0.0000. When the measured
+margin collapses toward zero the rule stops being an equivalence test and becomes a sign test on
+numerical noise — the **identical** no-magnitude-floor flaw that rejected soft-NMS at −1.03e-5.
 
-I wrote this pre-registration *after* diagnosing that flaw in §4.7 and still did
-not put an absolute floor in it. I assumed the measured margin would supply one.
-It does not, on the cells where the arm barely moves.
+I wrote this pre-registration *after* diagnosing that flaw in §4.7 and still did not put an absolute
+floor in it. I assumed the measured margin would supply one. It does not, on the cells where the arm
+barely moves.
 
-**It changes nothing here, and that was checked rather than asserted.** Recounting
-dominance at magnitude floors of 0, 1e-4, 2e-4 and 5e-4 leaves every arm with at
-least one `WORSE` cell and no arm dominating at any of them. The verdicts are
-robust; the rule that produced them is not, and the next pre-registration must
-carry an absolute floor **alongside** the measured margin.
+**It changes nothing here, and that was checked rather than asserted.** Recounting dominance at
+magnitude floors of 0, 1e-4, 2e-4 and 5e-4 leaves every arm with at least one `WORSE` cell and no arm
+dominating at any of them. The verdicts are robust; the rule that produced them is not, and the next
+pre-registration must carry an absolute floor **alongside** the measured margin.
 
 #### One number that looks wrong and is not
 
-The `cap_ir_scale` arms have paired-bootstrap sd of 0.0000–0.0001 while the
-`iou_thr` arms have 0.0007–0.0008 on the same cells. That is mechanism, not a bug:
-rescaling IR confidence is a *monotone transform within one stream*, so it only
-moves the VIS/IR interleaving in the concatenated list and moves it the same way
-on every frame. Changing `iou_thr` changes which boxes merge at all, which varies
-frame to frame. A stable arm genuinely has a stable delta.
-
----
+The `cap_ir_scale` arms have paired-bootstrap sd of 0.0000–0.0001 while the `iou_thr` arms have
+0.0007–0.0008 on the same cells. That is mechanism, not a bug: rescaling IR confidence is a *monotone
+transform within one stream*, so it only moves the VIS/IR interleaving in the concatenated list and
+moves it the same way on every frame. Changing `iou_thr` changes which boxes merge at all, which
+varies frame to frame. A stable arm genuinely has a stable delta.
 
 ---
 
 ## 5. I2 — σ knows how far, not which way
 
-`runs/eval/sigma_residual_day.md`, 108,119 detections matched to GT at IoU ≥ 0.5
-over the 9,284-frame substrate.
+`runs/eval/sigma_residual_day.md`, 108,119 detections matched to GT at IoU ≥ 0.5 over the
+9,284-frame substrate.
 
-The head is roughly calibrated in magnitude, not just in ordering — mean σ vs mean
-|err| ratios of 0.78 / 0.58 / 0.58 / 1.06 across the four edges.
+The head is roughly calibrated in magnitude, not just in ordering — mean σ vs mean |err| ratios of
+0.78 / 0.58 / 0.58 / 1.06 across the four edges.
 
-The screen asks the only question that matters for a correction: is the **signed**
-residual predictable out of fold?
+The screen asks the only question that matters for a correction: is the **signed** residual
+predictable out of fold?
 
 | edge | oof R² (signed) | oof R² (\|resid\|) | verdict |
 |---|---:|---:|---|
@@ -638,10 +586,9 @@ Screen verdict PASS (2/4). Applied end to end with leave-one-run-out:
 | ridge ×0.5 | 0.2444 | −0.0327 |
 | ridge ×1 | 0.1976 | −0.0795 |
 
-Monotone in the wrong direction: the more of the correction you apply, the worse it
-gets. Two edges out of four is not enough — moving y1 and y2 while x1 and x2 stay
-put deforms the box. Reject, on both substrates, and this is the **fifth**
-confirmation that coordinate-moving loses here.
+Monotone in the wrong direction: the more of the correction you apply, the worse it gets. Two edges
+out of four is not enough — moving y1 and y2 while x1 and x2 stay put deforms the box. Reject, on
+both substrates, and this is the **fifth** confirmation that coordinate-moving loses here.
 
 ---
 
@@ -658,10 +605,10 @@ confirmation that coordinate-moving loses here.
 | day | ship | 88,919 | 0.919 | 0.3512 | 0.4624 | +0.1112 |
 | day | buoy | 7,871 | **0.081** | 0.2031 | 0.3495 | **+0.1464** |
 
-Buoy headroom exceeds ship's on **both** substrates. Oracle-re-ranking one class
-and leaving the other alone: ship-only **+0.0484**, buoy-only **+0.0576**. Every
-lever in this project has been fitted pooled, which means fitted on ship's 10,663
-boxes and charged to the class that carries half the metric.
+Buoy headroom exceeds ship's on **both** substrates. Oracle-re-ranking one class and leaving the
+other alone: ship-only **+0.0484**, buoy-only **+0.0576**. Every lever in this project has been fitted
+pooled, which means fitted on ship's 10,663 boxes and charged to the class that carries half the
+metric.
 
 ### 6.2 `support_gamma` is a ship-only lever wearing a global name
 
@@ -672,14 +619,14 @@ boxes and charged to the class that carries half the metric.
 | γ 1 | 0.3288 | +0.0002 | 0.3796 | **0.2780** |
 | γ 2 | 0.3285 | −0.0001 | 0.3790 | **0.2780** |
 
-Buoy AP is **exactly 0.2780** at every γ. IR is `nc=1`, so a buoy box can never have
-cross-modal support — the term is fitted on one class and named as if it were
-global. Extends [[project-detector-scale-null]]. The right form is per class.
+Buoy AP is **exactly 0.2780** at every γ. IR is `nc=1`, so a buoy box can never have cross-modal
+support — the term is fitted on one class and named as if it were global. Extends
+[[project-detector-scale-null]]. The right form is per class.
 
 ### 6.3 I4 — the loss is pixels, and re-ranking cannot reach it
 
-`runs/eval/ap_by_size.md`. GT side length **median 12.0 px** on the 640 canvas; area
-p5 = 34 px², p50 = 144 px².
+`runs/eval/ap_by_size.md`. GT side length **median 12.0 px** on the 640 canvas; area p5 = 34 px²,
+p50 = 144 px².
 
 | class | size | n_gt | share | AP50-95 | headroom | **rec@50** |
 |---|---|---:|---:|---:|---:|---:|
@@ -688,14 +635,14 @@ p5 = 34 px², p50 = 144 px².
 | ship | large | 130 | 0.012 | 0.5092 | +0.1057 | 0.923 |
 | buoy | small | 600 | — | 0.2780 | +0.1152 | 0.878 |
 
-**89.8% of the GT is `small`**, and small ship AP is 0.3382 against medium's 0.6229.
-`rec@50` 0.778 is a **ceiling**: 22% of small GT is not covered by any detection at
-any confidence. No re-ranker can retrieve a box that was never proposed — which is
-the mechanical reason §2 found the +0.1288 oracle headroom unreachable.
+**89.8% of the GT is `small`**, and small ship AP is 0.3382 against medium's 0.6229. `rec@50` 0.778
+is a **ceiling**: 22% of small GT is not covered by any detection at any confidence. No re-ranker can
+retrieve a box that was never proposed — the mechanical reason §2 found the +0.1288 oracle headroom
+unreachable.
 
-This is the screen `i4_fullres_prep` was gated on, and it says go. Not launched:
-re-prepping 127k images at full resolution is hours of GPU and tens of GB, and it
-should be a deliberate decision rather than a queue side-effect.
+This is the screen `i4_fullres_prep` was gated on, and it says go. Not launched: re-prepping 127k
+images at full resolution is hours of GPU and tens of GB, and it should be a deliberate decision
+rather than a queue side-effect.
 
 ---
 
@@ -703,26 +650,24 @@ should be a deliberate decision rather than a queue side-effect.
 
 `runs/eval/night_restore_audit.md`. Writes no labels, launches no training.
 
-[[project-visfilter-night-cut]] records `filter_night_boxes.py --cut-dark
-pohang01:100` as removing 132,688 boxes from 17,502 frames, with 1,311 brighter
-frames keeping their labels. The audit adds what happened *inside* the frames it
-touched:
+[[project-visfilter-night-cut]] records `filter_night_boxes.py --cut-dark pohang01:100` as removing
+132,688 boxes from 17,502 frames, with 1,311 brighter frames keeping their labels. The audit adds
+what happened *inside* the frames it touched:
 
 | run | files | boxes before | after | dropped | drop rate | emptied frames |
 |---|---:|---:|---:|---:|---:|---:|
 | pohang01 | 17,502 | 132,688 | 0 | 132,688 | **1.000** | **17,502** |
 
-**Read that 1.000 carefully.** `audit_night_restore.py` enumerates
-`*.pre_visfilter` backups, i.e. only the files the filter modified, so the row
-cannot say anything about the 1,311 frames it left alone. What it does say is that
-`--cut-dark` is a **frame-level** decision: once a frame's content-median luminance
-fell below 100, *every* box in it went, whatever that individual box looked like.
+**Read that 1.000 carefully.** `audit_night_restore.py` enumerates `*.pre_visfilter` backups, i.e.
+only the files the filter modified, so the row cannot say anything about the 1,311 frames it left
+alone. What it does say is that `--cut-dark` is a **frame-level** decision: once a frame's
+content-median luminance fell below 100, *every* box in it went, whatever that individual box looked
+like.
 
-That is the gap. The filter's own **per-box** scores exist in
-`runs/visfilter/box_scores.csv`, and flagging required *all three* of intensity,
-gradient and local contrast to fail. Only **38,135** of the 120,829 scored boxes
-were flagged. **82,694 boxes were scored, would not have been flagged on their own
-merits, and were deleted anyway** because of the frame they sat in.
+That is the gap. The filter's own **per-box** scores exist in `runs/visfilter/box_scores.csv`, and
+flagging required *all three* of intensity, gradient and local contrast to fail. Only **38,135** of
+the 120,829 scored boxes were flagged. **82,694 boxes were scored, would not have been flagged on
+their own merits, and were deleted anyway** because of the frame they sat in.
 
 And the two populations overlap on every axis:
 
@@ -732,24 +677,23 @@ And the two populations overlap on every axis:
 | grad | 5.60 | 7.55 | 16.81 | 9.02 |
 | contrast | 1.09 | **2.95** | 2.35 | **0.37** |
 
-Flagged p90 (4.86) sits well above kept p10 (3.18) on `box_mean`, and the contrast
-distributions cross entirely. The decision rule's "cleanly separated → the filter
-was right" branch does not fire.
+Flagged p90 (4.86) sits well above kept p10 (3.18) on `box_mean`, and the contrast distributions
+cross entirely. The decision rule's "cleanly separated → the filter was right" branch does not fire.
 
-The stake: **2,068 night val frames carrying 16,179 GT boxes**, which VIS currently
-recovers **0.0000** of. That is the number the night half of every benchmark cell is
-scored against, and no cross-modal lever can touch it — the training labels for it
-were deleted. All 17,502 `.pre_visfilter` backups exist, so `--restore` is available.
+The stake: **2,068 night val frames carrying 16,179 GT boxes**, which VIS currently recovers
+**0.0000** of. That is the number the night half of every benchmark cell is scored against, and no
+cross-modal lever can touch it — the training labels for it were deleted. All 17,502
+`.pre_visfilter` backups exist, so `--restore` is available.
 
-This does not say the filter was wrong — it says the deletion was **broader than
-the evidence supported**, and the 82,694 unflagged boxes are the recoverable
-population. The sound next move is to restore above a threshold **as ignore-regions,
-not as positives**, and fine-tune. Held: it is a training decision, not a queue job.
+This does not say the filter was wrong — it says the deletion was **broader than the evidence
+supported**, and the 82,694 unflagged boxes are the recoverable population. The sound next move is to
+restore above a threshold **as ignore-regions, not as positives**, and fine-tune. Held: a training
+decision, not a queue job.
 
 ### 7.1 The restore, executed
 
-Pre-registered at `docs/prereg-night-label-restore.md`, committed `030244e`
-**before any label was touched**. Two steps, both verified:
+Pre-registered at `docs/prereg-night-label-restore.md`, committed `030244e` **before any label was
+touched**. Two steps, both verified:
 
 | step | result |
 |---|---|
@@ -757,51 +701,48 @@ Pre-registered at `docs/prereg-night-label-restore.md`, committed `030244e`
 | `restore_night_perbox.py --execute` | **38,135** flagged boxes re-dropped across 10,766 files |
 | net | **+94,553 boxes**; `pohang01` TRAIN 2,031 → **96,584** |
 
-The per-box verdict comes from the committed `runs/visfilter/box_scores.csv` rather
-than a fresh scoring pass, so the labels match the audit that justified them
-box-for-box. `line_idx` alignment against the restored files was checked first
-(0 out of range across 2,819 sampled files) — an off-by-one there would have
-deleted a different 38,135 boxes and nothing downstream would have noticed.
+The per-box verdict comes from the committed `runs/visfilter/box_scores.csv` rather than a fresh
+scoring pass, so the labels match the audit that justified them box-for-box. `line_idx` alignment
+against the restored files was checked first (0 out of range across 2,819 sampled files) — an
+off-by-one there would have deleted a different 38,135 boxes and nothing downstream would have
+noticed.
 
 **Provenance, since `runs/` is gitignored and the manifest cannot be tracked:**
 
-* VIS train label hash **`b92739202127b6d8e3bbe948fe556bd440116ce83d23485438e5cacf0deb84f7`**
-  (was `287b11c50b5a…`). **This now diverges from the copy on `dgxanode01`** — quote
-  it before any server run mixes the two.
+* VIS train label hash **`b92739202127b6d8e3bbe948fe556bd440116ce83d23485438e5cacf0deb84f7`** (was
+  `287b11c50b5a…`). **This now diverges from the copy on `dgxanode01`** — quote it before any server
+  run mixes the two.
 * thresholds `t_int` 45.0, `t_grad` 8.0, `t_contrast` 10.0, `dark_median` 40.0
 * `runs/visfilter/perbox_restore_manifest.json` holds the full record locally.
 
-`.pre_visfilter` backups are written once and never clobbered
-(`filter_night_boxes.py:617`), so the original pre-filter state survives both
-operations. `val`/`test` and all IR labels are untouched.
+`.pre_visfilter` backups are written once and never clobbered (`filter_night_boxes.py:617`), so the
+original pre-filter state survives both operations. `val`/`test` and all IR labels are untouched.
 
-Two traps handled rather than assumed. The Ultralytics label cache was moved aside
-instead of trusted to invalidate itself across a 10,766-file rewrite; the retrain's
-scan then reported **771 backgrounds of 48,136**, down from ~9,400, which is the
-proof the new labels are in use. And `restore_night_perbox.py` now **refuses to
-re-execute** while its manifest exists: `line_idx` indexes the *restored* file, so a
-second run would apply the same indices to shortened files and delete the wrong
-boxes — the built-in `max(idxs) >= len(lines)` check catches only the files that
-shrank past the highest index, not the rest.
+Two traps handled rather than assumed. The Ultralytics label cache was moved aside instead of trusted
+to invalidate itself across a 10,766-file rewrite; the retrain's scan then reported **771 backgrounds
+of 48,136**, down from ~9,400, which is the proof the new labels are in use. And
+`restore_night_perbox.py` now **refuses to re-execute** while its manifest exists: `line_idx` indexes
+the *restored* file, so a second run would apply the same indices to shortened files and delete the
+wrong boxes — the built-in `max(idxs) >= len(lines)` check catches only the files that shrank past the
+highest index, not the rest.
 
-**What is being measured, and what cannot be.** `veto_vis` fires on **100% of night
-frames**, so the fused night number is `ir_only` by construction and cannot move
-whatever the retrained detector learns. The pre-registered endpoint is therefore
-VIS-only `mAP@50-95` on the 2,068 night val frames: **DEAD** < 0.005, **WEAK**
-0.005–0.02, **ALIVE** ≥ 0.02, with a day guard at `−max(2 × sd_paired, 0.002)`.
+**What is being measured, and what cannot be.** `veto_vis` fires on **100% of night frames**, so the
+fused night number is `ir_only` by construction and cannot move whatever the retrained detector
+learns. The pre-registered endpoint is therefore VIS-only `mAP@50-95` on the 2,068 night val frames:
+**DEAD** < 0.005, **WEAK** 0.005–0.02, **ALIVE** ≥ 0.02, with a day guard at
+`−max(2 × sd_paired, 0.002)`.
 
-The prereg also records why a null here would be weak: the fine-tune starts from a
-checkpoint trained on *empty* night labels, so the initialisation already encodes
-"night frames contain nothing". **ALIVE** would be strong evidence; **DEAD** is
-provisional and cannot separate a blind sensor from an unbudged initialisation.
-Settling that needs a from-scratch run (~13.7 h), which the prereg does not
+The prereg also records why a null here would be weak: the fine-tune starts from a checkpoint trained
+on *empty* night labels, so the initialisation already encodes "night frames contain nothing".
+**ALIVE** would be strong evidence; **DEAD** is provisional and cannot separate a blind sensor from an
+unbudged initialisation. Settling that needs a from-scratch run (~13.7 h), which the prereg does not
 authorise.
 
 ### 7.2 The verdict — ALIVE, by 12.6×
 
-`runs/eval/night_restore_verdict.md`, scored by `scripts/eval_night_restore.py`
-against the bands fixed in `030244e`, committed before a single label was touched.
-Training early-stopped at epoch 20 with **best at epoch 10**, patience 10, 5.82 h.
+`runs/eval/night_restore_verdict.md`, scored by `scripts/eval_night_restore.py` against the bands
+fixed in `030244e`, committed before a single label was touched. Training early-stopped at epoch 20
+with **best at epoch 10**, patience 10, 5.82 h.
 
 | endpoint | new | old (shipped) | delta |
 |---|---:|---:|---:|
@@ -809,66 +750,58 @@ Training early-stopped at epoch 20 with **best at epoch 10**, patience 10, 5.82 
 | night val `mAP@50` | 0.4957 | 0.0000 | +0.4957 |
 | paired day `mAP@50-95` (1,200 fr) | 0.3395 | 0.3233 | +0.0162 |
 
-Paired interval on the night delta **[0.2473, 0.2567]**, se 0.0024, sign-flip
-0.000. The band was **ALIVE ≥ 0.02**; the measurement is **0.2520**, twelve and a
-half times it. The day guard floor was `−max(2 × se, 0.002)` = **−0.0045** and the
-observed day delta is **+0.0162** → **PASS**.
+Paired interval on the night delta **[0.2473, 0.2567]**, se 0.0024, sign-flip 0.000. The band was
+**ALIVE ≥ 0.02**; the measurement is **0.2520**, twelve and a half times it. The day guard floor was
+`−max(2 × se, 0.002)` = **−0.0045** and the observed day delta is **+0.0162** → **PASS**.
 
-**The shipped VIS detector was not blind at night. It was untrained at night.**
-The 0.0000 that has stood in every night table since the filter ran was
-manufactured by deleting 132,688 boxes, and it reverses completely the moment they
-come back.
+**The shipped VIS detector was not blind at night. It was untrained at night.** The 0.0000 that has
+stood in every night table since the filter ran was manufactured by deleting 132,688 boxes, and it
+reverses completely the moment they come back.
 
-One class question resolved itself. Night val GT is **16,179 boxes, every one class
-0** — there is not a single buoy in `pohang01` val. `presort` builds its class list
-from GT, so `map50_95` on this subset *is* ship AP, and no buoy zero is averaged
-in. The prereg bands apply as written with no interpretation.
+One class question resolved itself. Night val GT is **16,179 boxes, every one class 0** — there is not
+a single buoy in `pohang01` val. `presort` builds its class list from GT, so `map50_95` on this
+subset *is* ship AP, and no buoy zero is averaged in. The prereg bands apply as written with no
+interpretation.
 
-**What the +0.0162 day number is not.** It is not evidence that the restore helps
-day. The two arms differ in *two* things — the labels and ten extra epochs over the
-same day frames — and the report's own §2 carries the tell: **buoy AP gained
-+0.0300 while ship gained +0.0024**. Night val contains no buoys, so the class that
-*cannot* benefit from restored night labels gained 12× more than the class that
-can. That is training budget, not the restore. The guard is one-sided, so the
-verdict is untouched; the defensible claim is **"day did not regress"**, not "day
-improved".
+**What the +0.0162 day number is not.** It is not evidence that the restore helps day. The two arms
+differ in *two* things — the labels and ten extra epochs over the same day frames — and the report's
+own §2 carries the tell: **buoy AP gained +0.0300 while ship gained +0.0024**. Night val contains no
+buoys, so the class that *cannot* benefit from restored night labels gained 12× more than the class
+that can. That is training budget, not the restore. The guard is one-sided, so the verdict is
+untouched; the defensible claim is **"day did not regress"**, not "day improved".
 
 ### 7.3 What this puts in question — and what it does not
 
-`veto_vis` fires on **100% of night frames**. The justification on record for that
-was that VIS recovers 0.0000 at night. That justification was an artefact of the
-label filter, not a property of the sensor.
+`veto_vis` fires on **100% of night frames**. The justification on record for that was that VIS
+recovers 0.0000 at night. That justification was an artefact of the label filter, not a property of
+the sensor.
 
-The distinction that keeps this honest: the veto is **not wrong for the checkpoint
-it ships with**. `gauss_vis_seed0` genuinely scores 0.0000 on night val — §7.2
-measures it directly. What §7.2 shows is that a *differently trained* VIS is not
-blind, so the veto is a correct response to a detector this project crippled rather
-than to darkness.
+The distinction that keeps this honest: the veto is **not wrong for the checkpoint it ships with**.
+`gauss_vis_seed0` genuinely scores 0.0000 on night val — §7.2 measures it directly. What §7.2 shows
+is that a *differently trained* VIS is not blind, so the veto is a correct response to a detector this
+project crippled rather than to darkness.
 
-**Nothing about the veto changes in this run.** The prereg (rule: out of scope) says
-an ALIVE verdict licenses *a new pre-registration* about the night veto, not a veto
-change — and the shipped `crossmodal26m` numbers keep reproducing from
-`runs/full_scale/gauss_vis_seed0/`, which this run never wrote. The fused benchmark
-was deliberately not run at all: with the veto firing on every night frame the fused
-night number is `ir_only` by construction and cannot move, so scoring the restore on
-it would have manufactured a null that means nothing.
+**Nothing about the veto changes in this run.** The prereg (rule: out of scope) says an ALIVE verdict
+licenses *a new pre-registration* about the night veto, not a veto change — and the shipped
+`crossmodal26m` numbers keep reproducing from `runs/full_scale/gauss_vis_seed0/`, which this run never
+wrote. The fused benchmark was deliberately not run at all: with the veto firing on every night frame
+the fused night number is `ir_only` by construction and cannot move, so scoring the restore on it
+would have manufactured a null that means nothing.
 
-Three earlier conclusions are now conditional on a crippled VIS and need re-reading,
-not retracting:
+Three earlier conclusions are now conditional on a crippled VIS and need re-reading, not retracting:
 
-* the night arm of every fusion gate, which has been scoring `ir_only` against
-  `ir_only` on night cells;
-* "night is single-sensor by physics" — the audit's second branch, which §7.2
-  removes the evidence for;
-* the cross-modal gate's night behaviour (`docs/…crossmodal`), whose *mechanism* is
-  untouched but whose *necessity* at night is now open.
+* the night arm of every fusion gate, which has been scoring `ir_only` against `ir_only` on night
+  cells;
+* "night is single-sensor by physics" — the audit's second branch, which §7.2 removes the evidence
+  for;
+* the cross-modal gate's night behaviour (`docs/…crossmodal`), whose *mechanism* is untouched but
+  whose *necessity* at night is now open.
 
 ### 7.4 Phase 1, unpooled — the handicap was total, and the ranking survives
 
-`runs/eval/phase1_day_night_slice.md`, `scripts/slice_phase1_day_night.py`, 76 min
-over the 27 archived `main` checkpoints at
-`D:/Backup/Uncertain/phase1_benchmark/runs/`. No retraining, no label change — the
-same val list, simply not pooled before reporting.
+`runs/eval/phase1_day_night_slice.md`, `scripts/slice_phase1_day_night.py`, 76 min over the 27
+archived `main` checkpoints at `D:/Backup/Uncertain/phase1_benchmark/runs/`. No retraining, no label
+change — the same val list, simply not pooled before reporting.
 
 | check | result |
 |---|---|
@@ -877,20 +810,18 @@ same val list, simply not pooled before reporting.
 | night AP spread across variants | **0.0000** |
 | day ranking vs pooled ranking | **identical, all 9 positions** |
 
-The slice ran `classes=[0]` and night GT is 100% ship, so that zero is a real
-ship-only zero rather than a class-averaging artefact.
+The slice ran `classes=[0]` and night GT is 100% ship, so that zero is a real ship-only zero rather
+than a class-averaging artefact.
 
-This was written to test an assertion I had made, not to confirm one. When I
-recommended *against* redoing Phase 1, the argument was that the night handicap is
-uniform across rows so the ranking survives — true at the time only as a claim. It
-now has a measurement and it holds in the strongest available form: the handicap is
-not merely uniform, it is **total and identical**. `day − published` runs +0.045 to
-+0.056 and tracks each row's day AP, so the pooled numbers are the day numbers
-scaled by a near-constant and **the published variant selection stands unchanged**.
+This was written to test an assertion I had made, not to confirm one. When I recommended *against*
+redoing Phase 1, the argument was that the night handicap is uniform across rows so the ranking
+survives — true at the time only as a claim. It now has a measurement and it holds in the strongest
+available form: the handicap is not merely uniform, it is **total and identical**. `day − published`
+runs +0.045 to +0.056 and tracks each row's day AP, so the pooled numbers are the day numbers scaled
+by a near-constant and **the published variant selection stands unchanged**.
 
-One line in that report should not be over-read: the "by night AP" column of §3 is
-ordering nine tied zeros, so it is sort order, not a ranking. The meaningful figure
-is the spread of 0.0000.
+One line in that report should not be over-read: the "by night AP" column of §3 is ordering nine tied
+zeros, so it is sort order, not a ranking. The meaningful figure is the spread of 0.0000.
 
 ---
 
@@ -898,43 +829,40 @@ is the spread of 0.0000.
 
 ### 8.1 I8 — the second checkpoint is closed
 
-`runs/eval/checkpoint_ensemble.md`. A = `gauss_vis_seed0` (0.3233), B = its
-fine-tune (0.3144).
+`runs/eval/checkpoint_ensemble.md`. A = `gauss_vis_seed0` (0.3233), B = its fine-tune (0.3144).
 
-Matched lift of "B also fires": **0.93× / 1.00× / 1.55× / 1.97×** at IoU
-0.10/0.30/0.55/0.75. Raw lift reads 4.2–6.8×, which is confidence's own 4.8×
-(47% of VIS boxes sit below conf 0.05). Against the F1 reference points —
-cross-modal 2.08×, temporal 1.00× — this is temporal-support territory.
+Matched lift of "B also fires": **0.93× / 1.00× / 1.55× / 1.97×** at IoU 0.10/0.30/0.55/0.75. Raw
+lift reads 4.2–6.8×, which is confidence's own 4.8× (47% of VIS boxes sit below conf 0.05). Against
+the F1 reference points — cross-modal 2.08×, temporal 1.00× — this is temporal-support territory.
 
-Every arm confirms it: concat A+B **−0.0949**, WBF@0.55 −0.0021, WBF@0.85σ −0.0033,
-and the score-only `support` arm — the only cross-modal form that has ever worked —
-lands at **+0.0001**. Two checkpoints of the same model on the same data are not
-independent. **Closed.**
+Every arm confirms it: concat A+B **−0.0949**, WBF@0.55 −0.0021, WBF@0.85σ −0.0033, and the score-only
+`support` arm — the only cross-modal form that has ever worked — lands at **+0.0001**. Two checkpoints
+of the same model on the same data are not independent. **Closed.**
 
 ### 8.2 I7 — the gated `cap_ir_scale` was never actually measured
 
-`runs/eval/cap_ir_gated.md`, 1,787 s. Section 1 reproduces A2's tie cleanly: ×16
-beats ×4 on every clean-VIS cell (+0.0006 on clean/clean) and loses on every
-degraded-VIS cell (`blur_s3/clean` 0.0269 → 0.0266).
+`runs/eval/cap_ir_gated.md`, 1,787 s. Section 1 reproduces A2's tie cleanly: ×16 beats ×4 on every
+clean-VIS cell (+0.0006 on clean/clean) and loses on every degraded-VIS cell (`blur_s3/clean` 0.0269
+→ 0.0266).
 
-Section 2 gates the scale on the gate's IR-health flag. **`IR vetoed` = 0.000 on all
-eleven cells.** The gated arm is therefore identical to a ×16 constant by
-construction, and every delta in that table is the ×16 vs ×4 comparison relabelled.
+Section 2 gates the scale on the gate's IR-health flag. **`IR vetoed` = 0.000 on all eleven cells.**
+The gated arm is therefore identical to a ×16 constant by construction, and every delta in that table
+is the ×16 vs ×4 comparison relabelled.
 
-The doc's own decision rule anticipated this: the conditioning signal is wrong, not
-the idea. The IR-health veto does not fire on this benchmark — [[project-ir-night-switch-safety]]
-records that IR is uncorrupted in every cell — so the right conditioner is `ir_d2`,
-the multivariate health term, not the binary veto. **Unmeasured, not refuted.**
+The doc's own decision rule anticipated this: the conditioning signal is wrong, not the idea. The
+IR-health veto does not fire on this benchmark — [[project-ir-night-switch-safety]] records that IR is
+uncorrupted in every cell — so the right conditioner is `ir_d2`, the multivariate health term, not the
+binary veto. **Unmeasured, not refuted.**
 
 ### 8.3 I3b — the one2many cache is broken
 
-`runs/cache_o2m/gauss_vis_paired_clean.pkl`: **3.5 boxes/frame** (the o2o cache has
-16.6), `sigma_valid` False, agreement with base **0.000 at every IoU**, and every
-arm that uses its coordinates scores **AP 0.0000**.
+`runs/cache_o2m/gauss_vis_paired_clean.pkl`: **3.5 boxes/frame** (the o2o cache has 16.6),
+`sigma_valid` False, agreement with base **0.000 at every IoU**, and every arm that uses its
+coordinates scores **AP 0.0000**.
 
 A one2many head produces *more* boxes than one2one, not five times fewer. This is a
-coordinate-handling bug in `scripts/build_tta_o2m.py`, not a property of the branch.
-The o2m rows in `tta_o2m.md` measure my bug. **Unmeasured, not refuted.**
+coordinate-handling bug in `scripts/build_tta_o2m.py`, not a property of the branch. The o2m rows in
+`tta_o2m.md` measure my bug. **Unmeasured, not refuted.**
 
 ---
 
@@ -942,165 +870,147 @@ The o2m rows in `tta_o2m.md` measure my bug. **Unmeasured, not refuted.**
 
 ### 9.1 `probe_oracle_headroom.py` — silent cross-substrate IR misalignment
 
-`i1_oracle_day` crashed with `IndexError: list index out of range` at line 63. The
-job passed `--vis-cache runs/cache_day/...` but no `--ir-cache`, so `ir_path` fell
-back to the `--cache-dir` default `runs/cache_m/gauss_ir_paired_clean.pkl` — a real,
-loadable, **completely unrelated** 2,232-frame cache. `have_ir` was True and the
-union-recall loop indexed a 9,284-frame VIS list against it.
+`i1_oracle_day` crashed with `IndexError: list index out of range` at line 63. The job passed
+`--vis-cache runs/cache_day/...` but no `--ir-cache`, so `ir_path` fell back to the `--cache-dir`
+default `runs/cache_m/gauss_ir_paired_clean.pkl` — a real, loadable, **completely unrelated**
+2,232-frame cache. `have_ir` was True and the union-recall loop indexed a 9,284-frame VIS list against
+it.
 
-**The crash was the good outcome.** Had the day substrate been ≤ 2,232 frames, it
-would have computed cross-modal union recall between IR boxes and VIS frames *from
-different images* and printed a plausible number. Fixed with a length-alignment
-guard that disables the section and states the reason in the output:
+**The crash was the good outcome.** Had the day substrate been ≤ 2,232 frames, it would have computed
+cross-modal union recall between IR boxes and VIS frames *from different images* and printed a
+plausible number. Fixed with a length-alignment guard that disables the section and states the reason
+in the output:
 
-> Skipped: `runs\cache_m\gauss_ir_paired_clean.pkl` holds 2232 frames against this
-> substrate's 9284 — not index-aligned, so no IR box can be attributed to a VIS
-> frame.
+> Skipped: `runs\cache_m\gauss_ir_paired_clean.pkl` holds 2232 frames against this substrate's 9284 —
+> not index-aligned, so no IR box can be attributed to a VIS frame.
 
-Two failed patch attempts on the way (a multi-line `assert old2 in s` mismatch, then
-a `split`/`join` that wrote a literal backslash-n as a real newline and produced
-`SyntaxError: unterminated string literal`). Third attempt clean; probe reran in 6.4 s.
+Two failed patch attempts on the way (a multi-line `assert old2 in s` mismatch, then a `split`/`join`
+that wrote a literal backslash-n as a real newline and produced `SyntaxError: unterminated string
+literal`). Third attempt clean; probe reran in 6.4 s.
 
 ### 9.2 `sweep_vis_soft_nms.py` — I selected on the held-out half
 
-Covered in §4.1. The line was
-`best = max(sorted(by_test, reverse=True), key=lambda s: by_test[s])`. It converts
-the project's only held-out day data into a selection set. Caught by reading my own
-output rather than by any test — which is the argument for the `--ship-sigma`
-guard now in the script, and for pre-registering widths in general.
+Covered in §4.1. The line was `best = max(sorted(by_test, reverse=True), key=lambda s: by_test[s])`.
+It converts the project's only held-out day data into a selection set. Caught by reading my own output
+rather than by any test — which is the argument for the `--ship-sigma` guard now in the script, and
+for pre-registering widths in general.
 
-Both bugs share a shape: **a default that silently does something plausible.** A
-`--ir-cache` default that points at whatever is in `--cache-dir`; a selection rule
-that reads whichever column is available. Neither would have raised.
+Both bugs share a shape: **a default that silently does something plausible.** A `--ir-cache` default
+that points at whatever is in `--cache-dir`; a selection rule that reads whichever column is
+available. Neither would have raised.
 
 ---
 
 ## 10. Corrections to things I had stated
 
-1. **"The learned re-ranker is worth +0.0037 out of fold."** Withdrawn. That was
-   three runs; on four it is **+0.0000 at best**, and every non-zero λ is negative.
-   §2.2.
-2. **"The gate passed on every cell."** True of run 1 only, and run 1's σ was
-   selected on TEST. At the pre-registered width one cell is −0.0004. §4.
-3. **"The night filter's drop rate was 1.000 across pohang01."** Mine, written
-   earlier today and corrected in §7 before this log shipped. The audit only
-   enumerates files that *have* a backup, so 1.000 means "every frame the filter
-   touched was fully emptied", not "every pohang01 frame". 1,311 brighter frames
-   kept their labels, exactly as the manifest always said. The real finding is the
-   frame-level/box-level gap: **82,694 deleted boxes would not have been flagged
-   on their own scores.**
-4. **The o2m rows in `tta_o2m.md` are not a measurement of the one2many branch.**
-   They measure a build bug. §8.3.
-5. **The gated `cap_ir_scale` table is not a measurement of gating.** `IR vetoed` is
-   0.000 everywhere. §8.2.
-6. **"Re-run the gate on a day substrate at `pohang04` scale."** Mine, §4.4, and
-   impossible. I wrote it without checking IR availability. Measured: VIS val is
-   11,352 frames (pohang00 1672, 01 2068, 02 2690, 03 2579, 04 2343) but **IR val is
-   2,234** (pohang00 836, 01 1034, 02 247, 03 117) and **`pohang04` has no IR at
-   all**. The day half of IR is 836+247+117 = **exactly the 1,200 paired frames the
-   gate already uses.** There is no wider fused substrate to move to. §4.5 takes the
+1. **"The learned re-ranker is worth +0.0037 out of fold."** Withdrawn. That was three runs; on four
+   it is **+0.0000 at best**, and every non-zero λ is negative. §2.2.
+2. **"The gate passed on every cell."** True of run 1 only, and run 1's σ was selected on TEST. At the
+   pre-registered width one cell is −0.0004. §4.
+3. **"The night filter's drop rate was 1.000 across pohang01."** Mine, written earlier today and
+   corrected in §7 before this log shipped. The audit only enumerates files that *have* a backup, so
+   1.000 means "every frame the filter touched was fully emptied", not "every pohang01 frame". 1,311
+   brighter frames kept their labels, exactly as the manifest always said. The real finding is the
+   frame-level/box-level gap: **82,694 deleted boxes would not have been flagged on their own scores.**
+4. **The o2m rows in `tta_o2m.md` are not a measurement of the one2many branch.** They measure a build
+   bug. §8.3.
+5. **The gated `cap_ir_scale` table is not a measurement of gating.** `IR vetoed` is 0.000 everywhere.
+   §8.2.
+6. **"Re-run the gate on a day substrate at `pohang04` scale."** Mine, §4.4, and impossible. I wrote it
+   without checking IR availability. Measured: VIS val is 11,352 frames (pohang00 1672, 01 2068, 02
+   2690, 03 2579, 04 2343) but **IR val is 2,234** (pohang00 836, 01 1034, 02 247, 03 117) and
+   **`pohang04` has no IR at all**. The day half of IR is 836+247+117 = **exactly the 1,200 paired
+   frames the gate already uses.** There is no wider fused substrate to move to. §4.5 takes the
    corruption-draw axis instead, which was the un-measured one all along.
-7. **"The bar was tripped by draw noise, so the arm is fine."** Half right, and I
-   should not have implied the rest. §4.5 is correct about the *day* cell. The
-   draw-averaged gate then failed on **night**, at −1.03e-5 on 4 of 4 draws — a
-   sign-stable effect that averaging cannot touch. §4.6.
+7. **"The bar was tripped by draw noise, so the arm is fine."** Half right, and I should not have
+   implied the rest. §4.5 is correct about the *day* cell. The draw-averaged gate then failed on
+   **night**, at −1.03e-5 on 4 of 4 draws — a sign-stable effect that averaging cannot touch. §4.6.
 
 ---
 
 ## 11. Open
 
-1. **The soft-NMS decision** (§4.6) — **closed: do not adopt.** Failed a
-   draw-averaged, pre-registered bar on the night arm at −1.03e-5, 4/4 draws. The
-   code stays in the tree behind `crossmodal26m_snms`; the shipped preset has not
-   moved. Re-opening it requires a *third* pre-registration with an explicit
-   equivalence margin, written before the run — §4.7 says what it should contain.
-2. **Re-pricing the inherited constants — done, §4.10.** All three stand. What
-   is left on this axis is narrower: `cap_ir_scale` ×8 is the one alternative that
-   came close (5 cells better, TEST +0.0006, 2 cells worse), and rule 7 forbids
-   this run from selecting it. `iou_thr` has a flat top between 0.85 and 1.0, so
-   naming merging as OFF (§3.4) is now a free simplification rather than a guess.
-3. **Every gate rule this project writes needs an absolute magnitude floor**
-   (§4.10). Twice now a bar with no floor has turned into a sign test on numbers
-   near 1e-5 — once rejecting soft-NMS, once mislabelling 8 verdicts here. The
-   measured margin does not supply the floor on cells where the arm barely moves. A single corruption draw cannot
-   resolve ±0.001 on cells scoring ~0.027, and every adoption decision this project
-   made on those cells was taken with that instrument. `cap_ir_scale` ×4, the veil
-   veto repair and `iou_thr` 0.85 were all decided under it. Some turned on margins
-   far larger than the noise; **which ones did not is unmeasured.** This is now the
-   highest-value open item and it is cheap: `scripts/gate_snms_draw_avg.py` already
-   does the draw loop.
-2. **I4 full-resolution retrain** — the screen says go (§6.3). Not launched; hours of
-   GPU and tens of GB.
-3. **I5 night restore — done, and it is the largest result in this log (§7.2).**
-   Night VIS **0.0000 → 0.2520**, day guard passes. What is now open is the
-   consequence, not the restore: `veto_vis` fires on 100% of night frames on a
-   justification that no longer holds, and per the prereg that needs **its own
-   pre-registration** before a single veto parameter moves. Two things must be in
-   it — a from-scratch (not fine-tuned) VIS run to remove the initialisation
-   caveat, and a magnitude floor per item 3 above. Also open: every night-cell
-   fusion number in this project was scored `ir_only` vs `ir_only` and is
-   uninformative about fusion, and the shipped VIS label hash now diverges from
+1. **The soft-NMS decision** (§4.6) — **closed: do not adopt.** Failed a draw-averaged,
+   pre-registered bar on the night arm at −1.03e-5, 4/4 draws. The code stays in the tree behind
+   `crossmodal26m_snms`; the shipped preset has not moved. Re-opening it requires a *third*
+   pre-registration with an explicit equivalence margin, written before the run — §4.7 says what it
+   should contain.
+2. **Re-pricing the inherited constants — done, §4.10.** All three stand. What is left on this axis is
+   narrower: `cap_ir_scale` ×8 is the one alternative that came close (5 cells better, TEST +0.0006, 2
+   cells worse), and rule 7 forbids this run from selecting it. `iou_thr` has a flat top between 0.85
+   and 1.0, so naming merging as OFF (§3.4) is now a free simplification rather than a guess.
+3. **Every gate rule this project writes needs an absolute magnitude floor** (§4.10). Twice now a bar
+   with no floor has turned into a sign test on numbers near 1e-5 — once rejecting soft-NMS, once
+   mislabelling 8 verdicts here. The measured margin does not supply the floor on cells where the arm
+   barely moves. A single corruption draw cannot resolve ±0.001 on cells scoring ~0.027, and every
+   adoption decision this project made on those cells was taken with that instrument. `cap_ir_scale`
+   ×4, the veil veto repair and `iou_thr` 0.85 were all decided under it. Some turned on margins far
+   larger than the noise; **which ones did not is unmeasured.** This is now the highest-value open item
+   and it is cheap: `scripts/gate_snms_draw_avg.py` already does the draw loop.
+4. **I4 full-resolution retrain** — the screen says go (§6.3). Not launched; hours of GPU and tens of
+   GB.
+5. **I5 night restore — done, and it is the largest result in this log (§7.2).** Night VIS **0.0000 →
+   0.2520**, day guard passes. What is now open is the consequence, not the restore: `veto_vis` fires
+   on 100% of night frames on a justification that no longer holds, and per the prereg that needs
+   **its own pre-registration** before a single veto parameter moves. Two things must be in it — a
+   from-scratch (not fine-tuned) VIS run to remove the initialisation caveat, and a magnitude floor
+   per item 3. Also open: every night-cell fusion number in this project was scored `ir_only` vs
+   `ir_only` and is uninformative about fusion, and the shipped VIS label hash now diverges from
    `dgxanode01` (§7.1).
-4. **Per-class levers** — `support_gamma` is provably ship-only (§6.2). Splitting it
-   per class is cheap and untried.
-5. **`merge_iou` as an explicit "off"** (§3.4) — naming what the architecture already
-   does. Cheap, untried.
-6. **I7 re-conditioned on `ir_d2`** rather than the binary veto (§8.2).
-7. **I3b — fix `build_tta_o2m.py`** before the one2many branch can be called anything.
-8. **The +0.1288 oracle headroom is still open and still unreached.** §2.2 closes the
-   *feature-based re-ranking* route to it. §6.3 says the binding constraint is recall
-   on 12-px objects, which is a detector/resolution problem.
-9. Still open from 2026-09-01: the authority bound remains unpriced; `cap_ir_scale` ×4
-   has still not been re-selected under the run-disjoint discipline; the learned gate
-   is still in no headline table.
+6. **Per-class levers** — `support_gamma` is provably ship-only (§6.2). Splitting it per class is
+   cheap and untried.
+7. **`merge_iou` as an explicit "off"** (§3.4) — naming what the architecture already does. Cheap,
+   untried.
+8. **I7 re-conditioned on `ir_d2`** rather than the binary veto (§8.2).
+9. **I3b — fix `build_tta_o2m.py`** before the one2many branch can be called anything.
+10. **The +0.1288 oracle headroom is still open and still unreached.** §2.2 closes the *feature-based
+    re-ranking* route to it. §6.3 says the binding constraint is recall on 12-px objects, which is a
+    detector/resolution problem.
+11. Still open from 2026-09-01: the authority bound remains unpriced; `cap_ir_scale` ×4 has still not
+    been re-selected under the run-disjoint discipline; the learned gate is still in no headline table.
 
 ---
 
 ## 12. File index
 
 **New code.** `scripts/_ideas_common.py`, `scripts/run_ideas_queue.py`,
-`scripts/build_day_substrate.py`, `scripts/build_tta_o2m.py`,
-`scripts/fit_rerank.py`, `scripts/probe_oracle_headroom.py`,
-`scripts/probe_sigma_residual.py`, `scripts/probe_tta_o2m.py`,
+`scripts/build_day_substrate.py`, `scripts/build_tta_o2m.py`, `scripts/fit_rerank.py`,
+`scripts/probe_oracle_headroom.py`, `scripts/probe_sigma_residual.py`, `scripts/probe_tta_o2m.py`,
 `scripts/probe_within_modality.py`, `scripts/probe_checkpoint_ensemble.py`,
-`scripts/probe_ap_by_size.py`, `scripts/sweep_per_class.py`,
-`scripts/sweep_cap_ir_gated.py`, `scripts/sweep_merge_support_split.py`,
-`scripts/sweep_vis_soft_nms.py`, `scripts/smoke_vis_soft_nms.py`,
-`scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
+`scripts/probe_ap_by_size.py`, `scripts/sweep_per_class.py`, `scripts/sweep_cap_ir_gated.py`,
+`scripts/sweep_merge_support_split.py`, `scripts/sweep_vis_soft_nms.py`,
+`scripts/smoke_vis_soft_nms.py`, `scripts/audit_night_restore.py`, `scripts/redraw_snms_cell.py`,
 `scripts/gate_snms_draw_avg.py`, `scripts/probe_metric_noise_floor.py`,
-`scripts/probe_delta_noise_floor.py`,
-`scripts/reprice_constants_draw_avg.py`, `scripts/restore_night_perbox.py`,
-`scripts/train_night_restore.py`, `scripts/eval_night_restore.py`,
-`scripts/slice_phase1_day_night.py`, `scripts/queue_phase1_slice.py`.
+`scripts/probe_delta_noise_floor.py`, `scripts/reprice_constants_draw_avg.py`,
+`scripts/restore_night_perbox.py`, `scripts/train_night_restore.py`,
+`scripts/eval_night_restore.py`, `scripts/slice_phase1_day_night.py`,
+`scripts/queue_phase1_slice.py`.
 
 **Pre-registrations.** `docs/prereg-snms-draw-averaged-gate.md` (`1fbf735`),
-`docs/prereg-reprice-inherited-constants.md` (`6b49ca0`) and
-`docs/prereg-night-label-restore.md` (`030244e`), each committed before the run it
-governs existed.
+`docs/prereg-reprice-inherited-constants.md` (`6b49ca0`) and `docs/prereg-night-label-restore.md`
+(`030244e`), each committed before the run it governs existed.
 
-**Modified.** `src/uqfusion/eval/irdedup.py` (+`soft_nms_record`,
-`soft_nms_records`); `src/uqfusion/eval/ctx.py` (+`vis_soft_nms`,
-+`preset="crossmodal26m_snms"`). 82 insertions, 1 deletion.
+**Modified.** `src/uqfusion/eval/irdedup.py` (+`soft_nms_record`, `soft_nms_records`);
+`src/uqfusion/eval/ctx.py` (+`vis_soft_nms`, +`preset="crossmodal26m_snms"`). 82 insertions, 1
+deletion.
 
-**New results** (all under `runs/eval/`): `rerank_loro`, `rerank_loro_day`,
-`oracle_headroom`, `oracle_headroom_day`, `sigma_residual`, `sigma_residual_day`,
-`tta_o2m`, `within_modality`, `merge_support_split`, `checkpoint_ensemble`,
-`cap_ir_gated`, `per_class_levers`, `ap_by_size`, `night_restore_audit`,
-`vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
-`snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`,
-`reprice_constants`, `night_restore_verdict`, `phase1_day_night_slice`.
+**New results** (all under `runs/eval/`): `rerank_loro`, `rerank_loro_day`, `oracle_headroom`,
+`oracle_headroom_day`, `sigma_residual`, `sigma_residual_day`, `tta_o2m`, `within_modality`,
+`merge_support_split`, `checkpoint_ensemble`, `cap_ir_gated`, `per_class_levers`, `ap_by_size`,
+`night_restore_audit`, `vis_soft_nms_adoption`, `vis_soft_nms_adoption_v2`, `snms_cell_redraw`,
+`snms_gate_draw_avg`, `metric_noise_floor`, `delta_noise_floor`, `reprice_constants`,
+`night_restore_verdict`, `phase1_day_night_slice`.
 
-**New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames),
-`runs/cache_tta/` (4 views), `runs/cache_o2m/` (broken — see §8.3),
-`runs/cache_m_draw{901..905}/` (corruption redraws; uncorrupted members hard-linked
-from `runs/cache_m`, which is never written).
+**New caches.** `runs/cache_day/` (I0 substrate, 9,284 day frames), `runs/cache_tta/` (4 views),
+`runs/cache_o2m/` (broken — see §8.3), `runs/cache_m_draw{901..905}/` (corruption redraws;
+uncorrupted members hard-linked from `runs/cache_m`, which is never written).
 
-**Queue.** `runs/queue_ideas/` — `run_console.log`, `state.json`, `logs/` (16 jobs,
-15 succeeded, `i1_oracle_day` failed then fixed and rerun).
+**Queue.** `runs/queue_ideas/` — `run_console.log`, `state.json`, `logs/` (16 jobs, 15 succeeded,
+`i1_oracle_day` failed then fixed and rerun).
 
-**Companion.** `docs/architecture-ideas-2026-09-01.md` — the argued list these jobs
-were generated from.
+**Companion.** `docs/architecture-ideas-2026-09-01.md` — the argued list these jobs were generated
+from.
 
-**Commits.** `44274a3` the ideas queue and the two source edits; `1fbf735` the
-pre-registration and `redraw_snms_cell.py`, deliberately committed *before* the
-draw-averaged gate ran; then this log and `gate_snms_draw_avg.py`.
+**Commits.** `44274a3` the ideas queue and the two source edits; `1fbf735` the pre-registration and
+`redraw_snms_cell.py`, deliberately committed *before* the draw-averaged gate ran; then this log and
+`gate_snms_draw_avg.py`.

@@ -101,7 +101,7 @@ def main() -> int:
           f"'added' at every threshold)")
 
     # ---- 3. mAP effect at representative thresholds --------------------------
-    ctx = load_context(conditions=("clean",), verbose=False)
+    ctx = load_context(preset="adopted", conditions=("clean",), verbose=False)
     base_res = run_systems(ctx, "clean")
     base_parts = {
         "visible_only": frame_parts(ctx.vis_by_cond["clean"], ctx.gts),

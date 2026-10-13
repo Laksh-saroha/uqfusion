@@ -63,6 +63,14 @@ class LearnedGate:
     ) -> dict:
         from sklearn.linear_model import LogisticRegression
 
+        from uqfusion.eval.identity import assert_paired
+
+        # R-E1 slice 2. The gate's LABEL is "which stream was better on this frame",
+        # read off the two records at the same index. Mis-paired caches do not make it
+        # noisy, they make it wrong: it would learn to prefer whichever stream happens
+        # to look better on an unrelated instant.
+        assert_paired(vis_records, ir_records, where="LearnedGate.fit")
+
         all_u = [
             per_box_uncertainty(r["sigma_ltrb"], r["boxes_xyxy"])
             for r in list(vis_records) + list(ir_records) if len(r["conf"])

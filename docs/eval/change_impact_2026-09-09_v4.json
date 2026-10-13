@@ -1,0 +1,1661 @@
+{
+ "inflation": 1.95,
+ "convention": 0.00028501,
+ "n_significant": 74,
+ "n_lost": 20,
+ "items": [
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "clean / macro",
+   "delta": 0.001666580084725755,
+   "lo": -0.00017185499707856323,
+   "hi": 0.00415357889476543,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0019183683247926656,
+    0.006516227764303121
+   ],
+   "ci_full": [
+    -0.0022033783247926656,
+    0.006801237764303121
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "clean / ship",
+   "delta": 0.0052321142343585425,
+   "lo": 0.0035946545124399347,
+   "hi": 0.007476041026224252,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0020390677766172574,
+    0.009607771478496676
+   ],
+   "ci_full": [
+    0.0017540577766172573,
+    0.009892781478496676
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "fog / macro",
+   "delta": 0.008200980899061806,
+   "lo": 0.00670449982103607,
+   "hi": 0.009923892070759695,
+   "was_significant": true,
+   "ci_inflated": [
+    0.005282842796911621,
+    0.01156065768387269
+   ],
+   "ci_full": [
+    0.0049978327969116216,
+    0.01184566768387269
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "fog / ship",
+   "delta": 0.01607246863365409,
+   "lo": 0.013046455299859804,
+   "hi": 0.019236901202243025,
+   "was_significant": true,
+   "ci_inflated": [
+    0.010171742632755231,
+    0.022243112142402512
+   ],
+   "ci_full": [
+    0.00988673263275523,
+    0.02252812214240251
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / macro",
+   "delta": 0.003828585988630638,
+   "lo": 0.003126397972504424,
+   "hi": 0.004409022856711719,
+   "was_significant": true,
+   "ci_inflated": [
+    0.002459319357184521,
+    0.0049604378813887465
+   ],
+   "ci_full": [
+    0.002174309357184521,
+    0.005245447881388746
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / ship",
+   "delta": 0.006889537081324289,
+   "lo": 0.005427987998859051,
+   "hi": 0.007928631375859741,
+   "was_significant": true,
+   "ci_inflated": [
+    0.004039516370517074,
+    0.008915770955668421
+   ],
+   "ci_full": [
+    0.0037545063705170744,
+    0.009200780955668422
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "glare / macro",
+   "delta": 0.005440508844462955,
+   "lo": 0.0036282828739940447,
+   "hi": 0.007129008787599468,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0019066682020485804,
+    0.008733083733579157
+   ],
+   "ci_full": [
+    0.0016216582020485803,
+    0.009018093733579157
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "gated vs visible_only",
+   "item": "glare / ship",
+   "delta": 0.00859244028372641,
+   "lo": 0.006710486889747916,
+   "hi": 0.009979994346659598,
+   "was_significant": true,
+   "ci_inflated": [
+    0.004922631165468346,
+    0.011298170706446125
+   ],
+   "ci_full": [
+    0.004637621165468346,
+    0.011583180706446126
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "clean/day / macro",
+   "delta": -6.304990071331895e-05,
+   "lo": -0.0001123163125030649,
+   "hi": 9.388020844104653e-06,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.00015911940370332356,
+    7.820404632365708e-05
+   ],
+   "ci_full": [
+    -0.0004441294037033235,
+    0.0003632140463236571
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "clean/day / ship",
+   "delta": -9.55198039682692e-05,
+   "lo": -0.00014242409067668493,
+   "hi": -5.178294722674587e-05,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00018698316304967987,
+    -1.0232933322298712e-05
+   ],
+   "ci_full": [
+    -0.00047199316304967986,
+    0.00027477706667770126
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "lowlight/day / macro",
+   "delta": -0.009421243434996679,
+   "lo": -0.010477059073585513,
+   "hi": -0.008107303232547915,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.011480083930244906,
+    -0.006859060040221589
+   ],
+   "ci_full": [
+    -0.011765093930244906,
+    -0.00657405004022159
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "lowlight/day / ship",
+   "delta": -0.018814318608674926,
+   "lo": -0.02089321650367073,
+   "hi": -0.016111986675243363,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.022868169503916742,
+    -0.013544771338483377
+   ],
+   "ci_full": [
+    -0.02315317950391674,
+    -0.013259761338483377
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "glare/day / macro",
+   "delta": -0.0004036650190186175,
+   "lo": -0.0006692734437668102,
+   "hi": 2.3001528326080214e-05,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0009216014472775932,
+    0.0004283347483035431
+   ],
+   "ci_full": [
+    -0.0012066114472775932,
+    0.0007133447483035431
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: with_maha",
+   "item": "glare/day / ship",
+   "delta": -0.0006986589458286563,
+   "lo": -0.001046394242320825,
+   "hi": -0.0003543911892880364,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0013767427739883853,
+    -2.733682057444746e-05
+   ],
+   "ci_full": [
+    -0.0016617527739883854,
+    0.0002576731794255525
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: photometric_veto",
+   "item": "lowlight/day / macro",
+   "delta": -0.011721479113469234,
+   "lo": -0.012893659583012543,
+   "hi": -0.010291198483912103,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.014007231029078686,
+    -0.008932431885832828
+   ],
+   "ci_full": [
+    -0.014292241029078686,
+    -0.008647421885832828
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: photometric_veto",
+   "item": "lowlight/day / ship",
+   "delta": -0.02344486049987144,
+   "lo": -0.025787417900631045,
+   "hi": -0.020582427642977505,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.02801284743135267,
+    -0.017863116428928266
+   ],
+   "ci_full": [
+    -0.028297857431352668,
+    -0.017578106428928267
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / macro",
+   "delta": -0.00019051136191326756,
+   "lo": -0.0002342987176490806,
+   "hi": -0.00015270413874445902,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.000275896705598103,
+    -0.0001167872767340909
+   ],
+   "ci_full": [
+    -0.000560906705598103,
+    0.00016822272326590907
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / ship",
+   "delta": -0.00019051136191326756,
+   "lo": -0.0002342987176490806,
+   "hi": -0.00015270413874445902,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.000275896705598103,
+    -0.0001167872767340909
+   ],
+   "ci_full": [
+    -0.000560906705598103,
+    0.00016822272326590907
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/day / macro",
+   "delta": -0.0045474947361069246,
+   "lo": -0.005721436188090374,
+   "hi": -0.0031606007609071207,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00683668056747465,
+    -0.001843051484467307
+   ],
+   "ci_full": [
+    -0.00712169056747465,
+    -0.001558041484467307
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/day / ship",
+   "delta": -0.009503485706270805,
+   "lo": -0.011573938612287234,
+   "hi": -0.006834505617498376,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.013540868873002841,
+    -0.004298974533164568
+   ],
+   "ci_full": [
+    -0.013825878873002842,
+    -0.004013964533164568
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / macro",
+   "delta": -0.01470604362230113,
+   "lo": -0.01647483647673135,
+   "hi": -0.012782875219110241,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.018155189688440057,
+    -0.010955865236078898
+   ],
+   "ci_full": [
+    -0.018440199688440056,
+    -0.010670855236078898
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / ship",
+   "delta": -0.01470604362230113,
+   "lo": -0.01647483647673135,
+   "hi": -0.012782875219110241,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.018155189688440057,
+    -0.010955865236078898
+   ],
+   "ci_full": [
+    -0.018440199688440056,
+    -0.010670855236078898
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / macro",
+   "delta": -1.4221932643637691e-06,
+   "lo": -4.478183857495668e-06,
+   "hi": 0.0,
+   "was_significant": false,
+   "ci_inflated": [
+    -7.381374920970972e-06,
+    1.3510836011455806e-06
+   ],
+   "ci_full": [
+    -0.000292391374920971,
+    0.00028636108360114554
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / ship",
+   "delta": -1.4221932643637691e-06,
+   "lo": -4.478183857495668e-06,
+   "hi": 0.0,
+   "was_significant": false,
+   "ci_inflated": [
+    -7.381374920970972e-06,
+    1.3510836011455806e-06
+   ],
+   "ci_full": [
+    -0.000292391374920971,
+    0.00028636108360114554
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / macro",
+   "delta": -0.008651028889381532,
+   "lo": -0.010137303972777876,
+   "hi": -0.007063798078381042,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.011549265302004404,
+    -0.0055559288079305765
+   ],
+   "ci_full": [
+    -0.011834275302004404,
+    -0.005270918807930577
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal_v2 (reproduces under current code)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / ship",
+   "delta": -0.008651028889381532,
+   "lo": -0.010137303972777876,
+   "hi": -0.007063798078381042,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.011549265302004404,
+    -0.0055559288079305765
+   ],
+   "ci_full": [
+    -0.011834275302004404,
+    -0.005270918807930577
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "clean / macro",
+   "delta": 0.0007391525358516615,
+   "lo": -0.0010748504088023815,
+   "hi": 0.003228213631487483,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0027981532062237224,
+    0.005592821672341514
+   ],
+   "ci_full": [
+    -0.0030831632062237224,
+    0.005877831672341513
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "clean / ship",
+   "delta": 0.0033991683862692468,
+   "lo": 0.0017381762283143574,
+   "hi": 0.005624117234315198,
+   "was_significant": true,
+   "ci_inflated": [
+    0.00016023367825721262,
+    0.007737818639958851
+   ],
+   "ci_full": [
+    -0.00012477632174278736,
+    0.00802282863995885
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "fog / macro",
+   "delta": 0.008031722545088082,
+   "lo": 0.0065206453029966905,
+   "hi": 0.009725412767669374,
+   "was_significant": true,
+   "ci_inflated": [
+    0.005085121923009868,
+    0.0113344184791216
+   ],
+   "ci_full": [
+    0.004800111923009868,
+    0.011619428479121601
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "fog / ship",
+   "delta": 0.015745028171410592,
+   "lo": 0.012719632502291084,
+   "hi": 0.018846931461654635,
+   "was_significant": true,
+   "ci_inflated": [
+    0.009845506616627551,
+    0.021793739587386476
+   ],
+   "ci_full": [
+    0.009560496616627551,
+    0.022078749587386474
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / macro",
+   "delta": 0.0021201887607182716,
+   "lo": 0.0013453809482180258,
+   "hi": 0.0028645749351265577,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0006093135263427923,
+    0.0035717418008144293
+   ],
+   "ci_full": [
+    0.0003243035263427923,
+    0.0038567518008144294
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / ship",
+   "delta": 0.003488683666463259,
+   "lo": 0.0019154797411861206,
+   "hi": 0.004889249249671659,
+   "was_significant": true,
+   "ci_inflated": [
+    0.00042093601217283935,
+    0.006219786553719639
+   ],
+   "ci_full": [
+    0.00013592601217283937,
+    0.006504796553719639
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "glare / macro",
+   "delta": 0.004522902235300663,
+   "lo": 0.002611546346803852,
+   "hi": 0.006172168222479063,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0007957582527318811,
+    0.0077389709102985435
+   ],
+   "ci_full": [
+    0.0005107482527318811,
+    0.008023980910298543
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "gated vs visible_only",
+   "item": "glare / ship",
+   "delta": 0.006833094314164512,
+   "lo": 0.0049338257433862425,
+   "hi": 0.00817668032010922,
+   "was_significant": true,
+   "ci_inflated": [
+    0.003129520601146887,
+    0.009453087025756694
+   ],
+   "ci_full": [
+    0.002844510601146887,
+    0.009738097025756695
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "clean/day / macro",
+   "delta": -0.00015097715393752598,
+   "lo": -0.00029765159734091855,
+   "hi": -7.150561309469214e-07,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0004369923185741415,
+    0.00014203393678530315
+   ],
+   "ci_full": [
+    -0.0007220023185741415,
+    0.00042704393678530314
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "clean/day / ship",
+   "delta": -0.0002720791954830548,
+   "lo": -0.00035012377750081176,
+   "hi": -0.00016694530451614732,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00042426613041768085,
+    -6.70681080975852e-05
+   ],
+   "ci_full": [
+    -0.0007092761304176808,
+    0.00021794189190241478
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "lowlight/day / macro",
+   "delta": -0.01139030959854642,
+   "lo": -0.01285589155882481,
+   "hi": -0.009702214528408028,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.01424819442108928,
+    -0.008098524211776556
+   ],
+   "ci_full": [
+    -0.01453320442108928,
+    -0.007813514211776555
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "lowlight/day / ship",
+   "delta": -0.022766396232575956,
+   "lo": -0.02569663587684792,
+   "hi": -0.019408519157804612,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.028480363538906286,
+    -0.016218535936771836
+   ],
+   "ci_full": [
+    -0.028765373538906285,
+    -0.015933525936771838
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "glare/day / macro",
+   "delta": -0.002287829956788001,
+   "lo": -0.0028670219944609194,
+   "hi": -0.001397795818017937,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.003417254430250192,
+    -0.0005522633861863762
+   ],
+   "ci_full": [
+    -0.003702264430250192,
+    -0.0002672533861863762
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: with_maha",
+   "item": "glare/day / ship",
+   "delta": -0.0032484462298894012,
+   "lo": -0.004076814003241519,
+   "hi": -0.0023717425523407235,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00486376338792603,
+    -0.0015388740586694798
+   ],
+   "ci_full": [
+    -0.0051487733879260296,
+    -0.0012538640586694798
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: photometric_veto",
+   "item": "lowlight/day / macro",
+   "delta": -0.010182340239530591,
+   "lo": -0.011648049094151555,
+   "hi": -0.008727832193378578,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.01304047250604147,
+    -0.007346049549534167
+   ],
+   "ci_full": [
+    -0.01332548250604147,
+    -0.007061039549534167
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: photometric_veto",
+   "item": "lowlight/day / ship",
+   "delta": -0.02037144754725391,
+   "lo": -0.023302627188757502,
+   "hi": -0.01747049919421079,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.026087247848185915,
+    -0.014714598258819827
+   ],
+   "ci_full": [
+    -0.026372257848185914,
+    -0.014429588258819827
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / macro",
+   "delta": -0.0022451259529576995,
+   "lo": -0.002934454642722727,
+   "hi": -0.0011681593328041052,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0035893168979995033,
+    -0.0001450410436581906
+   ],
+   "ci_full": [
+    -0.0038743268979995033,
+    0.00013996895634180937
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / ship",
+   "delta": -0.0022451259529576995,
+   "lo": -0.002934454642722727,
+   "hi": -0.0011681593328041052,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0035893168979995033,
+    -0.0001450410436581906
+   ],
+   "ci_full": [
+    -0.0038743268979995033,
+    0.00013996895634180937
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/day / macro",
+   "delta": -0.0020910223444028115,
+   "lo": -0.0027355527286543266,
+   "hi": -0.0008125534578973565,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.003347856593693266,
+    0.0004019919842828258
+   ],
+   "ci_full": [
+    -0.003632866593693266,
+    0.0006870019842828258
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/day / ship",
+   "delta": -0.004587806787795714,
+   "lo": -0.005540010807118794,
+   "hi": -0.002372581471568337,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00644460462547572,
+    -0.0002681174211523283
+   ],
+   "ci_full": [
+    -0.00672961462547572,
+    1.6892578847671686e-05
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / macro",
+   "delta": -0.004830721889974715,
+   "lo": -0.005795126817947637,
+   "hi": -0.0038030372268589518,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.006711311499521913,
+    -0.0028267367968989768
+   ],
+   "ci_full": [
+    -0.006996321499521912,
+    -0.0025417267968989767
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / ship",
+   "delta": -0.004830721889974715,
+   "lo": -0.005795126817947637,
+   "hi": -0.0038030372268589518,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.006711311499521913,
+    -0.0028267367968989768
+   ],
+   "ci_full": [
+    -0.006996321499521912,
+    -0.0025417267968989767
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / macro",
+   "delta": -0.002200220982574469,
+   "lo": -0.0028922665707067407,
+   "hi": -0.0011231659537007963,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0035497098794323987,
+    -9.996367627080737e-05
+   ],
+   "ci_full": [
+    -0.0038347198794323988,
+    0.0001850463237291926
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / ship",
+   "delta": -0.002200220982574469,
+   "lo": -0.0028922665707067407,
+   "hi": -0.0011231659537007963,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0035497098794323987,
+    -9.996367627080737e-05
+   ],
+   "ci_full": [
+    -0.0038347198794323988,
+    0.0001850463237291926
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / macro",
+   "delta": -0.005383510664679514,
+   "lo": -0.006449245691626071,
+   "hi": -0.004205490082240746,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0074616939672253,
+    -0.0030863705289239174
+   ],
+   "ci_full": [
+    -0.0077467039672253,
+    -0.0028013605289239174
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "crossmodal 12:36 (superseded: no IR NMS, no cap scale)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / ship",
+   "delta": -0.005383510664679514,
+   "lo": -0.006449245691626071,
+   "hi": -0.004205490082240746,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0074616939672253,
+    -0.0030863705289239174
+   ],
+   "ci_full": [
+    -0.0077467039672253,
+    -0.0028013605289239174
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "clean / macro",
+   "delta": 0.0005874730440341702,
+   "lo": -0.0012500995665235368,
+   "hi": 0.003044995794151216,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.002995793546553358,
+    0.00537964240676241
+   ],
+   "ci_full": [
+    -0.0032808035465533582,
+    0.005664652406762409
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "clean / ship",
+   "delta": 0.0031256845150262613,
+   "lo": 0.0014472582431053955,
+   "hi": 0.005391309324777961,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00014724671521942683,
+    0.007543652894042075
+   ],
+   "ci_full": [
+    -0.0004322567152194268,
+    0.007828662894042075
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "fog / macro",
+   "delta": 0.005475725881655458,
+   "lo": 0.004156528447341812,
+   "hi": 0.00729518085165784,
+   "was_significant": true,
+   "ci_inflated": [
+    0.002903290884743848,
+    0.009023663073160102
+   ],
+   "ci_full": [
+    0.002618280884743848,
+    0.009308673073160103
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "fog / ship",
+   "delta": 0.010613854856096741,
+   "lo": 0.007952947935211022,
+   "hi": 0.014067767647456687,
+   "was_significant": true,
+   "ci_inflated": [
+    0.005425086360369588,
+    0.017348984799248637
+   ],
+   "ci_full": [
+    0.005140076360369589,
+    0.017633994799248636
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / macro",
+   "delta": -0.008613566188551108,
+   "lo": -0.010421874715924205,
+   "hi": -0.007261731765211749,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.012139767816928645,
+    -0.0059774890630393575
+   ],
+   "ci_full": [
+    -0.012424777816928646,
+    -0.005692479063039358
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "lowlight / ship",
+   "delta": -0.01798954027874288,
+   "lo": -0.021634843018375264,
+   "hi": -0.015263523943324643,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.025097880621026025,
+    -0.012673808424677318
+   ],
+   "ci_full": [
+    -0.025382890621026024,
+    -0.012388798424677317
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "glare / macro",
+   "delta": 0.002235147049455155,
+   "lo": 0.0003813467658186201,
+   "hi": 0.004236002241808638,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.0013797635036360877,
+    0.006136814674544447
+   ],
+   "ci_full": [
+    -0.0016647735036360877,
+    0.006421824674544447
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "gated vs visible_only",
+   "item": "glare / ship",
+   "delta": 0.0035847948458630485,
+   "lo": 0.0015282170865697484,
+   "hi": 0.0051831006608572885,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00042553178475888617,
+    0.006701491185101816
+   ],
+   "ci_full": [
+    -0.0007105417847588862,
+    0.006986501185101816
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "clean/day / macro",
+   "delta": 0.00019324009321980418,
+   "lo": 6.991005559094237e-05,
+   "hi": 0.0003167059655088594,
+   "was_significant": true,
+   "ci_inflated": [
+    -4.725348015647635e-05,
+    0.00043399854418346186
+   ],
+   "ci_full": [
+    -0.00033226348015647633,
+    0.0007190085441834619
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "clean/day / ship",
+   "delta": 0.00032389065542220985,
+   "lo": 0.0002438442529254875,
+   "hi": 0.0004013780561778868,
+   "was_significant": true,
+   "ci_inflated": [
+    0.00016780017055360126,
+    0.0004749910868957799
+   ],
+   "ci_full": [
+    -0.00011720982944639873,
+    0.0007600010868957799
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "fog/day / macro",
+   "delta": -0.000161019447654202,
+   "lo": -0.0011904221637196177,
+   "hi": 0.0011061964639780954,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0021683547439817624,
+    0.0023100515800287776
+   ],
+   "ci_full": [
+    -0.0024533647439817625,
+    0.0025950615800287777
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "fog/day / ship",
+   "delta": -0.0006793417336231865,
+   "lo": -0.002801153878717167,
+   "hi": 0.0016981202278094159,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.004816875416556448,
+    0.003956709091170388
+   ],
+   "ci_full": [
+    -0.005101885416556448,
+    0.004241719091170388
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "fog/night / macro",
+   "delta": -0.002823812425489375,
+   "lo": -0.003636136722874381,
+   "hi": -0.002078905993037782,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.004407844805390137,
+    -0.001371244882208769
+   ],
+   "ci_full": [
+    -0.004692854805390136,
+    -0.0010862348822087689
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "fog/night / ship",
+   "delta": -0.002823812425489375,
+   "lo": -0.003636136722874381,
+   "hi": -0.002078905993037782,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.004407844805390137,
+    -0.001371244882208769
+   ],
+   "ci_full": [
+    -0.004692854805390136,
+    -0.0010862348822087689
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "glare/day / macro",
+   "delta": 0.0023040778926428085,
+   "lo": 0.0014250295628083151,
+   "hi": 0.002877253111738641,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0005899336494655464,
+    0.0034217695698796824
+   ],
+   "ci_full": [
+    0.0003049236494655464,
+    0.0037067795698796824
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_maha",
+   "item": "glare/day / ship",
+   "delta": 0.0032648047048444706,
+   "lo": 0.0024093918633278032,
+   "hi": 0.00409322222389495,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0015967496638869692,
+    0.004880218866992905
+   ],
+   "ci_full": [
+    0.0013117396638869692,
+    0.0051652288669929046
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "clean/day / macro",
+   "delta": 0.0001516794918174913,
+   "lo": 4.679965924389612e-07,
+   "hi": 0.00029778418800384664,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00014318292387136076,
+    0.00043658364938088423
+   ],
+   "ci_full": [
+    -0.00042819292387136074,
+    0.0007215936493808842
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "clean/day / ship",
+   "delta": 0.00027348387124298545,
+   "lo": 0.0001676296641223013,
+   "hi": 0.00034998687425348974,
+   "was_significant": true,
+   "ci_inflated": [
+    6.706816735765135e-05,
+    0.00042266472711346883
+   ],
+   "ci_full": [
+    -0.00021794183264234863,
+    0.0007076747271134688
+   ],
+   "still_significant": false,
+   "verdict": "**INDETERMINATE**"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "fog/day / macro",
+   "delta": 0.0004649743190298129,
+   "lo": -0.0005577140739051129,
+   "hi": 0.001670560205330167,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0015292680471932925,
+    0.0028158667973155033
+   ],
+   "ci_full": [
+    -0.0018142780471932926,
+    0.0031008767973155034
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "fog/day / ship",
+   "delta": 0.0005433665275181368,
+   "lo": -0.0014484914126221173,
+   "hi": 0.002782705694356442,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.003340756455755359,
+    0.004910077902852832
+   ],
+   "ci_full": [
+    -0.003625766455755359,
+    0.005195087902852832
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "fog/night / macro",
+   "delta": -0.002826495525951059,
+   "lo": -0.003640706795861393,
+   "hi": -0.002081493835657183,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00441420750227621,
+    -0.001373742229878001
+   ],
+   "ci_full": [
+    -0.00469921750227621,
+    -0.001088732229878001
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "fog/night / ship",
+   "delta": -0.002826495525951059,
+   "lo": -0.003640706795861393,
+   "hi": -0.002081493835657183,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.00441420750227621,
+    -0.001373742229878001
+   ],
+   "ci_full": [
+    -0.00469921750227621,
+    -0.001088732229878001
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "glare/day / macro",
+   "delta": 0.002287755185845508,
+   "lo": 0.0013978034881545435,
+   "hi": 0.0028668740755899828,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0005523493753481271,
+    0.003417037020847234
+   ],
+   "ci_full": [
+    0.0002673393753481271,
+    0.003702047020847234
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: cap_only",
+   "item": "glare/day / ship",
+   "delta": 0.003248299468301463,
+   "lo": 0.002371833167501085,
+   "hi": 0.004076782855764062,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0015391901817407255,
+    0.004863842073853531
+   ],
+   "ci_full": [
+    0.0012541801817407255,
+    0.005148852073853531
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / macro",
+   "delta": -0.005077588779873979,
+   "lo": -0.006006111535253037,
+   "hi": -0.0036069222314013866,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.006888208152863142,
+    -0.002209789010352424
+   ],
+   "ci_full": [
+    -0.007173218152863142,
+    -0.001924779010352424
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "clean/night / ship",
+   "delta": -0.005077588779873979,
+   "lo": -0.006006111535253037,
+   "hi": -0.0036069222314013866,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.006888208152863142,
+    -0.002209789010352424
+   ],
+   "ci_full": [
+    -0.007173218152863142,
+    -0.001924779010352424
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / macro",
+   "delta": -0.00370158679205998,
+   "lo": -0.004615034546064017,
+   "hi": -0.0022214498555843303,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.005482809912367853,
+    -0.0008153197659324634
+   ],
+   "ci_full": [
+    -0.005767819912367853,
+    -0.0005303097659324634
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "fog/night / ship",
+   "delta": -0.00370158679205998,
+   "lo": -0.004615034546064017,
+   "hi": -0.0022214498555843303,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.005482809912367853,
+    -0.0008153197659324634
+   ],
+   "ci_full": [
+    -0.005767819912367853,
+    -0.0005303097659324634
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/day / macro",
+   "delta": -0.0006565517221035662,
+   "lo": -0.0011796965205701452,
+   "hi": 0.0006173145954021911,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.0016766840791133952,
+    0.0018274875970326603
+   ],
+   "ci_full": [
+    -0.001961694079113395,
+    0.0021124975970326604
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/day / ship",
+   "delta": -0.0012881664330228661,
+   "lo": -0.0023372598677124327,
+   "hi": 0.0012987082692955483,
+   "was_significant": false,
+   "ci_inflated": [
+    -0.003333898630667521,
+    0.0037562392364980423
+   ],
+   "ci_full": [
+    -0.003618908630667521,
+    0.004041249236498042
+   ],
+   "still_significant": false,
+   "verdict": "already spanned zero"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / macro",
+   "delta": -0.0038136383892250075,
+   "lo": -0.004729327414449474,
+   "hi": -0.0024447334618917732,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.005599231988412718,
+    -0.0011442737809252007
+   ],
+   "ci_full": [
+    -0.005884241988412717,
+    -0.0008592637809252007
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "lowlight/night / ship",
+   "delta": -0.0038136383892250075,
+   "lo": -0.004729327414449474,
+   "hi": -0.0024447334618917732,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.005599231988412718,
+    -0.0011442737809252007
+   ],
+   "ci_full": [
+    -0.005884241988412717,
+    -0.0008592637809252007
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / macro",
+   "delta": -0.01728921182560887,
+   "lo": -0.018588539961021232,
+   "hi": -0.014932224784866428,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.019822901689662976,
+    -0.012693087096161106
+   ],
+   "ci_full": [
+    -0.020107911689662975,
+    -0.012408077096161105
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "final_system (D27, 2026-08-20)",
+   "family": "D27 ablation: no_veto",
+   "item": "glare/night / ship",
+   "delta": -0.01728921182560887,
+   "lo": -0.018588539961021232,
+   "hi": -0.014932224784866428,
+   "was_significant": true,
+   "ci_inflated": [
+    -0.019822901689662976,
+    -0.012693087096161106
+   ],
+   "ci_full": [
+    -0.020107911689662975,
+    -0.012408077096161105
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  },
+  {
+   "source": "veil_veto_repair_26m",
+   "family": "veil veto repair",
+   "item": "day",
+   "delta": 0.07160262241383242,
+   "lo": 0.06567735406552354,
+   "hi": 0.07843113152389664,
+   "was_significant": true,
+   "ci_inflated": [
+    0.0600483491346301,
+    0.08491821517845764
+   ],
+   "ci_full": [
+    0.0597633391346301,
+    0.08520322517845764
+   ],
+   "still_significant": true,
+   "verdict": "SURVIVES"
+  }
+ ]
+}

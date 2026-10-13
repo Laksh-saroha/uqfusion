@@ -72,7 +72,7 @@ def main() -> int:
     t0 = time.time()
     # Recorded under the 2026-08-19 adopted system; pinned so re-runs keep
     # reproducing runs/eval/x_fusion_ci.md (the finalization changed the defaults).
-    ctx = load_context(capability_sel="all", bright_soft=True, veto_filter=None,
+    ctx = load_context(preset="adopted", capability_sel="all", bright_soft=True, veto_filter=None,
                        **({'conditions': tuple(args.conditions)} if args.conditions else {}))
     splits = {"day": ctx.sel("day"), "night": ctx.sel("night")}
 

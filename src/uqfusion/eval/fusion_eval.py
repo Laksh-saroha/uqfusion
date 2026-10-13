@@ -17,12 +17,18 @@ from dataclasses import replace
 
 import numpy as np
 
+from uqfusion.eval.identity import assert_paired
 from uqfusion.eval.matching import load_gt, map50_95
 from uqfusion.uq.fusion import apply_homography, fuse_detections
 from uqfusion.uq.reliability import ReliabilityConstants, compute_reliability, fusion_weights, smooth_reliability
 
 
+_FAST_DIST = __import__("os").environ.get("UQF_FAST_DIST") == "1"
+
+
 def _distances(records: list[dict], scorer) -> np.ndarray:
+    if _FAST_DIST and len(records):      # batched BLAS form; see MahalanobisScorer.score_fast
+        return scorer.score_fast(np.stack([np.asarray(r["feat"], dtype=np.float64) for r in records]))
     return np.asarray([scorer.score(r["feat"]) for r in records])
 
 
@@ -71,6 +77,7 @@ def evaluate_systems(
     support_iou: float = 0.0,
     support_gamma: float = 0.0,
     sigma_score_alpha: float = 0.0,
+    compute_metrics: bool = True,
 ) -> dict:
     """mAP@50-95 (and mAP@50) per system over the paired frame set. Also returns
     per-frame gate weights and R_sys for the B3 abstain analysis.
@@ -182,7 +189,14 @@ def evaluate_systems(
     is the fixed-weight control and must stay untouched, or it stops being a
     control.
     """
-    assert len(vis_records) == len(ir_records), "paired caches must be index-aligned"
+    # R-E1 slice 2. This was `assert len(vis) == len(ir)` -- equal LENGTHS, which is
+    # not the same claim as equal FRAMES. Reproduced on the real caches before the fix:
+    # a fully reversed IR cache passed that assert and moved gated fusion by -0.025630;
+    # a one-frame shift moved it by -0.000968, BELOW the 0.0014-0.0031 paired noise
+    # floor, so no statistical check could ever have caught it. `assert_paired` compares
+    # ordered `run/ordinal` pair ids, which are the same on both modalities even though
+    # the filenames are not (`pohang00_L_006767` vs `pohang00_006767`).
+    pairing = assert_paired(vis_records, ir_records, where="evaluate_systems")
     scorer_ir = scorer if scorer_ir is None else scorer_ir
     constants_ir = constants if constants_ir is None else constants_ir
     # `gts` overrides the default VIS-frame labels — used by the union-label
@@ -225,6 +239,14 @@ def evaluate_systems(
     w_vis_gated, r_sys_all, r_bright_all = [], [], []
     rf_vis_all, rf_ir_all, veto_vis_all, veto_ir_all = [], [], [], []
     r_prev_vis = r_prev_ir = None
+    # `support_gamma` may be one value or one per frame (a per-frame 0 withholds the
+    # bonus on that frame; ctx `support_requires_ir_health`).
+    if np.ndim(support_gamma):
+        sg_frames = [float(x) for x in support_gamma]
+        if len(sg_frames) != n:
+            raise ValueError("per-frame support_gamma must be index-aligned with the paired caches")
+    else:
+        sg_frames = [float(support_gamma)] * n
     for fi_, (rv, ri, dv, di, h, bv, bi) in enumerate(
             zip(vis_records, ir_records, d_vis, d_ir, h_frames, b_vis, b_ir)):
         rel_v = compute_reliability(rv, dv, constants, bv)
@@ -264,11 +286,12 @@ def evaluate_systems(
                                           consensus_beta=consensus_beta,
                                           consensus_distinct=consensus_distinct,
                                           support_iou=support_iou,
-                                          support_gamma=support_gamma,
+                                          support_gamma=sg_frames[fi_],
                                           sigma_score_alpha=sigma_score_alpha,
                                           score_scale=(None if tv is None
                                                        else (float(tv[fi_]), float(ti[fi_])))))
-        fused_naive.append(fuse_detections(rv, ri, 0.5, 0.5, hw, h, iou_thr_wbf, skip_box_thr))
+        if compute_metrics:
+            fused_naive.append(fuse_detections(rv, ri, 0.5, 0.5, hw, h, iou_thr_wbf, skip_box_thr))
         if gate is not None:
             wl = gate.predict_w_vis(rv, ri, dv, di)
             fused_learned.append(fuse_detections(rv, ri, wl, 1.0 - wl, hw, h, iou_thr_wbf, skip_box_thr))
@@ -281,11 +304,14 @@ def evaluate_systems(
     ir_in_vis = [{**r, "boxes_xyxy": apply_homography(np.asarray(r["boxes_xyxy"]).reshape(-1, 4), h)}
                  for r, h in zip(ir_records, h_frames)]
 
+    # `compute_metrics=False` (2026-10-10, speed): callers that score the per-frame outputs
+    # themselves (`fused_gated`, `ir_in_vis`) skip the naive-fusion control and the four AP
+    # calls; every other key is computed exactly as before.
+    metrics = ({"visible_only": map50_95(vis_records, gts), "ir_only": map50_95(ir_in_vis, gts),
+                "naive_fusion": map50_95(fused_naive, gts), "gated_fusion": map50_95(fused_gated, gts)}
+               if compute_metrics else {})
     out = {
-        "visible_only": map50_95(vis_records, gts),
-        "ir_only": map50_95(ir_in_vis, gts),
-        "naive_fusion": map50_95(fused_naive, gts),
-        "gated_fusion": map50_95(fused_gated, gts),
+        **metrics,
         "w_vis_gated": w_vis_gated,
         "R_sys": r_sys_all,
         "r_bright_vis": r_bright_all,
@@ -296,6 +322,10 @@ def evaluate_systems(
         "fused_gated": fused_gated,
         "ir_in_vis": ir_in_vis,   # IR boxes mapped to the VIS canvas, for per-run breakdowns
         "gts": gts,
+        # What the pairing check actually saw. Carried so a caller can tell a real pass
+        # from a vacuous one: `n_unidentifiable` counts frames whose ordinals could not
+        # be parsed, and a run where that number is large was never checked at all.
+        "pairing": pairing,
     }
     if gate is not None:
         out["learned_gate_fusion"] = map50_95(fused_learned, gts)

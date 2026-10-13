@@ -68,7 +68,7 @@ def main() -> int:
     args = ap.parse_args()
 
     t0 = time.time()
-    ctx = load_context(conditions=("clean",))
+    ctx = load_context(preset="adopted", conditions=("clean",))
 
     rows = []   # one per matched GT pair
     for i, (rv, ri, h) in enumerate(zip(ctx.vis_by_cond["clean"], ctx.ir_clean, ctx.h_frames)):

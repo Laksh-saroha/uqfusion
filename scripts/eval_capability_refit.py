@@ -57,8 +57,8 @@ def main() -> int:
     kw = {"conditions": tuple(args.conditions)} if args.conditions else {}
     # Recorded under the 2026-08-19 adopted system; pinned so re-runs keep
     # reproducing runs/eval/x_capability_refit.md.
-    ctx_all = load_context(capability_sel="all", bright_soft=True, veto_filter=None, **kw)
-    ctx_fit = load_context(capability_sel="fit", bright_soft=True, veto_filter=None,
+    ctx_all = load_context(preset="adopted", capability_sel="all", bright_soft=True, veto_filter=None, **kw)
+    ctx_fit = load_context(preset="adopted", capability_sel="fit", bright_soft=True, veto_filter=None,
                            verbose=False, **kw)
     print(f"[cap] adopted (all frames): VIS {ctx_all.cap_vis:.4f} IR {ctx_all.cap_ir:.4f} "
           f"ratio {ctx_all.cap_vis / ctx_all.cap_ir:.2f}x")

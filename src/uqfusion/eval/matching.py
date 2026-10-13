@@ -19,6 +19,31 @@ import numpy as np
 
 IOU_LEVELS = np.round(np.arange(0.5, 1.0, 0.05), 2)  # 0.50 ... 0.95
 
+_FAST_IO = __import__("os").environ.get("UQF_FAST_IO") == "1"
+
+
+def _label_text(lp: Path) -> str | None:
+    """The label file's text, decoded and newline-translated as `Path.read_text` does, or None when the file
+    does not exist. Under `UQF_FAST_IO=1` the bytes come from `labelcache` (validated by size and mtime)."""
+    if _FAST_IO:
+        from uqfusion.eval.labelcache import read_label_bytes
+        raw = read_label_bytes(lp)
+        return None if raw is None else raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    if not lp.is_file():
+        return None
+    return lp.read_text(encoding="utf-8")
+
+SORT_KIND = "stable"
+"""Tie semantics for every descending-confidence sort in this module (R-A1/R-A2).
+
+`np.argsort` defaults to an unstable introsort, so detections sharing a confidence
+were ordered arbitrarily -- and both the greedy match and the cumulative TP/FP run
+down that order. `apmetrics.SORT_KIND` documents the measured size (0.0067 mAP on a
+tie-dense synthetic fixture, 2.7e-7 on a real cache, where 99.9% of confidences are
+unique). Pinned here too so `cocoparity.TASK_CONFIG`'s "stable score sort" is true of
+the local evaluator as well -- pycocotools sorts with mergesort, which is stable, so
+the two now agree on tie handling by construction rather than by luck."""
+
 
 def label_path_for(image_path: str | Path) -> Path:
     p = Path(image_path)
@@ -26,19 +51,78 @@ def label_path_for(image_path: str | Path) -> Path:
     return Path(*parts).with_suffix(".txt")
 
 
-def load_gt(image_path: str | Path, image_hw: tuple[int, int]) -> dict:
-    """GT boxes (xyxy px) + classes for one image; empty arrays when no label file."""
+MISSING_LABEL_POLICY = "refuse"
+"""What a MISSING label file means (R-B5, finding F14). It is not an empty one.
+
+Until 2026-09-10 this function returned zero boxes for a missing file, exactly as it
+does for an empty one, so a wholly absent `labels/` tree evaluated as a valid
+all-background dataset and every detection in it scored as a false positive. Nothing
+raised; AP simply came back near zero and looked like a model problem.
+
+**Measured across the whole corpus before this was changed: 0 missing label files**
+in 133,140 train+val images across both modalities. So refusing costs nothing today
+and exists to catch a path or release mistake tomorrow. `allow_missing=True` is the
+declared escape for the legitimate case (scoring a modality against another's labels,
+or a fixture that deliberately has none), and it is a parameter rather than a silent
+default so that permitting it is visible at the call site.
+"""
+
+EMPTY_LABEL_POLICY = "allow"
+"""An EMPTY label file is a legitimate statement: this frame contains no objects.
+
+Measured: **3,880 empty label files** (1,550 VIS train, 2,330 IR train), 0 in either
+val split. They are data, not damage, and must keep loading as zero boxes -- which is
+the whole reason a missing file has to be told apart from an empty one rather than
+folded into it.
+"""
+
+MALFORMED_LINE_POLICY = "refuse"
+"""A line that is neither blank nor a valid `cls cx cy w h` record is an error.
+
+The old code skipped any line with fewer than five fields, so a truncated write or a
+stray token silently deleted a ground-truth box. Reproduced on a fixture: a file with
+one good line, one truncated line and one garbage token returned **one** box and
+raised nothing -- two thirds of the file discarded in silence. Measured on the real
+corpus before the change: see `docs/` for the scan; nothing in it is malformed.
+"""
+
+
+def load_gt(image_path: str | Path, image_hw: tuple[int, int],
+            *, allow_missing: bool = False) -> dict:
+    """GT boxes (xyxy px) + classes for one image.
+
+    Refuses a missing label file and a malformed line; an EMPTY file is legitimate and
+    returns zero boxes. See the three policy constants above for what was measured.
+    """
     h, w = image_hw
     lp = label_path_for(image_path)
+    text = _label_text(lp)
+    if text is None:
+        if not allow_missing:
+            raise FileNotFoundError(
+                f"no label file for {image_path} (looked for {lp}). A missing label "
+                "file is NOT an empty one: returning zero boxes here would score every "
+                "detection in the frame as a false positive and let a wrong path or a "
+                "wrong annotation release evaluate as a valid all-background dataset. "
+                "Pass allow_missing=True if this frame genuinely has no labels.")
+        return {"boxes_xyxy": np.zeros((0, 4), dtype=np.float64),
+                "cls": np.zeros(0, dtype=int)}
     boxes, clss = [], []
-    if lp.is_file():
-        for line in lp.read_text(encoding="utf-8").splitlines():
-            vals = line.split()
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        vals = line.split()
+        try:
             if len(vals) < 5:
-                continue
+                raise ValueError(f"expected at least 5 fields, got {len(vals)}")
             c, cx, cy, bw, bh = int(vals[0]), *map(float, vals[1:5])
-            boxes.append([(cx - bw / 2) * w, (cy - bh / 2) * h, (cx + bw / 2) * w, (cy + bh / 2) * h])
-            clss.append(c)
+        except ValueError as exc:
+            raise ValueError(
+                f"{lp}:{n}: malformed label line {line.strip()!r} ({exc}). Skipping it "
+                "would silently delete a ground-truth box -- see MALFORMED_LINE_POLICY."
+            ) from exc
+        boxes.append([(cx - bw / 2) * w, (cy - bh / 2) * h, (cx + bw / 2) * w, (cy + bh / 2) * h])
+        clss.append(c)
     return {"boxes_xyxy": np.asarray(boxes, dtype=np.float64).reshape(-1, 4),
             "cls": np.asarray(clss, dtype=int)}
 
@@ -72,7 +156,7 @@ def match_image(record: dict, gt: dict, iou_thr: float = 0.5) -> dict:
         same = pred_cls[:, None] == gt["cls"][None, :]
         ious = ious * same
         gt_used = np.zeros(len(gt["cls"]), dtype=bool)
-        for i in np.argsort(-conf):
+        for i in np.argsort(-conf, kind=SORT_KIND):
             if ious.shape[1] == 0:
                 break
             j = int(np.argmax(np.where(gt_used, -1.0, ious[i])))
@@ -84,18 +168,11 @@ def match_image(record: dict, gt: dict, iou_thr: float = 0.5) -> dict:
     return {"matched": matched, "iou_realized": iou_real, "err_edges": err, "n_gt": len(gt["cls"])}
 
 
-def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.ndarray:
-    """(N, len(levels)) TP flags — greedy match repeated per IoU level (mAP input)."""
-    n = len(record["conf"])
-    tp = np.zeros((n, len(levels)), dtype=bool)
-    if n == 0:
-        return tp
-    ious = iou_matrix(record["boxes_xyxy"], gt["boxes_xyxy"])
-    same = record["cls"][:, None] == gt["cls"][None, :]
-    ious = ious * same
-    order = np.argsort(-record["conf"])
+def _greedy_py(ious: np.ndarray, order: np.ndarray, levels: np.ndarray) -> np.ndarray:
+    """The reference greedy match: per level, detections in `order` take the best unused GT."""
+    tp = np.zeros((ious.shape[0], len(levels)), dtype=bool)
     for k, thr in enumerate(levels):
-        gt_used = np.zeros(len(gt["cls"]), dtype=bool)
+        gt_used = np.zeros(ious.shape[1], dtype=bool)
         for i in order:
             if ious.shape[1] == 0:
                 break
@@ -106,8 +183,73 @@ def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.nda
     return tp
 
 
-def map50_95(records: list[dict], gts: list[dict]) -> dict:
-    """COCO-style mAP@50-95 and mAP@50 over a frame set (101-point interpolation).
+# The same loop compiled with numba (2026-10-10, for speed only). np.argmax returns the FIRST
+# maximum, so the compiled scan keeps the first index on ties (strict >), and a used GT reads as
+# -1.0 exactly as in np.where; the outputs are boolean, so equality is exact
+# (`scripts/check_tp_numba.py`). UQF_NO_NUMBA=1 forces the reference path.
+_greedy = _greedy_py
+if not __import__("os").environ.get("UQF_NO_NUMBA"):
+    try:
+        import numba as _nb
+
+        @_nb.njit(cache=False, nogil=True)
+        def _greedy_nb(ious, order, levels):
+            n, m = ious.shape
+            tp = np.zeros((n, levels.shape[0]), dtype=np.bool_)
+            if m == 0:
+                return tp
+            used = np.zeros(m, dtype=np.bool_)
+            for k in range(levels.shape[0]):
+                thr = levels[k]
+                used[:] = False
+                for oi in range(order.shape[0]):
+                    i = order[oi]
+                    best, j = -np.inf, 0
+                    for jj in range(m):
+                        v = -1.0 if used[jj] else ious[i, jj]
+                        if v > best:
+                            best, j = v, jj
+                    if not used[j] and ious[i, j] >= thr:
+                        used[j] = True
+                        tp[i, k] = True
+            return tp
+        _greedy = _greedy_nb
+    except Exception:                                      # noqa: BLE001 - numba is an accelerator only
+        _greedy = _greedy_py
+
+
+def tp_matrix(record: dict, gt: dict, levels: np.ndarray = IOU_LEVELS) -> np.ndarray:
+    """(N, len(levels)) TP flags — greedy match repeated per IoU level (mAP input)."""
+    n = len(record["conf"])
+    tp = np.zeros((n, len(levels)), dtype=bool)
+    if n == 0:
+        return tp
+    ious = iou_matrix(record["boxes_xyxy"], gt["boxes_xyxy"])
+    same = record["cls"][:, None] == gt["cls"][None, :]
+    ious = np.ascontiguousarray(ious * same, dtype=np.float64)
+    order = np.argsort(-record["conf"], kind=SORT_KIND).astype(np.int64)
+    return _greedy(ious, order, np.asarray(levels, dtype=np.float64))
+
+
+def local_ap50_95(records: list[dict], gts: list[dict]) -> dict:
+    """This project's OWN mAP@50-95 and mAP@50 over a frame set.
+
+    Renamed from `map50_95` on 2026-09-10 (R-A1). The old name is kept as a working
+    alias below, and the returned dict keys are unchanged, so no call site and no
+    recorded number moves.
+
+    **This is not COCO AP.** The docstring said "COCO-style" for as long as the
+    function existed, and that was a mislabel of exactly the kind
+    `docs/exposure-ledger-2026-09-09.md` section 6 documents for
+    `preset="crossmodal"`: a name that does not pin a computation. The precision
+    envelope here is LINEARLY INTERPOLATED onto a 101-point recall grid
+    (`np.interp`); COCO looks it up at the first attained recall (`searchsorted`).
+    Ultralytics is a third rule again. See `apmetrics.AP_CONVENTION` for the full
+    statement and `uqfusion.eval.cocoparity` for the COCO implementation.
+
+    The measured delta gap is 0.00028501, 5x below the paired noise floor, so paired
+    comparisons are safe; ABSOLUTE numbers are not interchangeable across conventions
+    (`docs/ap-convention-rule-2026-09-10.md`).
 
     Also returns `per_class` — `{cls: {ap50_95, ap50, n_gt, n_pred}}`, the same
     shape `apmetrics.ap_from_parts` returns, pinned equal by `smoke_apmetrics.py`.
@@ -155,7 +297,7 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
             per_class[int(c)] = {"ap50_95": 0.0, "ap50": 0.0,
                                  "n_gt": int(n_gt), "n_pred": int(mask.sum())}
             continue
-        order = np.argsort(-conf[mask])
+        order = np.argsort(-conf[mask], kind=SORT_KIND)
         tpc = tp[mask][order]
         fpc = ~tpc
         cum_tp = np.cumsum(tpc, axis=0)
@@ -174,3 +316,11 @@ def map50_95(records: list[dict], gts: list[dict]) -> dict:
         return {"map50_95": 0.0, "map50": 0.0, "per_class": {}}
     return {"map50_95": float(ap.mean()), "map50": float(ap[:, 0].mean()),
             "per_class": per_class}
+
+
+# Backwards-compatible alias. 322 call sites across 70 files use this name, and the
+# dict keys it returns (`map50_95`, `map50`) are unchanged, so nothing breaks and no
+# recorded number moves. New code should prefer `local_ap50_95`, which does not claim
+# to be COCO. Deliberately NOT a deprecation warning: 70 files emitting one on every
+# eval would be noise, and the name is not wrong, only imprecise.
+map50_95 = local_ap50_95

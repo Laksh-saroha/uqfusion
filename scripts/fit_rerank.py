@@ -132,7 +132,21 @@ def main() -> int:
                     default=[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0])
     ap.add_argument("--n-features", type=int, nargs="+", default=[4, 8, 18])
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--cls", type=int, default=None,
+                    help="score this class's AP instead of the macro (0 = ship); the "
+                         "re-ranker is still fit on every class's boxes")
+    ap.add_argument("--block-len", type=int, default=None,
+                    help="also give the best out-of-fold arm a moving-block CI (L)")
+    ap.add_argument("--ci-vs", nargs=3, default=None, metavar=("N_FEAT", "MONO", "LAM"),
+                    help="with --ci-arm: also a paired block CI on (ci-arm minus this arm)")
+    ap.add_argument("--ci-arm", nargs=3, default=None, metavar=("N_FEAT", "MONO", "LAM"),
+                    help="with --block-len, also CI this fixed arm (e.g. 4 yes 0.30), so a "
+                         "re-score can be read on an arm it did not select")
     args = ap.parse_args()
+    K = args.cls
+
+    def _afs(p_, sel_, sc_):
+        return ap_from_scores(p_, sel_, sc_, cls_only=K)
     t0 = time.time()
 
     vp = Path(args.vis_cache) if args.vis_cache else Path(args.cache_dir) / "gauss_vis_paired_clean.pkl"
@@ -167,7 +181,7 @@ def main() -> int:
     parts = frame_parts(vis, gts)
     conf = [np.asarray(r["conf"], float) for r in vis]
 
-    base = ap_from_scores(parts, day, conf)
+    base = _afs(parts, day, conf)
     A, O, _pc, _rc = oracle_curves(parts, day)
     secs = [f"Source: `{vp}`" + (f" + `{args.ir_cache}`" if args.ir_cache else "")
             + f"  \nWeights: `{meta.get('weights')}`  \n"
@@ -175,6 +189,11 @@ def main() -> int:
             f"({', '.join(h + ':' + str(len(te)) for h, _t, te in folds)}).  \n"
             f"Baseline mAP50-95 **{fmt(base)}**; oracle re-rank ceiling "
             f"**{fmt(O.mean())}** (headroom {sgn(O.mean() - A.mean())})."]
+    if K is not None:
+        secs.append(f"**Metric: class {K} AP only (`--cls {K}`).** The baseline, every "
+                    f"`oof`/`delta` column and section 2 score class {K}; the oracle line "
+                    f"above is still the macro. The re-ranker is fit on all classes' boxes, "
+                    f"exactly as in the default run.")
 
     # ---- LORO out-of-fold predictions, per (n_features, monotone) ---------
     results = {}
@@ -200,8 +219,8 @@ def main() -> int:
         for lam in args.lambdas:
             sc = [np.clip(c, 1e-9, None) ** (1 - lam) * np.clip(p, 1e-6, None) ** lam
                   for c, p in zip(conf, pred)]
-            oof = ap_from_scores(parts, day, sc)
-            per_run = [ap_from_scores(parts, te, sc) - ap_from_scores(parts, te, conf)
+            oof = _afs(parts, day, sc)
+            per_run = [_afs(parts, te, sc) - _afs(parts, te, conf)
                        for _h, _tr, te in folds]
             rows.append([n_feat, "yes" if monotone else "no", f"{lam:.2f}", fmt(oof),
                          sgn(oof - base), sgn(min(per_run)), sgn(max(per_run)),
@@ -221,6 +240,41 @@ def main() -> int:
         secs.append(f"**Best out-of-fold arm:** {n_feat} features, "
                     f"monotone={'yes' if monotone else 'no'}, lambda={lam:.2f}, "
                     f"delta **{sgn(best[1])}**.")
+        if args.block_len:
+            from uqfusion.eval.blockboot import block_bootstrap_delta
+            pred = results[(n_feat, monotone)]
+            sc = [np.clip(c, 1e-9, None) ** (1 - lam) * np.clip(p_, 1e-6, None) ** lam
+                  for c, p_ in zip(conf, pred)]
+            p_sc = [{**pp, "conf": np.asarray(s_, float)} for pp, s_ in zip(parts, sc)]
+            bb = block_bootstrap_delta(p_sc, parts, [r["image_path"] for r in vis],
+                                       args.block_len, sel=day, n_boot=1000, seed=0, cls=K)
+            secs.append(f"Moving-block bootstrap (L = {args.block_len}, n 1000, stable-sort "
+                        f"AP path) on that arm's out-of-fold delta: **{sgn(bb['delta'], 6)}** "
+                        f"[{sgn(bb['ci_lo'], 6)}, {sgn(bb['ci_hi'], 6)}].")
+            if args.ci_arm:
+                fn, fm, fl = int(args.ci_arm[0]), args.ci_arm[1] == "yes", float(args.ci_arm[2])
+                pred = results[(min(fn, len(names)), fm)]
+                sc = [np.clip(c, 1e-9, None) ** (1 - fl) * np.clip(p_, 1e-6, None) ** fl
+                      for c, p_ in zip(conf, pred)]
+                p_sc = [{**pp, "conf": np.asarray(s_, float)} for pp, s_ in zip(parts, sc)]
+                bf = block_bootstrap_delta(p_sc, parts, [r["image_path"] for r in vis],
+                                           args.block_len, sel=day, n_boot=1000, seed=0, cls=K)
+                secs.append(f"Fixed arm ({fn} features, monotone={args.ci_arm[1]}, "
+                            f"lambda={fl:.2f}), same bootstrap: **{sgn(bf['delta'], 6)}** "
+                            f"[{sgn(bf['ci_lo'], 6)}, {sgn(bf['ci_hi'], 6)}].")
+                if args.ci_vs:
+                    vn, vm, vl = int(args.ci_vs[0]), args.ci_vs[1] == "yes", float(args.ci_vs[2])
+                    pv = results[(min(vn, len(names)), vm)]
+                    sv = [np.clip(c, 1e-9, None) ** (1 - vl) * np.clip(p_, 1e-6, None) ** vl
+                          for c, p_ in zip(conf, pv)]
+                    p_sv = [{**pp, "conf": np.asarray(s_, float)} for pp, s_ in zip(parts, sv)]
+                    bv = block_bootstrap_delta(p_sc, p_sv, [r["image_path"] for r in vis],
+                                               args.block_len, sel=day, n_boot=1000, seed=0,
+                                               cls=K)
+                    secs.append(f"Fixed arm minus ({vn} features, monotone={args.ci_vs[1]}, "
+                                f"lambda={vl:.2f}), paired, same bootstrap: "
+                                f"**{sgn(bv['delta'], 6)}** [{sgn(bv['ci_lo'], 6)}, "
+                                f"{sgn(bv['ci_hi'], 6)}].")
 
     # ---- 2. what the in-fold number would have said (the C8 lesson) -------
     rows = []
@@ -241,8 +295,8 @@ def main() -> int:
             sc = [np.clip(c, 1e-9, None) ** (1 - lam) * np.clip(p, 1e-6, None) ** lam
                   for c, p in zip(conf, insample)]
             rows.append([n_feat, f"{lam:.2f}",
-                         sgn(ap_from_scores(parts, tr, sc) - ap_from_scores(parts, tr, conf)),
-                         sgn(ap_from_scores(parts, te, sc) - ap_from_scores(parts, te, conf))])
+                         sgn(_afs(parts, tr, sc) - _afs(parts, tr, conf)),
+                         sgn(_afs(parts, te, sc) - _afs(parts, te, conf))])
     secs.append("## 2. Fit-set gain vs held-out gain -- the C8 lesson, restated\n\n"
                 f"One fold ({folds[0][0]} held out), reporting both columns. The 2026-09-01 "
                 "pilot reported only the first and read +0.0419 as a result.\n\n"

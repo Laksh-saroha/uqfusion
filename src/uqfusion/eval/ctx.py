@@ -10,8 +10,11 @@ table used the D5/B5 constants while every analysis used the D-6 ladder fit, and
 gated glare read 0.0641 instead of 0.2058. That happened because the setup was
 duplicated. This module exists so it cannot happen again.
 
-`load_context()` reproduces the ADOPTED configuration by default. As of the
-2026-08-20 finalization (`docs/architecture-final-2026-08-20.md`) that is:
+`load_context()` has NO default preset (R-E6): every caller names the system it
+evaluates. The shipped system is `preset="crossmodal26m"` with
+`cache_dir="runs/cache_m"` (or a Phase 3 seed tree under `runs/cache_p3`).
+`preset="adopted"` is the 2026-08-20 finalization
+(`docs/architecture-final-2026-08-20.md`), kept for reproducing that record:
 
     capability-weighted WBF, iou_thr 0.85, sigma-weighted available
     D-6 ladder constants (runs/eval/reliability_constants.json)
@@ -49,6 +52,12 @@ from uqfusion.uq.reliability import ReliabilityConstants, fit_constants, per_box
 
 ROOT = Path(__file__).resolve().parents[3]
 
+#: Sentinel so `role="final"` can tell "caller did not choose" from "caller chose 'fit'".
+#: R-B2 asks for `capability_sel` to be required; making it required outright would break
+#: 56 of this repo's 63 `load_context` call sites and silently rewrite every recorded
+#: number, so it is required only where it can do harm -- in a final score.
+_UNSET = object()
+
 DEFAULT_CONDITIONS = ("clean", "fog", "lowlight", "glare")
 NIGHT_RUNS = ("pohang01",)
 #: Runs the gate was allowed to see. pohang01 is held out of every fit (§7).
@@ -72,6 +81,31 @@ FIT_RUNS = ("pohang00", "pohang02", "pohang03")
 TUNE_RUNS = ("pohang00",)
 TEST_RUNS = ("pohang02", "pohang03")
 
+#: R-B2 (finding F02). Runs whose day frames have been inspected repeatedly, across
+#: many tuning sweeps and reported tables, and which are therefore **development data**
+#: whatever a later document calls them.
+#:
+#: This is a label, not a computation, and labelling is the whole fix. `TEST_RUNS` was
+#: declared after those runs had already been looked at: the 2026-09-01 log discusses
+#: keeping support IoU 0.30 *because 0.55 scored poorly on TEST*, and a test set that
+#: rejects a candidate has participated in selection even when it does not pick the
+#: winner. Fresh corruption seeds over the same scenes test robustness to the transform
+#: draw; they do not supply new scene-level test data, and a pre-registration written
+#: afterwards improves auditability without undoing the exposure (Cawley & Talbot 2010).
+#:
+#: So: every paired day run below is development data. Nothing in this repository is an
+#: untouched test set. A genuinely frozen evaluation needs a release this project has
+#: not yet looked at.
+DEVELOPMENT_RUNS = ("pohang00", "pohang02", "pohang03")
+
+#: What `role="final"` refuses to fit a capability prior on, because these selectors
+#: include frames a final score would be reported over.
+_OVERLAPPING_SELECTORS = ("all", "day", "fit", "test", "dev")
+
+
+class ExposureError(RuntimeError):
+    """Raised when a context declared `role="final"` would fit on frames it scores."""
+
 
 def fit_scorer(cache_path: Path) -> MahalanobisScorer:
     records, _ = load_cache(cache_path)
@@ -88,7 +122,10 @@ def constants_for(records, scorer, alpha, combination) -> ReliabilityConstants:
         # calibration constant and a stream with no boxes has no r_box to scale.
         raise ValueError("no detections to fit reliability constants on")
     u = np.concatenate(parts)
-    d = np.asarray([scorer.score(r["feat"]) for r in records])
+    if __import__("os").environ.get("UQF_FAST_DIST") == "1":   # batched BLAS; see MahalanobisScorer.score_fast
+        d = scorer.score_fast(np.stack([np.asarray(r["feat"], dtype=np.float64) for r in records]))
+    else:
+        d = np.asarray([scorer.score(r["feat"]) for r in records])
     return fit_constants(u, d, alpha=alpha, combination=combination)
 
 
@@ -145,9 +182,18 @@ class FusionContext:
     sigma_score_alpha: float = 0.0        # (median_sigma/sigma)**alpha on the score
     order_records: list | None = None    # the stream capture order is read from
     struct_const: dict = field(default_factory=dict)
+    role: str = "develop"                 # R-B2: "develop" or "final"; see load_context
+    cap_fit_frames: np.ndarray | None = None   # frames the capability prior was fit on
     veil_requires_night: bool = False   # AND the veil axis with the night arm
     night_weak_fallback: bool = False   # a disarmed IR may still be CONFIRMED by a dark VIS
     ir_merge_veto: bool = True          # drop a novel IR from the merge (measured harmful)
+    # --- the 2026-10-10 degraded-IR repairs (docs/prereg-degraded-ir-repairs-2026-10-10.md).
+    # Both default to the shipped behaviour, so no existing number can move. The registered
+    # verdict (docs/eval/corruption_v2/degraded_ir_repairs.md) ADOPTED R1 and REJECTED R2 (8 cells
+    # harmed at 0.0014), so `preset="crossmodal26m_r"` turns on R1 only; the R2 switch stays to
+    # reproduce the rejection.
+    fallback_veil: bool = True          # weak-IR fallback confirms with `concentrated | (dark & veil)`
+    support_requires_ir_health: bool = False   # cross-modal support only where IR is merge-healthy
     veto_rule: str = "photometric+veil"          # | "gini+ir_night"
     # --- the V2 night rule (docs/prereg-night-veto-v2.md). EMPTY BY DEFAULT, so
     # every existing caller keeps the shipped `night & (dark | veil)` clause and
@@ -169,6 +215,27 @@ class FusionContext:
     veto_health_mode: str = "night_arm"
     single_passthrough: bool = False
     cap_note: str = ""
+    # R-E1: the two values that made `preset="crossmodal"` name three different
+    # systems on 2026-09-01 (docs/exposure-ledger-2026-09-09.md section 6). They were
+    # local variables in `load_context`, applied and then discarded, so no result file
+    # could record them and `cap_ir` was their only witness. Recorded here so a config
+    # block can stamp the VALUES rather than the preset NAME.
+    # The preset AS THE CALLER ASKED FOR IT, kept separate from the resolved name.
+    # `crossmodal26m` and `crossmodal26m_snms` both rewrite themselves to
+    # `crossmodal` internally, so recording only the resolved name loses which one
+    # ran -- and recording only the request loses nothing, which is why both are here.
+    # R-E1: every `load_context` argument as resolved, so a result file records the
+    # INPUTS and not just a preset name. 15 of the 26 parameters previously reached
+    # no attribute at all -- `capability_sel` (which frames the capability prior was
+    # fit on, R-B2's whole subject), `vis_soft_nms` (the ONLY thing separating
+    # `crossmodal26m_snms` from `crossmodal26m`), `ir_condition`, and every path to a
+    # constants file. A dict rather than 15 new fields so a parameter added later is
+    # captured without anyone remembering to.
+    inputs: dict = field(default_factory=dict)
+    preset: str | None = None
+    preset_resolved: str | None = None
+    ir_nms: float | None = None
+    cap_ir_scale: float | None = None
     _sel: dict = field(default_factory=dict)
     _order: dict | None = None
 
@@ -187,7 +254,13 @@ class FusionContext:
 
     # ---- frame selectors -------------------------------------------------
     def sel(self, name: str) -> np.ndarray:
-        """Frame indices for 'all', 'day', 'night', 'fit', or a run id."""
+        """Frame indices for 'all', 'day', 'night', 'fit', 'tune', 'test', 'dev', or a run id.
+
+        `tune`/`test` were defined as module constants long before anything could ask
+        for them here, so a run-disjoint evaluation was expressible in comments and not
+        in code (R-B2). `dev` is the honest name for the union: every day run has been
+        inspected repeatedly, so `test` names a *split*, not an untouched holdout.
+        """
         if name in self._sel:
             return self._sel[name]
         if name == "all":
@@ -198,12 +271,44 @@ class FusionContext:
             v = np.flatnonzero(~np.isin(self.runs, NIGHT_RUNS))
         elif name == "fit":
             v = np.flatnonzero(np.isin(self.runs, FIT_RUNS))
+        elif name == "tune":
+            v = np.flatnonzero(np.isin(self.runs, TUNE_RUNS))
+        elif name == "test":
+            v = np.flatnonzero(np.isin(self.runs, TEST_RUNS))
+        elif name == "dev":
+            v = np.flatnonzero(np.isin(self.runs, DEVELOPMENT_RUNS))
         else:
             v = np.flatnonzero(self.runs == name)
             if not len(v):
                 raise KeyError(f"no frames for selector {name!r}")
         self._sel[name] = v
         return v
+
+    def assert_final_scorable(self, eval_sel: str | np.ndarray) -> None:
+        """R-B2 acceptance: a final score may not be reported on frames it was fit on.
+
+        Checks the one thing `load_context` actually fits from evaluation frames -- the
+        capability prior -- against the frames about to be scored, and refuses on any
+        intersection. Everything else `load_context` uses is either fit on TRAIN caches
+        (the Mahalanobis scorers) or read from a frozen constants file.
+
+        This is a real check, not a label: it compares frame index sets. Call it from
+        any script that reports a final number.
+        """
+        frames = self.sel(eval_sel) if isinstance(eval_sel, str) else np.asarray(eval_sel)
+        if self.role != "final":
+            raise ExposureError(
+                f"context role is {self.role!r}; a final score needs load_context(role='final'). "
+                "A 'develop' context may fit constants on the frames it reports.")
+        if self.cap_fit_frames is None:
+            return                      # no prior was fitted here; nothing to overlap
+        bad = np.intersect1d(self.cap_fit_frames, frames)
+        if bad.size:
+            raise ExposureError(
+                f"{bad.size} of the {frames.size} frames about to be scored were also used "
+                f"to fit the capability prior. A final score cannot be reported on frames "
+                f"that participated in fitting it (R-B2 / F02). Fit on a disjoint selector, "
+                f"or pass capability_sel=None and read a frozen prior.")
 
     @property
     def run_ids(self) -> list[str]:
@@ -248,12 +353,13 @@ def load_context(
     bright_dir="runs/derived/brightness",
     iou_thr: float = 0.85,
     veto: float | None = 0.5,
-    capability_sel: str | None = "fit",
+    capability_sel: str | None = _UNSET,
+    role: str = "develop",
     bright_soft: bool = False,
     veto_filter: tuple[str, int] | None = ADOPTED_VETO_FILTER,
     veil_filter: tuple[str, int] | None = ADOPTED_VEIL_FILTER,
     tau_lap: float | None = None,
-    preset: str = "adopted",
+    preset: str | None = None,
     ir_condition: str | None = None,
     ir_nms: float | None = None,
     vis_soft_nms: float | None = None,
@@ -265,9 +371,13 @@ def load_context(
     config=None,
     verbose: bool = True,
 ) -> FusionContext:
-    """`preset="adopted"` (default) reproduces the 2026-08-20/09-01 system exactly.
+    """`preset` is required (R-E6). A default let callers evaluate a superseded
+    system without saying so; `adopted` was the default long after it stopped
+    being the shipped system.
 
-    `preset="crossmodal26m"` is `crossmodal` plus the two repairs the full-scale
+    `preset="adopted"` reproduces the 2026-08-20/09-01 system exactly.
+
+    `preset="crossmodal26m"` — the SHIPPED system — is `crossmodal` plus the two repairs the full-scale
     yolo26m / yolo26m-p2feat detectors force, measured in
     `docs/levers-and-the-26m-swap-2026-09-01.md`: the veil axis becomes conditional
     on the night arm, and a cross-modal SUPPORT term replaces the cross-modal
@@ -302,16 +412,31 @@ def load_context(
     +0.0003, and -0.0003 (CI spans zero) on each of the four night cells. Every one
     of the eight cells lands at or above max(VIS, IR).
     """
-    if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms"):
+    # R-E1: captured before the rewrites below, which are lossy.
+    preset_requested = preset
+
+    if preset is None:
+        raise ValueError("load_context() needs an explicit preset: 'crossmodal26m' is the "
+                         "shipped system; 'adopted' and 'crossmodal' reproduce older records")
+    if preset not in ("adopted", "crossmodal", "crossmodal26m", "crossmodal26m_snms",
+                      "crossmodal26m_r"):
         raise ValueError(f"unknown preset {preset!r}")
+    # `crossmodal26m_r` is `crossmodal26m` with repair R1 of
+    # docs/prereg-degraded-ir-repairs-2026-10-10.md: the weak-IR fallback confirms with
+    # `concentrated` alone. R1 was adopted on draws 942-944 (0 cells harmed, 5 gaining
+    # >= 0.0060, claim 35/60 vs 32); R2 (support only from a merge-healthy IR) was rejected
+    # and is not part of the preset. Development-only; the pohang04 look scored `crossmodal26m`.
+    repaired = preset == "crossmodal26m_r"
+    if repaired:
+        preset = "crossmodal26m"
     # `crossmodal26m` is `crossmodal` with the two repairs the full-scale detectors
     # force. It is a separate preset and not a change to `crossmodal` because every
     # published number was measured under the latter and must stay reproducible.
     #
-    # `crossmodal26m_snms` is `crossmodal26m` plus VIS soft-NMS, adopted 2026-09-02.
-    # Same reasoning one layer up: the +0.0106 headline and the whole of
-    # `final_26m_grid_v2.md` were measured under `crossmodal26m`, so that preset does
-    # not move. A caller who wants the shipped system asks for this one.
+    # `crossmodal26m_snms` is `crossmodal26m` plus VIS soft-NMS. It was NOT adopted:
+    # night fails at -1.03e-5 on 4/4 draws (`experiment-log-2026-09-02.md`, "do not
+    # adopt"). It stays loadable only to reproduce that rejection; the shipped system
+    # is `crossmodal26m`.
     if preset == "crossmodal26m_snms":
         if vis_soft_nms is None:
             vis_soft_nms = 0.5
@@ -596,7 +721,13 @@ def load_context(
         ir_merge_veto = True
         support_iou, support_gamma = 0.0, 0.0
 
+    # snapshot AFTER the preset defaults have been applied, so the record shows
+    # what actually ran rather than what the caller happened to pass.
+    _inputs = {k: v for k, v in locals().items() if k in _LOAD_CONTEXT_PARAMS}
     ctx = FusionContext(
+        inputs=_inputs,
+        preset=preset_requested, preset_resolved=preset,
+        ir_nms=(float(ir_nms) if ir_nms else None),
         vis_by_cond=vis_by_cond, ir_clean=ir_clean, scorer_vis=scorer_vis, scorer_ir=scorer_ir,
         c_vis=c_vis, c_ir=c_ir, bright_by_cond=bright_by_cond, struct_by_cond=struct_by_cond,
         h_frames=h_frames, gts=gts,
@@ -616,10 +747,33 @@ def load_context(
         struct_lov_by_cond=struct_lov_by_cond,
         veil_requires_night=veil_requires_night,
         night_weak_fallback=night_weak_fallback, ir_merge_veto=ir_merge_veto,
-        support_iou=support_iou, support_gamma=support_gamma)
+        support_iou=support_iou, support_gamma=support_gamma,
+        fallback_veil=not repaired, support_requires_ir_health=False)
 
+    ctx.role = role
+    if capability_sel is _UNSET:
+        if role == "final":
+            raise ExposureError(
+                "load_context(role='final') requires an explicit capability_sel. The "
+                "development default is 'fit', which is every day frame — the same "
+                "frames a final score is reported over (R-B2 / F02). Choose a selector "
+                "disjoint from what you will score, or pass capability_sel=None to fit "
+                "no prior at all.")
+        capability_sel = "fit"          # unchanged development default; results identical
+    if role == "final" and capability_sel in _OVERLAPPING_SELECTORS:
+        raise ExposureError(
+            f"capability_sel={capability_sel!r} spans frames a final score would be "
+            f"reported over. Refused under role='final' (R-B2 / F02). Use a run "
+            f"selector disjoint from the scoring set, or capability_sel=None.")
+    if role not in ("develop", "final"):
+        raise ValueError(f"role must be 'develop' or 'final', not {role!r}")
+    # resolved after ctx construction, like cap_ir_scale -- record the value that ran,
+    # never the `_UNSET` sentinel, which is meaningless outside this call.
+    ctx.inputs["capability_sel"] = capability_sel
     if capability_sel:
         sel = None if capability_sel == "all" else ctx.sel(capability_sel)
+        ctx.cap_fit_frames = (np.arange(len(ctx.runs)) if sel is None
+                              else np.asarray(sel))
         ctx.cap_vis, ctx.cap_ir = capability_prior(
             vis_prior_records, ir_prior_records, gts, h_frames, sel)
         # The fitted prior is each stream's clean mAP, which answers "how good is
@@ -642,6 +796,8 @@ def load_context(
         if cap_ir_scale is None:
             cap_ir_scale = 4.0 if preset == "crossmodal" else 1.0
         ctx.cap_ir = ctx.cap_ir / float(cap_ir_scale)
+        ctx.cap_ir_scale = float(cap_ir_scale)
+        ctx.inputs["cap_ir_scale"] = float(cap_ir_scale)
         ctx.cap_note = f"capability prior over {capability_sel} frames"
 
     if verbose:
@@ -841,7 +997,12 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
                 if lv is not None:
                     concentrated = lv > float(
                         ctx.struct_const["axes"]["lap_over_var"]["threshold"])
-                vv |= ctx.ir_night_raw & (~ctx.ir_ok) & (concentrated | (dark & veil))
+                # Under corruption v2 the `dark & veil` half is what fires on low-light
+                # DAY frames once IR is fogged or noisy (up to 96%, -0.16 ship AP;
+                # docs/eval/corruption_v2/fallback_cost.md): v2 low light is both dark
+                # and veiled. `fallback_veil=False` (preset crossmodal26m_r) drops it.
+                confirm = (concentrated | (dark & veil)) if ctx.fallback_veil else concentrated
+                vv |= ctx.ir_night_raw & (~ctx.ir_ok) & confirm
 
         # ---- R_sys, and the abstain it exists for --------------------------
         # scope §7.4 introduced R_sys as "has every modality failed?", and under the
@@ -900,6 +1061,13 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
         # saying "no modality is reliable here", for a downstream consumer or a
         # risk-coverage curve. It does not touch the merge.
         abstain = (~healthy_vis) & (~healthy_ir)
+        # The support bonus lets an IR box vouch for a VIS box. A fogged IR's
+        # scattered boxes vouch for VIS false positives (IR fog s3: the bonus costs
+        # 0.0113; docs/eval/corruption_v2/ir_merge_veto.md), so under
+        # `support_requires_ir_health` only a merge-healthy IR may vouch. IR stays in
+        # the merge either way; only the bonus is withheld.
+        if ctx.support_requires_ir_health and kw.get("support_gamma"):
+            kw["support_gamma"] = np.where(healthy_ir, float(kw["support_gamma"]), 0.0).tolist()
         kw["veto_override"] = (vv.tolist(), vi.tolist())
         kw["veto_below"] = None
         res = evaluate_systems(vis, ir, ctx.scorer_vis, ctx.c_vis, **kw)
@@ -939,3 +1107,11 @@ def run_systems(ctx: FusionContext, condition: str, **overrides) -> dict:
 def run_table(ctx: FusionContext, **overrides) -> dict[str, dict]:
     """The full condition sweep. Returns {condition: evaluate_systems result}."""
     return {cond: run_systems(ctx, cond, **overrides) for cond in ctx.conditions}
+
+
+
+# Resolved once, from the signature itself, so this cannot drift out of date the way
+# a hand-maintained list would. `verbose` is excluded: it changes no number.
+_LOAD_CONTEXT_PARAMS = frozenset(
+    p for p in __import__("inspect").signature(load_context).parameters
+    if p != "verbose")

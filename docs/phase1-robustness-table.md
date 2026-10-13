@@ -1,3 +1,5 @@
+# Phase 1 robustness — Table 1 mAP vs curve-peak, per run
+
 Campaign: **main**
 
 | run | Table 1 mAP50-95 | curve peak | delta | best ep | last ep | gap | stop reason | admissible |

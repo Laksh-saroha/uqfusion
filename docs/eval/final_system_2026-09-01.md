@@ -1,10 +1,10 @@
 # The finalized system (2026-08-20), measured
 
-Configuration: capability prior over fit runs (VIS 0.3352 / IR 0.0092), photometric term veto-only, hard veto at r_bright<0.5 with ('dilate', 15) hysteresis, WBF iou_thr 0.85. Paired frame-level bootstrap, n=1000, seed 0. Caches: the record's yolo26s checkpoints (the full-scale retrain replaces them; this table freezes the architecture, not the numbers).
+Config: capability prior over fit runs (VIS 0.3352 / IR 0.0092), photometric term veto-only, hard veto at r_bright<0.5 with ('dilate', 15) hysteresis, WBF iou_thr 0.85. Paired frame-level bootstrap, n=1000, seed 0. Caches: the record's yolo26s checkpoints (the full-scale retrain replaces them; this table freezes the architecture, not the numbers).
 
 ## 1. Eight cells, gated vs `ir_only` — SHIP AP (the headline)
 
-Ship is the only class both streams can produce: IR is nc=1 ship-only (D28/A-1 — IR buoy AP measured 0.00019). Read this table, not the macro one below. The macro delta is `(delta_ship + delta_buoy) / 2`, mixing the class fusion acts on with one only VIS can supply, so it answers no single question: it dilutes a large ship gain (where delta_buoy < delta_ship), inflates a small one (where VIS buoy AP is high and the ship gain is not), and in a vetoed cell carries a buoy zero the system was never able to avoid. None of those apply here.
+Ship is the only class both streams produce: IR is nc=1 ship-only (D28/A-1 — IR buoy AP 0.00019). **Read this table, not the macro one below.** The macro delta `(delta_ship + delta_buoy)/2` mixes the class fusion acts on with one only VIS supplies, so it answers no single question: it dilutes a large ship gain (where delta_buoy < delta_ship), inflates a small one (high VIS buoy AP, small ship gain), and in a vetoed cell carries a buoy zero the system could never avoid.
 
 | cell | VIS ship | IR ship | gated ship | delta vs ir | 95% CI | flips | VIS veto |
 |---|---:|---:|---:|---:|---|---:|---:|
@@ -19,7 +19,7 @@ Ship is the only class both streams can produce: IR is nc=1 ship-only (D28/A-1 �
 
 ### 1b. The same cells, macro mAP over both classes (continuity with the record)
 
-`buoy gated` is VIS-only by construction; where it drops to ~0 the veto has removed VIS from the merge, and the macro column below is carrying that zero. This table exists so earlier macro-quoted numbers stay comparable — it is not the result.
+`buoy gated` is VIS-only by construction; where it drops to ~0 the veto removed VIS from the merge and the macro column carries that zero. Kept only so earlier macro-quoted numbers stay comparable — not the result.
 
 | cell | visible_only | ir_only | gated | delta vs ir | 95% CI | buoy gated | buoy VIS |
 |---|---:|---:|---:|---:|---|---:|---:|
@@ -34,7 +34,7 @@ Ship is the only class both streams can produce: IR is nc=1 ship-only (D28/A-1 �
 
 ## 2. Gated vs `visible_only`, day frames (the record's open item 1)
 
-Ship AP is the headline column here too; macro follows for continuity.
+Ship AP is the headline; macro follows for continuity.
 
 | condition | VIS ship | gated ship | delta | 95% CI | flips |
 |---|---:|---:|---:|---|---:|

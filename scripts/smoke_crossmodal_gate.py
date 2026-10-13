@@ -97,10 +97,16 @@ def main() -> int:
         pass
     except SystemExit:
         pass
-    print("[smoke] D unknown preset raises  OK")
+    try:
+        load_context(verbose=False)
+        fails.append("D missing preset did not raise (R-E6: no default system)")
+    except ValueError:
+        pass
+    print(f"[smoke] D unknown/missing preset raises  "
+          f"{'FAIL' if any(f.startswith('D') for f in fails) else 'OK'}")
 
     # ---- B, C, E, F, G, H ------------------------------------------------
-    ad = load_context(verbose=False)
+    ad = load_context(preset="adopted", verbose=False)
     if ad.veto_rule != "photometric+veil" or ad.gini_by_cond or ad.ir_night is not None:
         fails.append("B preset='adopted' picked up crossmodal state")
     if ad.single_passthrough:
