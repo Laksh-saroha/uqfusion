@@ -28,7 +28,7 @@ MD = (ROOT / "PAPER.md").read_text(encoding="utf-8").replace("\r\n", "\n")
 CODE_ANON = "in a public repository, withheld from this review copy for anonymity and linked in the camera-ready"
 CODE_OPEN = "in the public repository (github.com/Laksh-saroha/uqfusion, branch `fusion-uq-phase3`)"
 if IEEE:  # IEEE review is single-blind: the code link stays, and TMLR's broader-impact section goes
-    assert MD.count(CODE_ANON) == 1
+    assert MD.count(CODE_ANON) == 2  # Appendix J and the availability statement
     MD = MD.replace(CODE_ANON, CODE_OPEN)
     i, j = MD.index("\n## 9. Broader impact statement\n"), MD.index("\n## References\n")
     MD = MD[:i] + "\n" + MD[j:]
@@ -63,7 +63,7 @@ MATH = {  # the BN-mix formulas (§4.3) and the Appendix D.1 formulas, which the
     "w_m = R̄_m / (R̄_vis + R̄_ir)": r"$w_m = \bar{R}_m / (\bar{R}_{\mathrm{vis}} + \bar{R}_{\mathrm{ir}})$",
 }
 BIB_ACCENTS = [("ü", r'{\"u}'), ("Ç", r"{\c{C}}"), ("ç", r"{\c{c}}"), ("Ö", r'{\"O}'), ("á", r"{\'a}"),
-               ("ø", r"{\o}"), ("–", "--")]
+               ("ø", r"{\o}"), ("č", r"{\v{c}}"), ("š", r"{\v{s}}"), ("Ž", r"{\v{Z}}"), ("–", "--")]
 
 
 # ---------------------------------------------------------------- references -> BibTeX
@@ -131,7 +131,7 @@ def parse_ref(e):
                 f["note"] = "; ".join(notes)
     first_word = re.sub(r"[^a-z0-9]", "", f["title"].split()[0].lower()) or "x"
     sur = pairs[0][0]
-    key = re.sub(r"[^a-z]", "", sur.lower().translate(str.maketrans("üçöáø", "ucoao"))) + year + first_word
+    key = re.sub(r"[^a-z]", "", sur.lower().translate(str.maketrans("üçöáøčšž", "ucoaocsz"))) + year + first_word
     return dict(key=key, type=typ, fields=f, surnames=[s for s, _ in pairs], given=pairs[0][1], year=year)
 
 
@@ -141,6 +141,7 @@ def bib_value(k, v):
     for a, b in BIB_ACCENTS:
         v = v.replace(a, b)
     v = v.replace("&", r"\&")
+    v = re.sub(r"\*(.+?)\*", r"\\emph{\1}", v)  # Markdown italics, e.g. a journal named in a note
     return "{" + v + "}" if k == "title" else v
 
 

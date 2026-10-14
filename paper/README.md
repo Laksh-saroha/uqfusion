@@ -13,7 +13,7 @@ py -3.13 paper/build_latex.py
 tectonic --keep-logs main.tex              # in a scratch folder holding main.tex, references.bib, figures/ and the style files
 ```
 
-**State on 2026-10-14** (rebuilt with Tectonic 0.17.0 after merging the caption source paths moving to Table 20 in Appendix J and the night-restore figure label fix). 52 pages: main body pages 1–12 (TMLR's normal-review mark is 12), references from page 12, Appendices A–K after them. No errors, overfull boxes or undefined references. 43 references, 20 tables, 8 figures.
+**State on 2026-10-14** (revised after a simulated JOE review: claims scoped, variants renamed IG-BN, Table 1 and Fig. 2 moved to the appendices, related work extended, availability statement added). 54 pages: main body pages 1–12 (TMLR's normal-review mark is 12), references from page 12, Appendices A–K after them. No errors, overfull boxes or undefined references. 50 references, 19 tables, 8 figures.
 
 **Before submission.**
 1. The review copy is anonymous: the author block is hidden and the code link is not given. Restore both for the camera-ready (`\usepackage[accepted]{tmlr}`), and add Acknowledgements, which the review copy omits.
