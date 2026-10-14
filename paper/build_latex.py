@@ -43,7 +43,7 @@ STATE = {"two_col": False}  # True while converting the IEEE main body, whose fl
 UNI = [  # applied after escaping, longest first
     ("10⁻⁴", "10$^{-4}$"), ("R̄", r"$\bar{R}$"), ("−", "$-$"), ("±", r"$\pm$"), ("×", r"$\times$"),
     ("σ", r"$\sigma$"), ("α", r"$\alpha$"), ("λ", r"$\lambda$"), ("γ", r"$\gamma$"), ("μ", r"$\mu$"),
-    ("τ", r"$\tau$"), ("ρ", r"$\rho$"), ("Σ", r"$\Sigma$"), ("Δ", r"$\Delta$"), ("≥", r"$\geq$"),
+    ("τ", r"$\tau$"), ("ρ", r"$\rho$"), ("Σ", r"$\Sigma$"), ("Δ", r"$\Delta$"), ("≥", r"$\geq$"), ("∧", r"$\wedge$"),
     ("≤", r"$\leq$"), ("≈", r"$\approx$"), ("·", r"$\cdot$"), ("÷", r"$\div$"), ("²", r"$^{2}$"),
     ("¼", r"$\frac{1}{4}$"), ("′", r"$'$"), ("—", "---"), ("–", "--"), ("†", r"\textdagger{}"),
     ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"),
