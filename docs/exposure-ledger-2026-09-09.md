@@ -887,3 +887,13 @@ from the detector" are different claims and only the first is true.
     REPLICATE): FAILS, in the same direction as the ungated arm.
   * `q_vis` ∧ gap (both rules) REPLICATES (3 better, 0 worse), better than IG-BN in one cell (VIS noise) and tied with
     the clock gate in every cell (0 better, 0 worse), as predicted.
+
+* **2026-10-14 (9:53 PM, before any N4c2g detection) — IG-BN-causal+glare (N4c2g) on pohang04's glare cell
+  registered: P-C2G, the twelfth scoring of pohang04** (`docs/prereg-ttbn-causal-glare-p04-2026-10-14.md`,
+  `b22c44e`). Asked by Laksh to fill the dash in Table 3's IG-BN-causal column, glare row.
+  * Arm: N4c2's causal BN-mix (previous block's N4 statistics, N = 16, blocks of 8) under N4g's gate. Cell
+    glare/clean only (VIS v2 glare s2, IR clean, draws 941–944, five systems), on P-G's plain glare caches.
+  * Rule: P-G's (worse at ≤ −0.0014 with CI below zero; better at ≥ +0.0060 with CI above zero), same replicates.
+    Descriptive: N4c2g − N4g. Prediction: REPLICATES, Δ ≈ +0.030, slightly below N4g's +0.0309.
+  * Seen first: every development and pohang04 number to date (P-C2, P-G, P-FG among them). N4c2g has no
+    development verdict; fp16 is N4c2's registered arithmetic and P-G's glare fp16 check covers glare.
