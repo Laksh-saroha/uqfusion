@@ -48,6 +48,11 @@ UNI = [  # applied after escaping, longest first
     ("¼", r"$\frac{1}{4}$"), ("′", r"$'$"), ("—", "---"), ("–", "--"), ("†", r"\textdagger{}"),
     ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"),
 ]
+DISPLAY = {  # paragraphs that are one formula
+    "`μ = (N μ_src + n μ_b) / (N + n)`, `σ² = (N σ²_src + n σ²_b) / (N + n)`,":
+        r"\begin{equation*}\mu = \frac{N\mu_{\mathrm{src}} + n\mu_b}{N+n},\qquad"
+        r" \sigma^2 = \frac{N\sigma^2_{\mathrm{src}} + n\sigma^2_b}{N+n},\end{equation*}",
+}
 MATH = {  # the BN-mix formulas (§4.3) and the Appendix D.1 formulas, which the Markdown carries as code spans
     "μ = (N μ_src + n μ_b) / (N + n)": r"$\mu = (N\mu_{\mathrm{src}} + n\mu_b)/(N+n)$",
     "σ² = (N σ²_src + n σ²_b) / (N + n)": r"$\sigma^2 = (N\sigma^2_{\mathrm{src}} + n\sigma^2_b)/(N+n)$",
@@ -434,6 +439,12 @@ def convert(md, cv):
                         assert num == f"{'ABCDEFGHIJKLM'[counters['app'] - 1]}.{counters['sub']}", num
                         tex.append(r"\subsection{" + cv.inline(name, heading=True) + r"}\label{app:" + num + "}")
                     defined.add(("app", num))
+                k += 1
+                continue
+            if p in DISPLAY:  # set as a displayed equation inside the paragraph around it
+                if tex and tex[-1] == "":
+                    tex.pop()
+                tex.append(DISPLAY[p])
                 k += 1
                 continue
             if p.startswith("!["):
