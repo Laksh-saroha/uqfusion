@@ -160,9 +160,17 @@ MATH_VARS = {  # code spans that are quantities, not identifiers, are typeset as
 }
 
 
+SYSTEMS = {  # system names are set in small caps, as names, not as code
+    "union", "shipped", "full_tta", "lex", "ttbn_lex", "full_tta_lex", "ens5_union", "ens5_lex", "ens5",
+    "calunion", "demote", "union_ttbn",
+}
+
+
 def code(s, breakable=True):
     if s in MATH_VARS:
         return MATH_VARS[s]
+    if s in SYSTEMS:
+        return r"\textsc{" + escape(s) + "}"
     s = escape(s)
     if breakable:
         s = s.replace("/", r"/\allowbreak{}").replace(r"\_", r"\_\allowbreak{}")
