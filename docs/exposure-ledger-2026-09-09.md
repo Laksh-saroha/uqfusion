@@ -879,3 +879,11 @@ from the detector" are different claims and only the first is true.
   * Thermal day only REPLICATES (8 better, 0 worse); prediction (worse on clean cells): FAILS.
   * `q_vis` only (= `q_vis` ∧ solar) REPLICATES; against IG-BN better in one cell (VIS noise, +0.0090 [+0.0056,
     +0.0132]), worse in none: CLOCK BETTER, as predicted.
+* **2026-10-14 (7:35 PM) — GA Amendment 2 on pohang04, the eleventh scoring: the gap-only prediction FAILS; with
+  `q_vis` the gap ties the clock gate** (`docs/eval/ttbn/gate_ablation_gap_p04_2026-10-14.md`). Same cells, draws,
+  replicates and adapted streams as the tenth scoring; only the frame selections differ.
+  * The gap fires on 0.984–0.999 of held-out frames. Alone (Yoo's rule and calibrated bound) it REPLICATES, better
+    than `union` in all nine cells and than IG-BN in eight (clean-VIS cells +0.0202 to +0.0216). Prediction (DOES NOT
+    REPLICATE): FAILS, in the same direction as the ungated arm.
+  * `q_vis` ∧ gap (both rules) REPLICATES (3 better, 0 worse), better than IG-BN in one cell (VIS noise) and tied with
+    the clock gate in every cell (0 better, 0 worse), as predicted.
