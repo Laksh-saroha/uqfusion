@@ -155,3 +155,18 @@ A new exposure: the tenth scoring of pohang04, under the standing rule of 10-11.
 `docs/eval/ttbn/gate_ablation_dev_2026-10-14.md`, `docs/eval/ttbn/gate_ablation_p04_2026-10-14.md`,
 `docs/eval/ttbn/gate_night_p01_2026-10-14.md` (each with a `.json`). Large intermediates (complement
 records, pohang04 presorts) in `runs/gate_ablation/` (a junction to C:, because A: is full).
+
+## Amendment 1 (4:22 PM, before any pohang04 ablation block is built): the fp16 rebuild noise, priced
+
+As registered above, N4's fp16 development blocks of low light and fog (draw 942; 151 blocks each) were rebuilt
+on the pohang04 code path (fp16 autocast, channels_last, cuDNN autotuning, fused statistics) and `union_ttbn`
+was scored both ways (IR clean, day, five systems; `runs/gate_ablation/fp16_rebuild_noise.json`):
+
+| cell | stored | rebuilt | Δ (mean of five) | largest |Δ| of one system |
+|---|---:|---:|---:|---:|
+| lowlight/clean/day | 0.25071 | 0.25070 | −0.000009 | 0.00020 |
+| fog/clean/day | 0.03269 | 0.03268 | −0.000012 | 0.00002 |
+
+Rebuilding fp16 blocks moves a cell by about 1e-5, two orders below the 0.0014 floor. The pohang04 build goes
+ahead with N4's stored records plus newly built blocks, as registered. No ablation number exists on pohang04;
+development scoring has started (no result read).

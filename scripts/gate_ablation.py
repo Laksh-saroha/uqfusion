@@ -677,6 +677,32 @@ def _night_stats_path(ic: str, draw: int, kind: str) -> Path:
     return OUT / "night" / kind / ttbn.sub(draw - 10) / f"gauss_ir_paired_{ic}.json"
 
 
+#: depth maps of the night-test IR frames (v2 fog), built by `build_depth_maps.py --out-root` on C: (A: is full);
+#: `corruptions_v2.depth_path` reads the module's DEPTH_ROOT at call time, so each worker points it here
+NIGHT_DEPTH = OUT / "depth_v2"
+
+
+def _night_init(spec):
+    import uqfusion.eval.corruptions_v2 as c2
+    from uqfusion.eval import parallel_frames as pf
+    c2.DEPTH_ROOT = NIGHT_DEPTH
+    pf._init(spec)
+
+
+def _night_chunk(idx):
+    from uqfusion.eval import parallel_frames as pf
+    return [pf._one(i)[2] for i in idx]
+
+
+def _night_frames(paths, spec, workers):
+    """`parallel_frames.corrupted_frames`' arithmetic (its `_init`/`_one`), statistics only, in order."""
+    spec = {**spec, "images": [str(p) for p in paths]}
+    chunks = [list(range(a, min(a + 4, len(paths)))) for a in range(0, len(paths), 4)]
+    with ProcessPoolExecutor(workers, initializer=_night_init, initargs=(spec,)) as ex:
+        for out in ex.map(_night_chunk, chunks):
+            yield from out
+
+
 def cmd_night_stats(args) -> int:
     """IR frame statistics of the 1,109 night pairs under the development IR corruptions (v2, seeds
     952-954), by the arithmetic that wrote the development v2 IR statistics (`parallel_frames`, this
@@ -708,7 +734,7 @@ def cmd_night_stats(args) -> int:
                     "stats": "ir"}
             br, st = [], []
             t0 = time.time()
-            for _, _, s_ in corrupted_frames(paths, spec, workers=args.workers):
+            for s_ in _night_frames(paths, spec, args.workers):
                 br.append(s_[0])
                 st.append(s_[1])
             for kd, fr in (("brightness", br), ("structure", st)):
