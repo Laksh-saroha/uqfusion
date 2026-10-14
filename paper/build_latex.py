@@ -554,9 +554,7 @@ IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
 
 \title{\TITLE}
 
-\author{\AUTHOR%
-\thanks{\AFFIL}%
-\thanks{Appendices A--J, cited in the text, are provided as supplementary material.}}
+\author{\AUTHOR}
 
 \markboth{}{\SHORT}
 
