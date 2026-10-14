@@ -356,8 +356,8 @@ def fig4() -> None:
     ax.axhspan(0, dead, color="#e7e6e2", lw=0, zorder=0)
     ax.axhspan(dead, alive, color=BAND, lw=0, zorder=0)
     ax.axhline(alive, color=INK2, lw=0.7, ls=(0, (3, 2)), zorder=1)
-    ax.text(0.5, alive + 0.004, "ALIVE threshold 0.02\n(pre-registered)", fontsize=6.2, color=INK2,
-            va="bottom", ha="center", linespacing=1.15)
+    ax.text(1.53, alive, "ALIVE threshold 0.02\n(pre-registered)", fontsize=6.2, color=INK2,
+            va="center", ha="left", linespacing=1.15, clip_on=False)  # right margin, clear of the bar labels
     xs = [0, 1]
     ax.bar(xs, [old, new], width=0.42, color=VIS, zorder=2)
     ax.errorbar([1], [new], yerr=[[new - ci[0]], [ci[1] - new]], fmt="none", ecolor=INK,
