@@ -897,3 +897,12 @@ from the detector" are different claims and only the first is true.
     Descriptive: N4c2g − N4g. Prediction: REPLICATES, Δ ≈ +0.030, slightly below N4g's +0.0309.
   * Seen first: every development and pohang04 number to date (P-C2, P-G, P-FG among them). N4c2g has no
     development verdict; fp16 is N4c2's registered arithmetic and P-G's glare fp16 check covers glare.
+
+* **2026-10-14 (11:20 PM) — IG-BN-causal+glare (N4c2g) on pohang04, the twelfth scoring: P-C2G REPLICATES**
+  (`docs/eval/ttbn/ttbn_causal2_glare_p04_2026-10-14.md`; registered in `docs/prereg-ttbn-causal-glare-p04-2026-10-14.md`).
+  Built 9:55–11:09 PM, scored 11:09–11:14 PM, bootstrap 11:14–11:18 PM.
+  * glare/clean: gate 81.0% (equal to the frame-statistics gate in all 20 jobs). Δ vs `union`
+    +0.0306 [+0.0287, +0.0325] (0.1417 → 0.1724). Claim +0.0003 [−0.0012, +0.0023].
+  * Descriptive: N4c2g − N4g −0.0003 [−0.0005, −0.0000]. The prediction (Δ ≈ +0.030, price between −0.0010 and 0) held.
+  * A parallel two-process build was tried and stopped (slower); every record was written by one complete run of
+    its draw.
