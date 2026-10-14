@@ -813,6 +813,266 @@ def cmd_report_p04(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ Amendment 2: gap arms, scoring and reports
+GAP_NAME = {"gap_yoo": "gap (Yoo's rule)", "gap_cal": "gap (calibrated bound)", "qvis_gap_yoo": "q_vis ∧ gap (Yoo)",
+            "qvis_gap_cal": "q_vis ∧ gap (calibrated)"}
+
+
+def _dev_gap_job(spec):
+    import dataclasses
+    import seed_ensemble as se
+    from uqfusion.eval.apmetrics import frame_parts
+    from uqfusion.eval.ctx import NIGHT_RUNS, load_context, run_systems
+    from v2_sensitivity import ship_ap
+    draw, ir_cond, k = spec
+    ttbn._low()
+    se._memo_distances()
+    d = f"{se.STATS}/brightness/{ttbn.sub(draw)}"
+    conds = tuple(ttbn.DEV_CONDS)
+    ctx = load_context(preset="crossmodal26m", cache_dir=f"{se.CACHE}/seed{k}/{ttbn.sub(draw)}", bright_dir=d,
+                       structure_dir=f"{se.STATS}/structure/{ttbn.sub(draw)}",
+                       ir_bright=f"{d}/gauss_ir_paired_{ir_cond or 'clean'}.json",
+                       conditions=conds, ir_condition=ir_cond, verbose=False)
+    night = np.isin(ctx.runs, NIGHT_RUNS)
+    sl = {"day": np.flatnonzero(~night), "night": np.flatnonzero(night)}
+    u = dataclasses.replace(ctx, veto=None)
+    res = {}
+    for c in conds:
+        q, _ = gate_ctx_arms(ctx, c)
+        vis = ctx.vis_by_cond[c]
+        assert [Path(r["image_path"]).name for r in vis] == [Path(p).name for p in _list("dev")]
+        gs = gap_gates(vis, k, q)
+        full = full_stream("dev", k, c, None if c == "clean" else draw)
+        o0 = run_systems(u, c, compute_metrics=False)
+        parts = {"union": frame_parts(o0["fused_gated"], ctx.gts)}
+        done = {}
+        for a in GAP_ARMS:
+            key = gs[a].tobytes()
+            if key in done:
+                parts[f"union_{a}"], parts[f"vis_{a}"] = parts[f"union_{done[key]}"], parts[f"vis_{done[key]}"]
+                continue
+            done[key] = a
+            vg = select(full, vis, gs[a])
+            parts[f"vis_{a}"] = frame_parts(vg, ctx.gts)
+            parts[f"union_{a}"] = (parts["union"] if not gs[a].any() else
+                                   frame_parts(run_systems(u, c, compute_metrics=False, vis_records=vg)["fused_gated"],
+                                               ctx.gts))
+        for s, idx in sl.items():
+            res[f"{c}|{s}"] = {n: ship_ap(p, idx) for n, p in parts.items()}
+            res[f"{c}|{s}"]["gate"] = {a: float(gs[a][idx].mean()) for a in GAP_ARMS}
+    return spec, res
+
+
+def cmd_score_dev_gap(args) -> int:
+    out_p = OUT / "score_dev_gap.json"
+    allres = json.loads(out_p.read_text(encoding="utf-8")) if out_p.is_file() else {}
+    specs = [(d, ic, k) for d in ttbn.DEV_DRAWS for ic in ttbn.DEV_IR_CONDS for k in ttbn.SEEDS
+             if f"{d}|{ic}|{k}" not in allres]
+    print(f"[score-gap] {len(specs)} jobs", flush=True)
+    t0 = time.time()
+    with ProcessPoolExecutor(args.workers, max_tasks_per_child=1) as ex:
+        for n, (spec, res) in enumerate(ex.map(_dev_gap_job, specs), 1):
+            allres["|".join(map(str, spec))] = res
+            tmp = out_p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(allres), encoding="utf-8")
+            os.replace(tmp, out_p)
+            print(f"[score-gap] {n}/{len(specs)} {spec} ({time.time() - t0:.0f}s)", flush=True)
+    return 0
+
+
+def _counts(cells: dict, a: str, key: str) -> tuple[list, list]:
+    worse = [c for c, v in cells.items() if v[a][key][0] <= -0.0014 and v[a][key][2] < 0]
+    better = [c for c, v in cells.items() if v[a][key][0] >= 0.0060 and v[a][key][1] > 0]
+    return worse, better
+
+
+def _reading(worse: list, better: list, who: str) -> str:
+    return (f"{who} BETTER" if not worse and better else "MATCHES" if not worse and not better else
+            "BASELINE BETTER" if not better else "MIXED")
+
+
+def cmd_report_dev_gap(args) -> int:
+    res = json.loads((OUT / "score_dev.json").read_text(encoding="utf-8"))
+    gap = json.loads((OUT / "score_dev_gap.json").read_text(encoding="utf-8"))
+    cells, verdict, worst_id = {}, {}, 0.0
+    for c in ttbn.DEV_CONDS:
+        for ic in ttbn.DEV_IR_CONDS:
+            for s in ("day", "night"):
+                cell = f"{c}/{ic or 'clean'}/{s}"
+                rows = {}
+                for k in ttbn.SEEDS:
+                    rows[k] = []
+                    for d in ttbn.DEV_DRAWS:
+                        g = gap[f"{d}|{ic}|{k}"][f"{c}|{s}"]
+                        r = dict(res[f"{d}|{ic}|{k}"][f"{c}|{s}"])
+                        r.update({n: v for n, v in g.items() if n not in ("union", "gate")})
+                        r["gate_gap"], r["union_check"] = g["gate"], g["union"]
+                        rows[k].append(r)
+                        worst_id = max(worst_id, abs(r["union"] - r["union_check"]))
+                cells[cell] = {"union": float(np.mean([np.mean([r["union"] for r in rows[k]]) for k in ttbn.SEEDS]))}
+                for a in GAP_ARMS:
+                    def f(base, a=a):
+                        return _t([np.mean([r[f"union_{a}"] - r[base] for r in rows[k]]) for k in ttbn.SEEDS])
+                    cells[cell][a] = {"gate": float(np.mean([np.mean([r["gate_gap"][a] for r in rows[k]])
+                                                             for k in ttbn.SEEDS])),
+                                      "vs_union": f("union"), "vs_n4": f("union_n4"), "vs_clock": f("union_qvis_solar")}
+    if worst_id > 0:
+        raise SystemExit(f"union differs between the two scorings by {worst_id}")
+    for a in GAP_ARMS:
+        w, b = _counts(cells, a, "vs_union")
+        wn, bn = _counts(cells, a, "vs_n4")
+        wc, bc = _counts(cells, a, "vs_clock")
+        verdict[a] = {"worse": w, "better": b, "pass": (not w) and bool(b), "worse_than_n4": wn, "better_than_n4": bn,
+                      "worse_than_clock": wc, "better_than_clock": bc,
+                      "vs_n4_reading": _reading(wn, bn, "GAP"), "vs_clock_reading": _reading(wc, bc, "GAP")}
+    o = ROOT / args.out
+    o.with_suffix(".json").write_text(json.dumps({"verdict": verdict, "cells": cells}, indent=1), encoding="utf-8")
+    ga6 = any(verdict[a]["pass"] for a in ("qvis_gap_yoo", "qvis_gap_cal"))
+    L = ["# Gate ablation, Amendment 2: Yoo et al.'s feature-gap gate, development", "",
+         "`docs/prereg-gate-ablation-2026-10-14.md`, Amendment 2. Draws VIS 942–944 / IR 952–954, five systems, 60 "
+         "cells; same adapted records, fusion, statistics and rule as the other arms "
+         "(`gate_ablation_dev_2026-10-14.md`). Δ paired against `union`, IG-BN and the clock gate (`q_vis` ∧ solar).", "",
+         "| arm | better | worse | verdict vs `union` | vs IG-BN (better / worse) | vs clock gate (better / worse) |",
+         "|---|---:|---:|---|---|---|"]
+    for a in GAP_ARMS:
+        v = verdict[a]
+        L.append(f"| {GAP_NAME[a]} | {len(v['better'])} | {len(v['worse'])} | {'PASS' if v['pass'] else 'FAIL'} | "
+                 f"{len(v['better_than_n4'])} / {len(v['worse_than_n4'])} | {len(v['better_than_clock'])} / "
+                 f"{len(v['worse_than_clock'])} |")
+    L += ["", f"**GA-6: a model-internal feature gap {'CAN' if ga6 else 'CANNOT'} stand in for the day term on this "
+              f"data** (`q_vis` ∧ gap {'passes' if ga6 else 'fails'} development)."]
+    for a in GAP_ARMS:
+        v = verdict[a]
+        L += ["", f"**{GAP_NAME[a]}.** Worse than `union`: {', '.join(v['worse']) or 'none'}. Better: "
+                  f"{', '.join(v['better']) or 'none'}. Worse than the clock gate: "
+                  f"{', '.join(v['worse_than_clock']) or 'none'}. Better than the clock gate: "
+                  f"{', '.join(v['better_than_clock']) or 'none'}."]
+    L += ["", "## Per cell: gate rate and Δ vs `union` [95%]", "",
+          "| cell | union | " + " | ".join(GAP_NAME[a] for a in GAP_ARMS) + " |", "|---|---:|" + "---|" * len(GAP_ARMS)]
+    for cell, v in cells.items():
+        L.append(f"| {cell} | {v['union']:.4f} | " + " | ".join(
+            f"{v[a]['gate']:.2f}: {v[a]['vs_union'][0]:+.4f} [{v[a]['vs_union'][1]:+.4f}, {v[a]['vs_union'][2]:+.4f}]"
+            for a in GAP_ARMS) + " |")
+    o.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L[:12]))
+    return 0
+
+
+P04_GAP_GATES = OUT / "p04_gap_gates.json"
+
+
+def _p04_gap_job(job):
+    import dataclasses
+    import holdout_p04_look as look
+    import holdout_p04_v2_rescore as v2r
+    import p04_heldout_score as psc
+    import seed_ensemble as se
+    from uqfusion.eval.apmetrics import frame_parts
+    from uqfusion.eval.ctx import run_systems
+    k, s, ic, vc, main = job
+    ttbn._low()
+    se._memo_distances()
+    tag, key = psc.cell_tag((vc, ic)), f"seed{k}_{s}"
+    dev = look.dev_context(k, f"runs/cache_p3/seed{k}")
+    sub_ = look.Pohang04() if s == "clean" else v2r.Pohang04V2()
+    ctx = look.system_context(sub_, k, s, sorted({vc, "clean"}), ic, dev)
+    q, irok = gate_ctx_arms(ctx, vc)
+    vis = ctx.vis_by_cond[vc]
+    gs = gap_gates(vis, k, q)
+    ms = gates_from(q, irok, sun_up("p04"))
+    own = [a for a in ARMS if a != "n4" and "same_as" not in main[a]]      # main arms holding their own presort
+    draw = None if (s == "clean" or vc == "clean") else int(s[4:7])
+    full = None
+    u = dataclasses.replace(ctx, veto=None)
+    info, done = {}, {}
+    for a in GAP_ARMS:
+        g = gs[a]
+        info[a] = {"gate": float(g.mean()), "n_gated": int(g.sum())}
+        if not g.any():
+            info[a]["same_as"] = "union"
+            continue
+        kb = g.tobytes()
+        twin = (done.get(kb) or next((m for m in own if np.array_equal(ms[m], g)), None)
+                or ("n4" if np.array_equal(ms["n4"], g) else None))
+        if twin:
+            info[a]["same_as"] = twin
+            continue
+        done[kb] = a
+        if full is None:
+            full = full_stream("p04", k, vc, draw)
+        recs = run_systems(u, vc, compute_metrics=False, vis_records=select(full, vis, g))["fused_gated"]
+        d = PRE / f"union_{a}" / tag / key
+        if not (d / "obs.json").is_file():
+            d.mkdir(parents=True, exist_ok=True)
+            info[a]["obs"] = psc.save_pre(frame_parts(recs, ctx.gts), d)
+    return job[:4], info
+
+
+def cmd_score_p04_gap(args) -> int:
+    import p04_heldout_score as psc
+    main = json.loads(P04_GATES.read_text(encoding="utf-8"))
+    gates = json.loads(P04_GAP_GATES.read_text(encoding="utf-8")) if P04_GAP_GATES.is_file() else {}
+    jobs = [(k, s, ic, vc, main[f"{k}|{s}|{ic}|{vc}"]) for vc, ic in _p04_cells() for s in psc.subs_of((vc, ic))
+            for k in ttbn.SEEDS if f"{k}|{s}|{ic}|{vc}" not in gates]
+    print(f"[p04-gap] {len(jobs)} jobs", flush=True)
+    t0 = time.time()
+    with ProcessPoolExecutor(args.workers, max_tasks_per_child=1) as ex:
+        for n, (j, info) in enumerate(ex.map(_p04_gap_job, jobs), 1):
+            gates[f"{j[0]}|{j[1]}|{j[2]}|{j[3]}"] = info
+            tmp = P04_GAP_GATES.with_suffix(".tmp")
+            tmp.write_text(json.dumps(gates, indent=1), encoding="utf-8")
+            os.replace(tmp, P04_GAP_GATES)
+            print(f"[p04-gap] {n}/{len(jobs)} {j} " + " ".join(f"{a}={info[a]['gate']:.3f}" for a in GAP_ARMS)
+                  + f" ({time.time() - t0:.0f}s)", flush=True)
+    return 0
+
+
+def cmd_report_p04_gap(args) -> int:
+    import p04_heldout_score as psc
+    main = json.loads(P04_GATES.read_text(encoding="utf-8"))
+    gap = json.loads(P04_GAP_GATES.read_text(encoding="utf-8"))
+    gates = {key: {**main[key], **gap[key]} for key in gap}
+    cells, verdict = {}, {}
+    for c in _p04_cells():
+        tag = psc.cell_tag(c)
+        un, n4, ck = _series("union", c, gates), _series("n4", c, gates), _series("qvis_solar", c, gates)
+        cells[tag] = {"union": un[0]}
+        for a in GAP_ARMS:
+            x = _series(a, c, gates)
+            g = float(np.mean([gates[f"{k}|{s}|{c[1]}|{c[0]}"][a]["gate"] for s in psc.subs_of(c) for k in ttbn.SEEDS]))
+            cells[tag][a] = {"gate": g, "ap": x[0]}
+            for nm, base in (("vs_union", un), ("vs_n4", n4), ("vs_clock", ck)):
+                cells[tag][a][nm] = [x[0] - base[0], *psc.ci(x[1] - base[1])]
+    for a in GAP_ARMS:
+        w, b = _counts(cells, a, "vs_union")
+        wn, bn = _counts(cells, a, "vs_n4")
+        wc, bc = _counts(cells, a, "vs_clock")
+        verdict[a] = {"worse": w, "better": b, "replicates": (not w) and bool(b), "worse_than_n4": wn,
+                      "better_than_n4": bn, "worse_than_clock": wc, "better_than_clock": bc}
+    o = ROOT / args.out
+    o.with_suffix(".json").write_text(json.dumps({"verdict": verdict, "cells": cells}, indent=1), encoding="utf-8")
+    L = ["# Gate ablation, Amendment 2: the feature-gap gate on the held-out run (pohang04)", "",
+         "`docs/prereg-gate-ablation-2026-10-14.md`, Amendment 2. The nine registered cells, five systems, four draws; "
+         "paired moving-block intervals (the gate-free scoring's 1,000 replicates). The clock gate is `q_vis` alone "
+         "here (the sun is up on every frame).", "",
+         "| arm | better | worse | vs `union` | vs IG-BN (better / worse) | vs clock gate (better / worse) |",
+         "|---|---:|---:|---|---|---|"]
+    for a in GAP_ARMS:
+        v = verdict[a]
+        L.append(f"| {GAP_NAME[a]} | {len(v['better'])} | {len(v['worse'])} | "
+                 f"{'REPLICATES' if v['replicates'] else 'DOES NOT REPLICATE'} | {len(v['better_than_n4'])} / "
+                 f"{len(v['worse_than_n4'])} | {len(v['better_than_clock'])} / {len(v['worse_than_clock'])} |")
+    L += ["", "| cell (VIS/IR) | union | " + " | ".join(GAP_NAME[a] for a in GAP_ARMS) + " |",
+          "|---|---:|" + "---|" * len(GAP_ARMS)]
+    for t, v in cells.items():
+        L.append(f"| {t.replace('__', '/')} | {v['union']:.4f} | " + " | ".join(
+            f"{v[a]['gate']:.3f}: {v[a]['vs_union'][0]:+.4f} [{v[a]['vs_union'][1]:+.4f}, {v[a]['vs_union'][2]:+.4f}]"
+            for a in GAP_ARMS) + " |")
+    o.write_text("\n".join(L) + "\n", encoding="utf-8")
+    print("\n".join(L))
+    return 0
+
+
 # ------------------------------------------------------------------ pohang01 night pairs: label-free gate rate
 def _night_stats_path(ic: str, draw: int, kind: str) -> Path:
     return OUT / "night" / kind / ttbn.sub(draw - 10) / f"gauss_ir_paired_{ic}.json"
@@ -956,6 +1216,14 @@ def cmd_night_rates(args) -> int:
               "sea-plane range (fit R² < 0.9; none of development's 1,032 night maps did). Rebuilding 16 development night maps the same way reproduced the stored "
               "maps bit for bit. The IR statistics were checked bit-exact on 24 development frames per checked "
               "condition before use."]
+    gp = OUT / "gap_rates.json"
+    if gp.is_file():                                  # Amendment 2: the feature-gap gate (VIS only, IR-independent)
+        gn = json.loads(gp.read_text(encoding="utf-8"))["night"]
+        L += ["", "## Amendment 2: Yoo et al.'s feature-gap gate on the same pairs", "",
+              "The gap reads only the VIS detector's features (VIS clean here), so one rate per arm; mean over the five "
+              "systems, per system in brackets.", "", "| arm | firing rate |", "|---|---:|"]
+        L += [f"| {GAP_NAME[a]} | {gn[a]['mean']:.3f} [{', '.join(f'{x:.3f}' for x in gn[a]['per_system'])}] |"
+              for a in GAP_ARMS]
     o.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
     return 0
@@ -978,6 +1246,13 @@ def main() -> int:
         s_ = sp.add_parser(n_)
         s_.add_argument("--workers", type=int, default=4)
     sp.add_parser("boot-p04")
+    for n_ in ("score-dev-gap", "score-p04-gap"):
+        s_ = sp.add_parser(n_)
+        s_.add_argument("--workers", type=int, default=4)
+    r = sp.add_parser("report-dev-gap")
+    r.add_argument("--out", default="docs/eval/ttbn/gate_ablation_gap_dev_2026-10-14.md")
+    r = sp.add_parser("report-p04-gap")
+    r.add_argument("--out", default="docs/eval/ttbn/gate_ablation_gap_p04_2026-10-14.md")
     r = sp.add_parser("report-dev")
     r.add_argument("--out", default="docs/eval/ttbn/gate_ablation_dev_2026-10-14.md")
     r = sp.add_parser("report-p04")
@@ -990,7 +1265,9 @@ def main() -> int:
     args = ap.parse_args()
     return {"rates": cmd_rates, "gap-rates": cmd_gap_rates, "repro": cmd_repro, "build": cmd_build, "score-dev": cmd_score_dev,
             "report-dev": cmd_report_dev, "score-p04": cmd_score_p04, "boot-p04": cmd_boot_p04,
-            "report-p04": cmd_report_p04, "night-stats": cmd_night_stats, "night-rates": cmd_night_rates}[args.cmd](args)
+            "report-p04": cmd_report_p04, "night-stats": cmd_night_stats, "night-rates": cmd_night_rates,
+            "score-dev-gap": cmd_score_dev_gap, "report-dev-gap": cmd_report_dev_gap,
+            "score-p04-gap": cmd_score_p04_gap, "report-p04-gap": cmd_report_p04_gap}[args.cmd](args)
 
 
 if __name__ == "__main__":

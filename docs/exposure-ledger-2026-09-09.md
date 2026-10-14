@@ -862,3 +862,10 @@ from the detector" are different claims and only the first is true.
   pohang04 when run), plus its label-free firing rate on the pohang01 night pairs. Asked for by Laksh after the
   novelty check (`afedfb6`). Seen first: the label-free gap firing rates (`runs/gate_ablation/gap_rates.json`) and
   every number to date; no gap arm had a score. The pohang04 build of the original arms was still running.
+* **2026-10-14 (5:57 PM) — GA Amendment 2 development: all four gap arms FAIL, as predicted; GA-6: the feature gap
+  cannot stand in for the day term** (`docs/eval/ttbn/gate_ablation_gap_dev_2026-10-14.md`). Draws 942–944, a further use.
+  * The gap fires on 0.90–1.00 of night frames, so every arm, with or without `q_vis`, is worse than `union` on the
+    twelve clean and low-light night cells (clean night −0.0195 Yoo / −0.0180 calibrated; low-light night to −0.0233).
+    Without `q_vis` it is also worse on clean day (−0.0100 Yoo, −0.0060 calibrated).
+  * Against the clock gate (`q_vis` ∧ solar): `q_vis` ∧ gap is better on no cell and worse on 12 (Yoo) and 18
+    (calibrated). Label-free on the pohang01 night pairs: Yoo 0.993, calibrated 0.665.
