@@ -558,7 +558,7 @@ IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
 \thanks{\AFFIL}%
 \thanks{Appendices A--K, cited in the text, are provided as supplementary material.}}
 
-\markboth{IEEE Journal of Oceanic Engineering}{\SHORT}
+\markboth{}{\SHORT}
 
 \maketitle
 
@@ -593,7 +593,7 @@ IEEE_SUPP = r"""\documentclass[journal,onecolumn]{IEEEtran}
 
 \title{Supplementary Material for\\``\TITLE''}
 \author{\AUTHOR}
-\markboth{IEEE Journal of Oceanic Engineering}{\SHORT: supplementary material}
+\markboth{}{\SHORT: supplementary material}
 \maketitle
 
 This supplement holds Appendices A--K of the paper. Section numbers in Roman numerals, tables numbered I, II and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
