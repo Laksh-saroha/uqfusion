@@ -842,6 +842,6 @@ from the detector" are different claims and only the first is true.
   * Seen first: every development and pohang04 number to date; label-free gate rates and solar elevations
     (`runs/gate_ablation/rates.json`); a rebuild check of N4's adapted blocks (development fp32 bit-exact;
     pohang04 fp16 not bit-reproducible, top-box confidence within 0.0021). No ablation arm had a score.
-  * **4:22 PM — GA Amendment 1:** fp16 rebuild noise priced on development before any pohang04 ablation block
+  * **4:21 PM — GA Amendment 1:** fp16 rebuild noise priced on development before any pohang04 ablation block
     exists: rebuilt against stored N4 fp16 records, `union_ttbn` moves −0.000009 (low light) and −0.000012 (fog),
     at most 0.0002 per system. The pohang04 build proceeds as registered.
