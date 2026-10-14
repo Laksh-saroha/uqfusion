@@ -152,6 +152,128 @@ def cmd_rates(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------------ Yoo et al.'s feature-gap gate (Amendment 2)
+GAP_ARMS = ("gap_yoo", "gap_cal", "qvis_gap_yoo", "qvis_gap_cal")
+GAP_ALPHA, GAP_TAU1, GAP_TAU2, GAP_LEMA = 0.01, 1.1, 1.05, 0.99   # Yoo et al. (CVPR 2024), Sec. 3.4 and 4.2
+GAP_REF = "runs/cache_p3/seed{k}/gauss_vis_train_clean.pkl"     # the 3,181 training-split frames (Mahalanobis fit)
+_GREF: dict = {}
+
+
+def _kl_diag(m1, v1, m2, v2) -> float:
+    """KL(N(m1, diag v1) || N(m2, diag v2))."""
+    return float(0.5 * np.sum(v1 / v2 + (m2 - m1) ** 2 / v2 - 1.0 + np.log(v2 / v1)))
+
+
+def _feats(recs) -> tuple[np.ndarray, list[str]]:
+    return (np.stack([np.asarray(r["feat"], np.float64) for r in recs]),
+            [Path(r["image_path"]).parent.name for r in recs])
+
+
+def gap_stream(F: np.ndarray, runs: list[str], ref: dict) -> dict:
+    """Eq. 1, 2 and the two criteria of Yoo et al., per N4 block (8 consecutive list frames) in list order.
+    The EMA starts at the training mean and restarts where a block begins in a different run than the
+    previous block ended. Returns per-frame L_img, criterion 1 and criterion 2."""
+    mu, var = ref["mu"], ref["var"]
+    n = len(F)
+    L, c1, c2 = np.zeros(n), np.zeros(n, bool), np.zeros(n, bool)
+    m_te, lema, prev = mu.copy(), None, None
+    for a in range(0, n, ttbn.BATCH):
+        b = slice(a, min(a + ttbn.BATCH, n))
+        if runs[a] != prev:
+            m_te, lema = mu.copy(), None
+        m_te = (1 - GAP_ALPHA) * m_te + GAP_ALPHA * F[b].mean(0)
+        li = float(0.5 * np.sum((m_te - mu) ** 2 / var))
+        lema = li if lema is None else GAP_LEMA * lema + (1 - GAP_LEMA) * li
+        L[b], c1[b], c2[b] = li, li / ref["d_in"] > GAP_TAU1, (li / lema > GAP_TAU2) if lema > 0 else False
+        prev = runs[b.stop - 1]
+    return {"L": L, "c1": c1, "c2": c2}
+
+
+def gap_ref(k: int) -> dict:
+    """Training statistics of system k's pooled head-input features, the in-domain gap D_in (two disjoint random
+    halves, seed 0) and the calibrated bound B (max L_img over the reference frames replayed as a stream)."""
+    if k in _GREF:
+        return _GREF[k]
+    with open(ROOT / GAP_REF.format(k=k), "rb") as fh:
+        recs = pickle.load(fh)["records"]
+    F, runs = _feats(recs)
+    mu, var = F.mean(0), F.var(0)
+    var = np.maximum(var, 1e-6 * var.mean())
+    perm = np.random.default_rng(0).permutation(len(F))
+    A, B = F[perm[: len(F) // 2]], F[perm[len(F) // 2:]]
+    fl = lambda v: np.maximum(v, 1e-6 * var.mean())
+    ref = {"mu": mu, "var": var, "n": len(F),
+           "d_in": _kl_diag(A.mean(0), fl(A.var(0)), B.mean(0), fl(B.var(0)))}
+    ref["bound"] = float(gap_stream(F, runs, ref)["L"].max())
+    _GREF[k] = ref
+    return ref
+
+
+def gap_gates(recs, k: int, q: np.ndarray) -> dict:
+    g = gap_stream(*_feats(recs), gap_ref(k))
+    gy, gc = g["c1"] | g["c2"], g["L"] > gap_ref(k)["bound"]
+    return {"gap_yoo": gy, "gap_cal": gc, "qvis_gap_yoo": q & gy, "qvis_gap_cal": q & gc}
+
+
+def _load_recs(p) -> list[dict]:
+    with open(p, "rb") as fh:
+        return pickle.load(fh)["records"]
+
+
+def cmd_gap_rates(args) -> int:
+    """Label-free: the gap gates' firing rates (development by day/night, pohang04 per VIS condition, the
+    pohang01 night pairs), per system and mean, and the reference constants."""
+    import seed_ensemble as se
+    import p04_heldout as ph
+    import p04_heldout_score as psc
+    from uqfusion.eval.ctx import NIGHT_RUNS
+    out = {"ref": {}, "dev": {}, "p04": {}, "night": {}}
+    for k in ttbn.SEEDS:
+        r = gap_ref(k)
+        out["ref"][k] = {"n": r["n"], "d_in": r["d_in"], "bound": r["bound"], "bound_over_d_in": r["bound"] / r["d_in"]}
+        print(f"[ref] system {k}: D_in {r['d_in']:.4f}, bound {r['bound']:.4f} ({r['bound'] / r['d_in']:.2f} x D_in)", flush=True)
+    lst = _list("dev")
+    night = np.isin([Path(p).parent.name for p in lst], NIGHT_RUNS)
+    for c in ttbn.DEV_CONDS:
+        for d in ttbn.DEV_DRAWS:
+            q = ttbn.vis_unhealthy(ttbn._dev_stats(d, "vis", c, "structure"))
+            for k in ttbn.SEEDS:
+                recs = _load_recs(ROOT / se.CACHE / f"seed{k}" / ttbn.sub(d) / f"gauss_vis_paired_{c}.pkl")
+                assert [Path(x["image_path"]).name for x in recs] == [Path(p).name for p in lst]
+                g = gap_gates(recs, k, q)
+                for sl, m in (("day", ~night), ("night", night)):
+                    for a in GAP_ARMS:
+                        out["dev"].setdefault(f"{c}/{sl}", {}).setdefault(a, []).append(float(g[a][m].mean()))
+    pl = ph.images("vis")
+    for vc in ("clean", "blur_s3", "noise_s2", "rain_s2", "fog", "lowlight"):
+        for s in (["clean"] if vc == "clean" else [ph.sub(v) for v in ph.VIS_DRAWS]):
+            q = ttbn.vis_unhealthy(ttbn._p04_stats("vis", vc, None if s == "clean" else int(s[4:7]), "structure"))
+            for k in ttbn.SEEDS:
+                recs = _load_recs(psc.raw_path(k, "vis", vc, s))
+                assert len(recs) == len(pl)
+                g = gap_gates(recs, k, q)
+                for a in GAP_ARMS:
+                    out["p04"].setdefault(vc, {}).setdefault(a, []).append(float(g[a].mean()))
+    q = ttbn.vis_unhealthy(NIGHT_DERIVED / "structure/clean/gauss_vis_paired_clean.json")
+    for k in ttbn.SEEDS:
+        recs = _load_recs(ROOT / f"runs/night_p01test/caches/seed{k}/clean/gauss_vis_paired_clean.pkl")
+        assert [Path(x["image_path"]).name for x in recs] == [Path(p).name for p in ttbn_read(NIGHT_LIST)]
+        g = gap_gates(recs, k, q)
+        for a in GAP_ARMS:
+            out["night"].setdefault(a, []).append(float(g[a].mean()))
+    for t in ("dev", "p04"):
+        for key, v in out[t].items():
+            out[t][key] = {a: {"mean": float(np.mean(x)), "per_system_draw": x} for a, x in v.items()}
+    out["night"] = {a: {"mean": float(np.mean(x)), "per_system": x} for a, x in out["night"].items()}
+    (OUT / "gap_rates.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
+    for t in ("dev", "p04"):
+        print(f"\n{t}: " + " ".join(f"{a:>13}" for a in GAP_ARMS))
+        for key, v in out[t].items():
+            print(f"{key:20s} " + " ".join(f"{v[a]['mean']:13.3f}" for a in GAP_ARMS))
+    print("\nnight pairs: " + " ".join(f"{a}={out['night'][a]['mean']:.3f}" for a in GAP_ARMS))
+    return 0
+
+
 # ------------------------------------------------------------------ complete adapted streams
 def comp_path(target: str, k: int, cond: str, draw) -> Path:
     where = "clean" if cond == "clean" else ttbn.sub(draw)
@@ -845,6 +967,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("rates")
+    sp.add_parser("gap-rates")
     r = sp.add_parser("repro")
     r.add_argument("--target", choices=["dev", "p04"], required=True)
     r.add_argument("--n", type=int, default=6)
@@ -865,7 +988,7 @@ def main() -> int:
     r = sp.add_parser("night-rates")
     r.add_argument("--out", default="docs/eval/ttbn/gate_night_p01_2026-10-14.md")
     args = ap.parse_args()
-    return {"rates": cmd_rates, "repro": cmd_repro, "build": cmd_build, "score-dev": cmd_score_dev,
+    return {"rates": cmd_rates, "gap-rates": cmd_gap_rates, "repro": cmd_repro, "build": cmd_build, "score-dev": cmd_score_dev,
             "report-dev": cmd_report_dev, "score-p04": cmd_score_p04, "boot-p04": cmd_boot_p04,
             "report-p04": cmd_report_p04, "night-stats": cmd_night_stats, "night-rates": cmd_night_rates}[args.cmd](args)
 

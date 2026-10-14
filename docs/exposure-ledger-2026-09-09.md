@@ -857,3 +857,8 @@ from the detector" are different claims and only the first is true.
 * **2026-10-14 (4:37 PM) — GA part 2, pohang01 night pairs (label-free): the prediction FAILS by one frame**
   (`docs/eval/ttbn/gate_night_p01_2026-10-14.md`). IG-BN's gate fires on 1 of 17,744 pair-draws (pohang01_011561,
   thermal fog s1, seed 953) and on none with clean IR or thermal noise. No detection, no label.
+* **2026-10-14 (5:45 PM) — GA Amendment 2 registered: Yoo et al.'s feature-gap gate** (four arms: gap with Yoo's
+  rule, gap with a calibrated bound, and each with `q_vis`), development and pohang04 (the eleventh scoring of
+  pohang04 when run), plus its label-free firing rate on the pohang01 night pairs. Asked for by Laksh after the
+  novelty check (`afedfb6`). Seen first: the label-free gap firing rates (`runs/gate_ablation/gap_rates.json`) and
+  every number to date; no gap arm had a score. The pohang04 build of the original arms was still running.

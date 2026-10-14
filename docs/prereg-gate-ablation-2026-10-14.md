@@ -170,3 +170,69 @@ was scored both ways (IR clean, day, five systems; `runs/gate_ablation/fp16_rebu
 Rebuilding fp16 blocks moves a cell by about 1e-5, two orders below the 0.0014 floor. The pohang04 build goes
 ahead with N4's stored records plus newly built blocks, as registered. No ablation number exists on pohang04;
 development scoring has started (no result read).
+
+## Amendment 2 (5:45 PM, before any gap-arm number exists): Yoo et al.'s feature-gap gate
+
+Added at Laksh's request after the novelty check (`docs/novelty-context-gated-tta-2026-10-14.md`, `afedfb6`): the
+claim that a model-internal signal cannot separate illumination from degradation rested on one internal signal
+(`q_vis`). The obvious alternative is the feature-distribution gap of Yoo et al. (CVPR 2024, arXiv 2312.08875,
+Sec. 3.4), which skips adaptation when test features sit near the training features. It might stay quiet at
+night, because night is in the detector's training distribution, and it needs no second sensor and no clock.
+
+**The statistic (Yoo et al. Eq. 1, 2, 5, with the choices their text leaves open fixed here).**
+* *Features:* the 1,280-dimensional vector every plain detection cache already stores per frame (`feat`): the
+  global average over space of the three inputs of system k's detection head (neck outputs P3–P5),
+  concatenated. Yoo et al. take "the backbone" output and do not state the pooling; this is the nearest pooled
+  representation we hold, and it is the one the shipped Mahalanobis scorer reads. No new detection is run.
+* *Training statistics:* μ_tr and a diagonal Σ_tr (per-channel variance, floored at 1e-6 × its mean) over the
+  3,181 training-split VIS frames of the Mahalanobis fit list (`runs/derived/maha_fit_vis_p04out.txt`,
+  `runs/cache_p3/seed{k}/gauss_vis_train_clean.pkl`): pohang00 679, pohang01 (night) 782, pohang02 848, pohang03
+  872; all in the training split, none in the validation split or the development frames (checked). Yoo et al.
+  used 2,000 training samples.
+* *Test mean (Eq. 1):* an EMA over N4's 8-frame blocks in list order, μ_te ← (1 − α) μ_te + α · (block mean),
+  α = 0.01 (their value), started at μ_tr and restarted where a block begins in another run. A block's decision
+  applies to its eight frames.
+* *Gap (Eq. 2):* L_img = KL(N(μ_tr, Σ_tr) ‖ N(μ_te, Σ_tr)) = ½ Σ_c (μ_te,c − μ_tr,c)² / σ²_tr,c.
+* *In-domain gap (Eq. 5):* D_in = KL between the diagonal Gaussians of two disjoint random halves of the 3,181
+  reference frames (permutation seed 0).
+* The gate is per system: each detector's own features.
+
+**Arms.**
+| arm | adapts a block iff |
+|---|---|
+| G-Y, gap (Yoo's rule) | L_img / D_in > 1.1 OR L_img / L_ema > 1.05, with L_ema ← 0.99 L_ema + 0.01 L_img (started at the first L_img of a run); their τ1 and τ2 |
+| G-C, gap (calibrated bound) | L_img > B_k, B_k = the maximum of L_img over system k's 3,181 reference frames replayed as a stream (list order, blocks of 8, run restarts), as the other bounds are maxima over clean frames; Yoo's criterion 1 only (their Sec. 4.5 option τ2 = ∞) |
+| `q_vis` ∧ G-Y | `q_vis` < 1 AND G-Y |
+| `q_vis` ∧ G-C | `q_vis` < 1 AND G-C |
+
+The last two ask the question the novelty check raised: can a model-internal gap stand in for the day term
+(the thermal terms or the clock) beside the visible term? Everything else (adaptation, records, fusion,
+statistics, rule) is as registered for the other arms.
+
+**Seen before writing (label-free, `runs/gate_ablation/gap_rates.json`; no detection run, no label, no score):**
+* D_in per system 1.62, 2.35, 2.32, 2.65, 4.49; B_k 72.2, 72.9, 73.4, 64.7, 81.7 (18–45 × D_in). The reference
+  list samples every 10–15 frames, so its replayed stream is less autocorrelated than a 10 Hz test stream.
+* Firing rates, development (mean over systems and draws): G-Y fires on 0.993 of day frames in every VIS
+  condition and on 1.000 of night frames; G-C on 0.61 (clean), 0.86 (fog), 0.82 (fog_s1), 0.72 (low light), 0.69
+  (glare) by day and 0.895 (clean) to 1.000 at night. With `q_vis`: by day `q_vis`'s own rates (G-C trims them, e.g.
+  low light 0.72); at night 1.000 (G-Y) and 0.895–1.000 (G-C).
+* pohang04: G-Y 0.999 and G-C 0.984–0.992 in every cell; with `q_vis`, close to `q_vis` alone.
+* pohang01 night pairs (VIS clean): G-Y 0.993, G-C 0.665; with `q_vis` the same.
+* So on this detector the gap does not stay quiet at night; the scores below price what that costs.
+
+**Predictions (development, same 60 cells and draws, same rule).**
+* G-Y FAILS: worse cells on clean-VIS day and on night, like the ungated arm.
+* G-C FAILS: worse cells at night (and on clean day, where it fires on 61%).
+* `q_vis` ∧ G-Y FAILS and `q_vis` ∧ G-C FAILS: worse cells at night, like `q_vis` alone.
+* **GA-6 reading** (fixed now): a model-internal feature gap *can stand in for the day term on this data* iff
+  `q_vis` ∧ G-Y or `q_vis` ∧ G-C PASSES on development; each is also compared with IG-BN and with the clock gate
+  (`q_vis` ∧ solar) by the better/worse counts of the rule, reported as CLOCK/GAP BETTER, MATCHES or MIXED as in
+  GA-5.
+
+**pohang04** (the eleventh scoring, under the standing rule): the four arms on the nine cells, as registered
+for the other arms, against `union`, IG-BN and the clock gate. pohang04 is all daylight, so it cannot test the
+night half. Predictions: G-Y and G-C DO NOT REPLICATE (worse on the clean-VIS cells, where they adapt ~99% of
+frames, like the ungated arm); `q_vis` ∧ G-Y and `q_vis` ∧ G-C REPLICATE, close to `q_vis` alone.
+
+**pohang01 night pairs:** the four arms' firing rates above, reported in
+`docs/eval/ttbn/gate_night_p01_2026-10-14.md` (label-free).
