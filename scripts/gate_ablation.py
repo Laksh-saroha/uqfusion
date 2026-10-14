@@ -719,20 +719,54 @@ def cmd_boot_p04(args) -> int:
     from holdout_p04_v2_rescore import load_ship_pre
     from uqfusion.eval.apmetrics import RECALL_GRID
     dev = torch.device("cuda")
+    torch.cuda.set_per_process_memory_fraction(0.70, 0)     # the allocator's cache otherwise grows past 11 GB
     grid_g = torch.from_numpy(RECALL_GRID).to(dev)
     W = np.load(psc.OUT / "boot_weights.npy")
     todo = sorted(p.parent for p in PRE.rglob("obs.json") if not (p.parent / "reps.npy").is_file())
     print(f"[boot] {len(todo)} presorts ({len(W)} replicates each)", flush=True)
     t0, checked = time.time(), False
-    for n, d in enumerate(todo, 1):
+    n = 0
+    while todo:                       # re-listed each pass: `boot-p04-cpu` may work the same queue from the far end
+        d = todo[0]
         pre = load_ship_pre(d)
         if not checked:
             print(f"[boot] checked {psc._check(pre, W, dev, grid_g)} rows equal to the CPU reference", flush=True)
             checked = True
-        np.save(d / "reps.npy", psc.boot_batch(pre, W, dev, grid_g))
+        reps = psc.boot_batch(pre, W, dev, grid_g)
+        if not (d / "reps.npy").is_file():
+            np.save(d / "reps_gpu_tmp.npy", reps)
+            os.replace(d / "reps_gpu_tmp.npy", d / "reps.npy")
         torch.cuda.empty_cache()
-        if n % 10 == 0 or n == len(todo):
-            print(f"[boot] {n}/{len(todo)} ({time.time() - t0:.0f}s)", flush=True)
+        n += 1
+        todo = sorted(p.parent for p in PRE.rglob("obs.json") if not (p.parent / "reps.npy").is_file())
+        if n % 10 == 0 or not todo:
+            print(f"[boot] {n} done, {len(todo)} left ({time.time() - t0:.0f}s)", flush=True)
+    return 0
+
+
+def cmd_boot_p04_cpu(args) -> int:
+    """The same replicates on the CPU (`boot_cpu`, checked == to the GPU path by scripts/check_boot_cpu.py),
+    working the queue from the far end so it can run beside `boot-p04`; each presort is re-checked just before
+    it is computed and written through a temporary file."""
+    import p04_heldout_score as psc
+    from boot_cpu import boot_cpu
+    from holdout_p04_v2_rescore import load_ship_pre
+    ttbn._low()
+    W = np.load(psc.OUT / "boot_weights.npy")
+    t0, n = time.time(), 0
+    while True:
+        todo = sorted((p.parent for p in PRE.rglob("obs.json") if not (p.parent / "reps.npy").is_file()), reverse=True)
+        if not todo:
+            break
+        d = todo[0]
+        reps = boot_cpu(load_ship_pre(d), W)
+        if not (d / "reps.npy").is_file():
+            np.save(d / "reps_cpu_tmp.npy", reps)
+            os.replace(d / "reps_cpu_tmp.npy", d / "reps.npy")
+        n += 1
+        if n % 10 == 0:
+            print(f"[boot-cpu] {n} done, {len(todo) - 1} left ({time.time() - t0:.0f}s)", flush=True)
+    print(f"[boot-cpu] queue empty after {n} ({time.time() - t0:.0f}s)", flush=True)
     return 0
 
 
@@ -1246,6 +1280,7 @@ def main() -> int:
         s_ = sp.add_parser(n_)
         s_.add_argument("--workers", type=int, default=4)
     sp.add_parser("boot-p04")
+    sp.add_parser("boot-p04-cpu")
     for n_ in ("score-dev-gap", "score-p04-gap"):
         s_ = sp.add_parser(n_)
         s_.add_argument("--workers", type=int, default=4)
@@ -1264,7 +1299,7 @@ def main() -> int:
     r.add_argument("--out", default="docs/eval/ttbn/gate_night_p01_2026-10-14.md")
     args = ap.parse_args()
     return {"rates": cmd_rates, "gap-rates": cmd_gap_rates, "repro": cmd_repro, "build": cmd_build, "score-dev": cmd_score_dev,
-            "report-dev": cmd_report_dev, "score-p04": cmd_score_p04, "boot-p04": cmd_boot_p04,
+            "report-dev": cmd_report_dev, "score-p04": cmd_score_p04, "boot-p04": cmd_boot_p04, "boot-p04-cpu": cmd_boot_p04_cpu,
             "report-p04": cmd_report_p04, "night-stats": cmd_night_stats, "night-rates": cmd_night_rates,
             "score-dev-gap": cmd_score_dev_gap, "report-dev-gap": cmd_report_dev_gap,
             "score-p04-gap": cmd_score_p04_gap, "report-p04-gap": cmd_report_p04_gap}[args.cmd](args)

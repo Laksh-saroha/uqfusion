@@ -869,3 +869,13 @@ from the detector" are different claims and only the first is true.
     Without `q_vis` it is also worse on clean day (−0.0100 Yoo, −0.0060 calibrated).
   * Against the clock gate (`q_vis` ∧ solar): `q_vis` ∧ gap is better on no cell and worse on 12 (Yoo) and 18
     (calibrated). Label-free on the pohang01 night pairs: Yoo 0.993, calibrated 0.665.
+* **2026-10-14 (7:28 PM) — GA on pohang04, the tenth scoring: two registered predictions FAIL; GA-5 reads CLOCK BETTER**
+  (`docs/eval/ttbn/gate_ablation_p04_2026-10-14.md`). Arms A0, A1, A2 scored (A3 ≡ A0, A4 ≡ A1); the N4 arm equals
+  the registered P-T presort in all 80 jobs where it was computed.
+  * **Ungated adaptation REPLICATES and is better than `union` in all nine cells**, including +0.0210 [+0.0185, +0.0242]
+    on clean/clean and +0.0202 to +0.0216 on the three other clean-VIS cells; it is better than IG-BN in eight cells
+    (fog +0.0228, rain +0.0191). Prediction (worse on the clean-VIS cells): FAILS. On development the same arm lost
+    −0.0101 on clean day: the held-out run's clean frames, from a run no detector trained on, gain from adaptation.
+  * Thermal day only REPLICATES (8 better, 0 worse); prediction (worse on clean cells): FAILS.
+  * `q_vis` only (= `q_vis` ∧ solar) REPLICATES; against IG-BN better in one cell (VIS noise, +0.0090 [+0.0056,
+    +0.0132]), worse in none: CLOCK BETTER, as predicted.
