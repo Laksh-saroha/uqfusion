@@ -7,7 +7,7 @@ Overleaf from the TMLR template, or drop the files from the TMLR style repositor
 
 The IEEE version (IEEEtran, two columns, numbered citations; IEEEtran.cls and IEEEtranN.bst ship with TeX Live)
 takes its author, abstract and index terms from paper/ieee/front.md, drops the TMLR broader-impact section,
-restores the code link, and moves Appendices A-K into a separate supplement.tex. The two documents cross-reference
+restores the code link, and moves Appendices A-J into a separate supplement.tex. The two documents cross-reference
 each other through the xr package, so compile main, then supplement, then main again.
 
 Tables and figures are renumbered in order of appearance; every "Table X", "Figure X", "§x.y" and "Appendix X.n"
@@ -28,7 +28,7 @@ MD = (ROOT / "PAPER.md").read_text(encoding="utf-8").replace("\r\n", "\n")
 CODE_ANON = "in a public repository, withheld from this review copy for anonymity and linked in the camera-ready"
 CODE_OPEN = "in the public repository (github.com/Laksh-saroha/uqfusion, branch `fusion-uq-phase3`)"
 if IEEE:  # IEEE review is single-blind: the code link stays, and TMLR's broader-impact section goes
-    assert MD.count(CODE_ANON) == 2  # Appendix J and the availability statement
+    assert MD.count(CODE_ANON) == 2  # Appendix I and the availability statement
     MD = MD.replace(CODE_ANON, CODE_OPEN)
     i, j = MD.index("\n## 9. Broader impact statement\n"), MD.index("\n## References\n")
     MD = MD[:i] + "\n" + MD[j:]
@@ -548,7 +548,7 @@ IEEE_PACKAGES = r"""\usepackage[T1]{fontenc}
 
 IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
 \PACKAGES
-\externaldocument[S-]{supplement}  % Appendices A-K; compile main, supplement, main
+\externaldocument[S-]{supplement}  % Appendices A-J; compile main, supplement, main
 
 \begin{document}
 
