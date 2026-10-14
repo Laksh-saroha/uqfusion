@@ -556,7 +556,7 @@ IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
 
 \author{\AUTHOR%
 \thanks{\AFFIL}%
-\thanks{Appendices A--K, cited in the text, are provided as supplementary material.}}
+\thanks{Appendices A--J, cited in the text, are provided as supplementary material.}}
 
 \markboth{}{\SHORT}
 
@@ -596,7 +596,7 @@ IEEE_SUPP = r"""\documentclass[journal,onecolumn]{IEEEtran}
 \markboth{}{\SHORT: supplementary material}
 \maketitle
 
-This supplement holds Appendices A--K of the paper. Section numbers in Roman numerals, tables numbered I, II and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
+This supplement holds Appendices A--J of the paper. Section numbers in Roman numerals, tables numbered I, II and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
 
 \BODY
 
