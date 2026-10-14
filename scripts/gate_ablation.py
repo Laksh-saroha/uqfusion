@@ -415,6 +415,13 @@ def _t(vals) -> tuple[float, float, float]:
     return ttbn._cell_stats(list(vals))
 
 
+def ga5(v: dict) -> str:
+    """The registered reading of A4 (q_vis + solar) against N4."""
+    w, b = v["worse_than_n4"], v["better_than_n4"]
+    return ("CLOCK BETTER" if not w and b else "CLOCK MATCHES" if not w else
+            "THERMAL BETTER" if not b else "MIXED")
+
+
 def cmd_report_dev(args) -> int:
     res = json.loads((OUT / "score_dev.json").read_text(encoding="utf-8"))
     n4 = json.loads((ttbn.DEV_OUT / "score.json").read_text(encoding="utf-8"))
@@ -463,6 +470,18 @@ def cmd_report_dev(args) -> int:
         v = verdict[a]
         L.append(f"| {name[a]} | {len(v['better'])} | {len(v['worse'])} | {'PASS' if v['pass'] else 'FAIL'} | "
                  f"{len(v['better_than_n4'])} | {len(v['worse_than_n4'])} |")
+    nec = lambda a: "shown necessary" if verdict[a]["worse"] else "not shown necessary"
+    L += ["", "**Registered readings.**",
+          f"* GA-1 (adaptation needs a gate): ungated {'FAILS' if not verdict['ungated']['pass'] else 'PASSES'}; "
+          f"a gate is {nec('ungated')}.",
+          f"* GA-2 (a day–night term is needed): q_vis only {'FAILS' if not verdict['qvis']['pass'] else 'PASSES'}; "
+          f"{nec('qvis')}.",
+          f"* GA-3 (the visible term is needed): thermal day only {'FAILS' if not verdict['irday']['pass'] else 'PASSES'}; "
+          f"{nec('irday')}.",
+          f"* GA-4: solar only {'FAILS' if not verdict['solar']['pass'] else 'PASSES'}.",
+          f"* GA-5 (thermal camera against clock): q_vis ∧ solar {'PASSES' if verdict['qvis_solar']['pass'] else 'FAILS'}; "
+          f"against IG-BN: **{ga5(verdict['qvis_solar'])}** ({len(verdict['qvis_solar']['better_than_n4'])} cells better, "
+          f"{len(verdict['qvis_solar']['worse_than_n4'])} worse)."]
     for a in ARMS:
         v = verdict[a]
         L += ["", f"**{name[a]}.** Worse than `union`: {', '.join(v['worse']) or 'none'}. Better: "
@@ -781,8 +800,18 @@ def cmd_night_rates(args) -> int:
         b = by_cond[ic]
         rows.append(f"| {ic} | {b['q_vis_lt_1']:.3f} | {b['ir_reads_day']:.4f} | {b['ir_healthy']:.4f} | "
                     f"{b['ir_day_and_healthy']:.4f} | {b['n4_gate']:.4f} | {b['n4_gate_frames_max']} |")
+    fired = {k: v["n4_gate_frames"] for k, v in out.items() if v["n4_gate_frames"]}
+    which = {}
+    for ic, d in conds:
+        if d is None or not out[f"{ic}/{d}"]["n4_gate_frames"]:
+            continue
+        day, ok = terms(_night_stats_path(ic, d, "brightness"), _night_stats_path(ic, d, "structure"))
+        which[f"{ic}/{d}"] = [Path(ttbn_read(NIGHT_IR_LIST)[i]).name for i in np.flatnonzero(q & day & ok)]
+    man = json.loads((NIGHT_DEPTH / "ir" / "manifest_pairs_ir.json").read_text(encoding="utf-8"))["frames"]
+    n_fb = sum(bool(v["fallback"]) for v in man.values())
     o = ROOT / args.out
-    o.with_suffix(".json").write_text(json.dumps({"per_draw": out, "per_condition": by_cond}, indent=1), encoding="utf-8")
+    o.with_suffix(".json").write_text(json.dumps({"per_draw": out, "per_condition": by_cond, "gated_frames": which,
+                                                  "depth_fallbacks": n_fb}, indent=1), encoding="utf-8")
     L = ["# IG-BN's gate on the pohang01 night test pairs (label-free)", "",
          "`docs/prereg-gate-ablation-2026-10-14.md`, part 2. The 1,109 pohang01 test-split pairs of the night test "
          "(`runs/night_p01test/pairs_*.txt`); VIS clean; IR clean and under the development IR corruptions (v2, "
@@ -790,12 +819,29 @@ def cmd_night_rates(args) -> int:
          f"{1 - sun.mean():.4f} of the pairs.", "",
          "| IR condition | q_vis < 1 | IR reads day | IR healthy | IR day ∧ healthy | IG-BN gate | max gated frames (of 1,109) |",
          "|---|---:|---:|---:|---:|---:|---:|"] + rows
+    total = sum(fired.values())
+    L += ["", f"**Prediction (no pair gated in any condition): {'HOLDS' if not total else 'FAILS'}.** "
+              + ("The gate fires on no pair." if not total else
+                 f"The gate fires on {total} pair-draw(s) of {len(conds) * 0 + (len(conds) - 1) * 1109 + 1109:,}: "
+                 + "; ".join(f"{k}: {', '.join(v)}" for k, v in which.items())
+                 + ". On every other pair and draw IG-BN is `union`."),
+          "", "Under thermal fog the thermal stream reads day on up to 42% of these night pairs; the health term "
+              "(merge bound 222.7) rejects all but the frame(s) above. Under clean IR, 75.3% of these pairs pass the "
+              "health term, against 100% of development's clean night (and day) frames: the night-test IR frames sit farther "
+              "from the development reference.",
+          "", f"v2 IR fog needs per-frame metric depth: Depth Anything V2 maps for these 1,109 frames were built by "
+              f"`build_depth_maps.py --out-root runs/gate_ablation/depth_v2` (A: is full); {n_fb} of 1,109 fall back to the "
+              "sea-plane range (fit R² < 0.9; none of development's 1,032 night maps did). Rebuilding 16 development night maps the same way reproduced the stored "
+              "maps bit for bit. The IR statistics were checked bit-exact on 24 development frames per checked "
+              "condition before use."]
     o.write_text("\n".join(L) + "\n", encoding="utf-8")
     print("\n".join(L))
     return 0
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")       # report lines carry "∧" and "−"; the console is cp1252
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     sp.add_parser("rates")

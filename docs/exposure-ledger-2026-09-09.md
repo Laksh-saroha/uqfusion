@@ -845,3 +845,15 @@ from the detector" are different claims and only the first is true.
   * **4:21 PM — GA Amendment 1:** fp16 rebuild noise priced on development before any pohang04 ablation block
     exists: rebuilt against stored N4 fp16 records, `union_ttbn` moves −0.000009 (low light) and −0.000012 (fog),
     at most 0.0002 per system. The pohang04 build proceeds as registered.
+* **2026-10-14 (4:53 PM) — GA development: every registered prediction holds; GA-5 reads CLOCK BETTER**
+  (`docs/eval/ttbn/gate_ablation_dev_2026-10-14.md`; registered in `docs/prereg-gate-ablation-2026-10-14.md`).
+  Draws 942–944, a further use. The N4 arm reproduces N4's registered scores exactly (max |diff| 0).
+  * Ungated FAILS (18 worse: every clean-VIS cell, clean day −0.0101, and every low-light night cell, to −0.0233).
+    `q_vis` only FAILS (12 night cells, to −0.0233). Thermal day only FAILS (clean/clean/day −0.0101, clean/fog_s1/day
+    −0.0048). Solar only FAILS (6 clean-VIS day cells).
+  * `q_vis` ∧ solar PASSES (17 better, 0 worse) and against IG-BN is better in 13 cells, worse in none: every cell
+    where a corrupted thermal stream stops vouching for daylight (low light with thermal noise +0.0709, thermal fog
+    s3 +0.0660; fog and fog_s1 with thermal fog or noise +0.0062 to +0.0135). Elsewhere it equals IG-BN.
+* **2026-10-14 (4:53 PM) — GA part 2, pohang01 night pairs (label-free): the prediction FAILS by one frame**
+  (`docs/eval/ttbn/gate_night_p01_2026-10-14.md`). IG-BN's gate fires on 1 of 17,744 pair-draws (pohang01_011561,
+  thermal fog s1, seed 953) and on none with clean IR or thermal noise. No detection, no label.
