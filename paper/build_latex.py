@@ -26,7 +26,7 @@ IEEE = "--ieee" in sys.argv[1:]
 OUT = ROOT / "paper" / ("ieee" if IEEE else "")
 MD = (ROOT / "PAPER.md").read_text(encoding="utf-8").replace("\r\n", "\n")
 CODE_ANON = "in a public repository, withheld from this review copy for anonymity and linked in the camera-ready"
-CODE_OPEN = "in the public repository (github.com/Laksh-saroha/uqfusion, branch `fusion-uq-phase3`)"
+CODE_OPEN = "in the public repository github.com/Laksh-saroha/maritime-tta"
 if IEEE:  # IEEE review is single-blind: the code link stays, and TMLR's broader-impact section goes
     assert MD.count(CODE_ANON) == 2  # Appendix I and the availability statement
     MD = MD.replace(CODE_ANON, CODE_OPEN)
