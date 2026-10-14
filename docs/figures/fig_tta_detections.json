@@ -1,0 +1,40 @@
+{
+ "frame": "pohang04_L_009042.png",
+ "index": 4033,
+ "seed": 0,
+ "draw": 941,
+ "crop_y0": 211,
+ "crop_h": 210,
+ "display_gamma": {
+  "lowlight": 0.45
+ },
+ "candidates": 5237,
+ "gt_ships": 12,
+ "conf": 0.25,
+ "panels": {
+  "fog/plain": {
+   "boxes": 2,
+   "found": 2
+  },
+  "fog/igbn": {
+   "boxes": 6,
+   "found": 3
+  },
+  "lowlight/plain": {
+   "boxes": 11,
+   "found": 7
+  },
+  "lowlight/igbn": {
+   "boxes": 15,
+   "found": 8
+  },
+  "noise_s2/plain": {
+   "boxes": 0,
+   "found": 0
+  },
+  "noise_s2/igbn": {
+   "boxes": 12,
+   "found": 6
+  }
+ }
+}

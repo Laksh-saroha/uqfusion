@@ -181,6 +181,12 @@ Each variant that passed development was registered for the held-out run before 
 
 **IG-BN+AE, with a cost development could not show.** Low light gains +0.0259 [+0.0231, +0.0285] over `union`, +0.0073 [+0.0046, +0.0099] over IG-BN, as on development. But the held-out rain darkens every gated rain frame below auto-exposure's threshold, so auto-exposure replaces adaptation there and IG-BN+AE on rain is 0.0036 below IG-BN. Development has no rain. We do not recommend IG-BN+AE for that reason.
 
+Figure 9 shows one held-out frame under the three conditions.
+
+![tta_detections](docs/figures/fig_tta_detections.png)
+
+**Figure 9. IG-BN on one held-out frame, thermal stream clean.** pohang04 frame 9042, system seed 0, corruption draw 941. Left, the frozen visible detector, the stream `union` fuses; right, the same detector with IG-BN, whose gate fires on this frame under all three conditions. Ship boxes at confidence ≥ 0.25 over the dashed ground truth; *found* counts ground-truth ships matched at IoU ≥ 0.5. Every box is read from the records the held-out scorings used (IG-BN in fp16); nothing was re-run. The frame was chosen on ground truth alone: of the 5,237 frames where the gate fires under all three conditions and at least three ships are labelled, the one with the largest median ship height times ship count (capped at six). Low light is brightened for display (gamma 0.45); the detector saw the stored frame. One frame shows the mechanism, not the size of the gain, which is in Table 3.
+
 ### 5.3 Where the gate does not fire
 
 The gate's job is as much where it stays off as where it fires. It fires on no frame of the clean held-out cell, on a rounded 0.0 percent of the other clean-visible held-out cells, and on no development night frame under any thermal condition, so on those frames every variant equals its baseline. That matters because the baseline itself is right there. At night, `union` keeps the visible stream that the shipped veto discards. On a night test registered on pohang01's test split, 1,109 frame pairs that no fusion system had scored, `union` beats `shipped` by +0.0273 [+0.0154, +0.0400] and holds the claim at −0.0010 [−0.0049, +0.0031], while `shipped`, which vetoes the visible stream on 90.3 percent of those frames, fails it by 0.0283 (Appendix G.4). The detectors trained on the same run's training split, so this tests the fusion rule, not the detectors, and night AP levels swing from 0.04 to 0.35 between the run's 52-second episodes; directions, not levels, transfer. On these 1,109 pairs IG-BN's gate, measured without labels, fires on none with a clean or noisy thermal stream and on one pair in one of nine thermal-fog draws, 1 of 17,744 pair-draws in all (`docs/eval/ttbn/gate_night_p01_2026-10-14.md`). IG-BN is thus `union` on this night test (the registered prediction, no pair at all, fails by one frame). The thermal terms do not hold the line alone: under thermal fog the thermal stream reads day on 37–42 percent of these night pairs, and the health term rejects all but the one. A solar gate fires on none (the sun is 6–10° below the horizon), the feature-gap gate of §5.1 on 99.3 percent (Yoo et al.'s thresholds) or 66.5 percent (calibrated).
@@ -1054,6 +1060,7 @@ A 44-of-93-run IR architecture ladder was stopped early on the basis of an ANOVA
 
 | Item | Source records |
 |---|---|
+| Figure 9 | `scripts/fig_tta_detections.py`; frame, crop and per-panel counts in `docs/figures/fig_tta_detections.json` |
 | Table 1 | `bench_patience20_2026-10-08/table1_ext.md`; throughput `phase1_benchmark/fps.csv` (fp32 rows) |
 | Table 2 | `ttbn/ttbn_dev_2026-10-11.md`, `ttbn/ttbn_variants_dev_2026-10-11.md`, `ttbn/ttbn_causal2_dev_2026-10-11.md`, `ttbn/ttbn_restore_dev_2026-10-11.md`, `ttbn/ttbn_fulltta_dev_2026-10-11.md`, `ttbn/ttbn_fulltta_glare_dev_2026-10-12.md` |
 | Table 21 | `ttbn/gate_ablation_dev_2026-10-14.md`, `ttbn/gate_ablation_p04_2026-10-14.md`, `ttbn/gate_ablation_gap_dev_2026-10-14.md`, `ttbn/gate_ablation_gap_p04_2026-10-14.md`; night-test rates `ttbn/gate_night_p01_2026-10-14.md`; registered in `docs/prereg-gate-ablation-2026-10-14.md` |
