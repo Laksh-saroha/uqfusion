@@ -632,7 +632,7 @@ def main():
         fm = front_matter()
         assert len(fm["Abstract"].split()) <= 250, len(fm["Abstract"].split())
         vals = {"PACKAGES": IEEE_PACKAGES, "TITLE": cv.inline(title, heading=True), "AUTHOR": fm["Author"],
-                "AFFIL": cv.inline(fm["Affiliation"]), "SHORT": "Saroha: Infrared-gated test-time adaptation",
+                "AFFIL": cv.inline(fm["Affiliation"]), "SHORT": "Saroha: Context-gated test-time adaptation",
                 "ABSTRACT": cv.inline(fm["Abstract"]), "KEYWORDS": cv.inline(fm["Index Terms"].rstrip("."))}
         tex = fill(IEEE_MAIN, {**vals, "BODY": body})
         (OUT / "main.tex").write_text(tex, encoding="utf-8")

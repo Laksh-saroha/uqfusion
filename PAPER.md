@@ -1,4 +1,4 @@
-# Let the Thermal Camera Decide When to Adapt: Infrared-Gated Test-Time Adaptation for Visible–Infrared Maritime Detection
+# Telling Night from a Failing Camera: Context-Gated Test-Time Adaptation for Maritime Detection
 
 **Anonymous authors** (TMLR review is double-blind; restore the author block for the camera-ready).
 
