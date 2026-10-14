@@ -171,7 +171,7 @@ Rebuilding fp16 blocks moves a cell by about 1e-5, two orders below the 0.0014 f
 ahead with N4's stored records plus newly built blocks, as registered. No ablation number exists on pohang04;
 development scoring has started (no result read).
 
-## Amendment 2 (5:45 PM, before any gap-arm number exists): Yoo et al.'s feature-gap gate
+## Amendment 2 (5:39 PM, before any gap-arm number exists): Yoo et al.'s feature-gap gate
 
 Added at Laksh's request after the novelty check (`docs/novelty-context-gated-tta-2026-10-14.md`, `afedfb6`): the
 claim that a model-internal signal cannot separate illumination from degradation rested on one internal signal
