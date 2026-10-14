@@ -58,7 +58,7 @@ The Pohang Canal dataset (Chung et al., 2023) records a 7.5 km route through a c
 
 ### 3.2 Detectors and fusion
 
-Both streams use YOLO26-m (Jocher et al., 2026): the visible detector with two classes, the thermal detector with a single ship class and a P2 neck, because it cannot see buoys. The backbone was chosen on a 93-run benchmark of 31 YOLO variants from six families with three seeds each (Table 18, Figure 8): the YOLO26 m, l and x variants form a top tier whose differences are below their seed standard deviations, and yolo26m is the fastest of the three. We use five independently trained system pairs (visible seed k with thermal seed k), trained on the corrected labels with the held-out run removed from every list, and report the mean over the five.
+Both streams use YOLO26-m (Jocher et al., 2026): the visible detector with two classes, the thermal detector with a single ship class and a P2 neck, because it cannot see buoys. The backbone was chosen on a 93-run benchmark (§3.5). We use five independently trained system pairs (visible seed k with thermal seed k), trained on the corrected labels with the held-out run removed from every list, and report the mean over the five.
 
 The baseline fusion is `union`. Both streams pass to Weighted Boxes Fusion (Solovyev et al., 2021) at IoU 0.85 with constant stream weights (the visible weight, 0.9926, is what the designed uncertainty weighting measured to on every frame, §6.1), and a box whose other-stream partner overlaps it at IoU 0.30 has its score raised by half. At this threshold only 0.05 percent of visible boxes find a thermal partner, so the fusion is concatenation with a support bonus. The shipped system, `shipped`, is `union` plus a veto that drops the visible stream when the thermal camera votes night and the visible frame reads dark or veiled (Appendix D.2). A registered study of replacements for that veto found that switching it off improves on it and that no gate we registered beats `union` (§6.3); `union` is therefore the baseline every adaptation is measured against. `full_tta` is the strongest system that changes no detector: five checkpoints per stream, each run on the raw and the horizontally flipped frame, merged per stream by WBF at IoU 0.55, with non-local-means denoising of thermal frames that fail their health check, and no veto. It costs ten detector passes per stream per frame.
 
@@ -77,6 +77,23 @@ Adverse conditions are simulated on the content rows of each frame. Fog, low lig
 **Metric and rule.** The metric is ship AP50-95 (local linear-interpolation AP), the only class both detectors emit. One rule decides every registered verdict, on development and held-out data alike: an arm passes (development) or replicates (held-out) if no cell is worse than its baseline by 0.0014 or more with the interval below zero, and at least one cell is better by 0.0060 or more with the interval above zero. The 0.0014 floor is the measured two-sigma noise of a paired delta; 0.0060 is the floor widened by the measured autocorrelation inflation (Appendix C.2–C.3). On held-out cells the development grid did not contain, the same rule is a first test, not a replication.
 
 **Registration.** Each arm's prediction, cells, statistic and rule were written and committed before any of its numbers existed. No constant, threshold or calibration of any system was fitted on held-out labels, but two gate constants were chosen with the held-out run's label-free statistics (§4.4), and no untouched test set existed before it (Appendix C.1). It is scored only through registered tests, and each scoring is logged in an exposure ledger. It has been scored eleven times: the original look of the shipped system, a re-score of its corrupted cells after the corruption model was replaced, and nine later registrations, six of them the adaptation tests of §5.2 and two the gate ablation of §5.1 (Appendix G). The evidence record names the variants by registration codes (IG-BN = N4, IG-BN-causal = N4c2, IG-BN-stale = N4c, IG-BN+glare = N4g, IG-BN+ens = N4F, IG-BN+ens+glare = N4Fg, IG-BN+AE = N4ae).
+
+### 3.5 Backbone benchmark
+
+Ninety-three runs, 31 YOLO variants from six families with three seeds each, were trained on the corrected labels and stopped after 20 epochs without a new best mAP50-95 (Appendix H). Table 1 lists the YOLO26 top tier and the best variant of each other family. The YOLO26 m, l and x variants differ by at most 0.0040, below the larger seed standard deviation of every pair, so the benchmark resolves a tier, not an order; the best variants of the other five families sit 0.010–0.025 below yolo26m. The selection rule, fixed before the benchmark (the top tier, then a DFL head, then the simplest fork, then throughput), falls to throughput, where yolo26m runs at 57.0 frames per second against 30.7 for yolo26x. These are Ultralytics validation mAPs over ship and buoy on the full visible validation split, not the local ship AP of every other table, so no value here is comparable with them. The full table, the earlier selection record and the throughput protocol are in Appendix H (Table 18, Table 19 and Figure 8).
+
+**Table 1. Visible backbone benchmark, seed mean ± sd over three seeds.** The YOLO26 top tier and the best variant of each other family from Table 18. Restored labels, stopped at patience 20, scored at the best epoch. FPS is one detector's `predict()` at fp32, batch 1, GPU clock pinned at 1,500 MHz. Some seeds of yolo26x (one), yolov10x, yolo12x and yolo11x (two each) are scored at their 25-epoch best because their continuation logs are missing (Appendix H).
+
+| Variant | Family | mAP50-95 | mAP50 | FPS |
+|---|---|---:|---:|---:|
+| yolo26x | YOLO26 | 0.2666 ± 0.0040 | 0.668 ± 0.033 | 30.7 |
+| yolo26l | YOLO26 | 0.2664 ± 0.0070 | 0.677 ± 0.003 | 44.9 |
+| yolo26m (selected) | YOLO26 | 0.2626 ± 0.0109 | 0.672 ± 0.026 | 57.0 |
+| yolov10x | YOLOv10 | 0.2524 ± 0.0051 | 0.642 ± 0.010 | 34.9 |
+| yolo12x | YOLO12 | 0.2523 ± 0.0091 | 0.641 ± 0.017 | 23.8 |
+| yolov8l | YOLOv8 | 0.2470 ± 0.0033 | 0.634 ± 0.006 | 41.1 |
+| yolo11x | YOLO11 | 0.2466 ± 0.0078 | 0.650 ± 0.022 | 29.0 |
+| yolov9c | YOLOv9 | 0.2377 ± 0.0067 | 0.608 ± 0.018 | 43.6 |
 
 ---
 
@@ -1037,6 +1054,7 @@ A 44-of-93-run IR architecture ladder was stopped early on the basis of an ANOVA
 
 | Item | Source records |
 |---|---|
+| Table 1 | `bench_patience20_2026-10-08/table1_ext.md`; throughput `phase1_benchmark/fps.csv` (fp32 rows) |
 | Table 2 | `ttbn/ttbn_dev_2026-10-11.md`, `ttbn/ttbn_variants_dev_2026-10-11.md`, `ttbn/ttbn_causal2_dev_2026-10-11.md`, `ttbn/ttbn_restore_dev_2026-10-11.md`, `ttbn/ttbn_fulltta_dev_2026-10-11.md`, `ttbn/ttbn_fulltta_glare_dev_2026-10-12.md` |
 | Table 21 | `ttbn/gate_ablation_dev_2026-10-14.md`, `ttbn/gate_ablation_p04_2026-10-14.md`, `ttbn/gate_ablation_gap_dev_2026-10-14.md`, `ttbn/gate_ablation_gap_p04_2026-10-14.md`; night-test rates `ttbn/gate_night_p01_2026-10-14.md`; registered in `docs/prereg-gate-ablation-2026-10-14.md` |
 | Table 3 | `ttbn/ttbn_p04_2026-10-11.md`, `ttbn/ttbn_causal2_p04_2026-10-11.md`, `ttbn/ttbn_fulltta_p04_2026-10-11.md`, `ttbn/ttbn_glare_p04_2026-10-12.md`, `ttbn/ttbn_fulltta_glare_p04_2026-10-12.md` |

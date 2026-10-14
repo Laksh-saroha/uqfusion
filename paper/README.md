@@ -13,7 +13,7 @@ py -3.13 paper/build_latex.py
 tectonic --keep-logs main.tex              # in a scratch folder holding main.tex, references.bib, figures/ and the style files
 ```
 
-**State on 2026-10-14** (revised after a simulated JOE review: claims scoped, variants renamed IG-BN, Table 1 and Fig. 2 moved to the appendices, related work extended, availability statement added; then the registered gate ablation and its feature-gap amendment added as §5.1's closing paragraph, Appendix G.5 and Table 21). 55 pages: main body pages 1–12 (TMLR's normal-review mark is 12), references from page 13, Appendices A–K after them. No errors, overfull boxes or undefined references. 51 references, 20 tables, 8 figures.
+**State on 2026-10-14** (revised after a simulated JOE review: claims scoped, variants renamed IG-BN, Table 1 and Fig. 2 moved to the appendices, related work extended, availability statement added; then the registered gate ablation and its feature-gap amendment added as §5.1's closing paragraph, Appendix G.5 and Table 21; then the retitle and a short §3.5 backbone benchmark with an eight-row Table 1, the full benchmark staying in Appendix H). 55 pages: main body pages 1–12 (TMLR's normal-review mark is 12), references from page 13, Appendices A–K after them. No errors, overfull boxes or undefined references. 51 references, 21 tables, 8 figures.
 
 **Before submission.**
 1. The review copy is anonymous: the author block is hidden and the code link is not given. Restore both for the camera-ready (`\usepackage[accepted]{tmlr}`), and add Acknowledgements, which the review copy omits.
