@@ -831,3 +831,14 @@ from the detector" are different claims and only the first is true.
   * Descriptive: N4Fg − N4g (one pass, P-G) +0.0240 [+0.0216, +0.0261]. N4Fg is the highest-scoring system measured on
     glare/clean (`ttbng_lex` 0.1762, N4g 0.1726).
   * 1:45 AM: report, ledger and Fig. 2 committed and pushed by the queue (`19ede9d`).
+
+* **2026-10-14 (3:50 PM) — Gate ablation registered (GA), development and pohang04, plus IG-BN's label-free
+  gate rate on the pohang01 night-test pairs** (`docs/prereg-gate-ablation-2026-10-14.md`). Asked for by a
+  simulated JOE review (does the thermal camera, rather than BN re-estimation itself or a clock, make the gate
+  work?). Arms: ungated, `q_vis` only, thermal day term only, solar only, `q_vis` + solar, IG-BN.
+  * New exposure of pohang04 (the tenth scoring): arms A0, A1, A2 on the nine registered cells (A3 ≡ A0 and
+    A4 ≡ A1 there: the sun is up on every pohang04 frame).
+  * Development draws 942–944: a further use (N4 and its variants used them).
+  * Seen first: every development and pohang04 number to date; label-free gate rates and solar elevations
+    (`runs/gate_ablation/rates.json`); a rebuild check of N4's adapted blocks (development fp32 bit-exact;
+    pohang04 fp16 not bit-reproducible, top-box confidence within 0.0021). No ablation arm had a score.
