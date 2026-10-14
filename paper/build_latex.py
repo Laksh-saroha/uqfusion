@@ -154,7 +154,15 @@ def write_bib(refs):
 
 
 # ---------------------------------------------------------------- inline conversion
+MATH_VARS = {  # code spans that are quantities, not identifiers, are typeset as math
+    "q_vis": r"$q_{\mathrm{vis}}$", "ir_p05": r"$p_{05}^{\mathrm{IR}}$", "w_vis": r"$w_{\mathrm{vis}}$",
+    "μ_b": r"$\mu_b$", "σ²_b": r"$\sigma_b^2$",
+}
+
+
 def code(s, breakable=True):
+    if s in MATH_VARS:
+        return MATH_VARS[s]
     s = escape(s)
     if breakable:
         s = s.replace("/", r"/\allowbreak{}").replace(r"\_", r"\_\allowbreak{}")

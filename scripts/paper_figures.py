@@ -531,7 +531,7 @@ def fig_tta() -> None:
     def one_pass(key):
         if key == "glare__clean":
             c = n4g[key]
-            return c["union"], c["union_ttbng"], c["delta"], "N4g"
+            return c["union"], c["union_ttbng"], c["delta"], "IG-BN+glare"
         if key == "clean__clean":
             v = gf["union|clean__clean"]["value"]
             return v, v, 0.0, None
@@ -545,7 +545,7 @@ def fig_tta() -> None:
             if not fg.is_file():
                 return None
             c = json.loads(fg.read_text(encoding="utf-8"))["cells"][key]
-            return c["full_tta"], c["full_tta_ttbng"], c["delta"], "N4Fg"
+            return c["full_tta"], c["full_tta_ttbng"], c["delta"], "IG-BN+ens+glare"
         if key == "clean__clean":
             v = gf["full_tta|clean__clean"]["value"]
             return v, v, 0.0, None
@@ -554,8 +554,8 @@ def fig_tta() -> None:
 
     fig, axes = plt.subplots(1, 2, figsize=(DOUBLE, 2.7), sharey=True, gridspec_kw={"wspace": 0.08})
     ys = list(range(len(TTA_ROWS)))[::-1]
-    panels = ((axes[0], one_pass, "one pass per stream: union → N4"),
-              (axes[1], ten_pass, "ten passes per stream: full_tta → N4F"))
+    panels = ((axes[0], one_pass, "one pass per stream: union → IG-BN"),
+              (axes[1], ten_pass, "ten passes per stream: full_tta → IG-BN+ens"))
     for ax, get, title in panels:
         for y, (key, _) in zip(ys, TTA_ROWS):
             r = get(key)
@@ -631,10 +631,10 @@ def fig_n4() -> None:
     stream(30 + o, 51.5 + o, "VIS frame", VIS)
     stream(7 + o, 28.5 + o, "IR frame", IR)
     box(5, 28.3 + o, 25, 16.2, "VIS frame health",
-        f"11 statistics → novelty d²\nunhealthy: d² > {vis_bound:.1f}\n(that is, q_vis < 1)\n"
-        f"N4g adds: mean > {g_mean:.1f}\n   and std > {g_std:.1f}", edge=VIS)
+        f"11 statistics → novelty d²\nunhealthy: d² > {vis_bound:.1f}\n(that is, $q_{{\\rm vis}}$ < 1)\n"
+        f"+glare term: mean > {g_mean:.1f}\n   and std > {g_std:.1f}", edge=VIS)
     box(5, 15.5 + o, 25, 12, "IR reading of the scene",
-        f"reads day:  p05 ≤ {irp:g}\nhealthy:  d² ≤ {ir_bound:.1f}\n(11 statistics, clean max)", edge=IR)
+        f"reads day:  $p_{{05}}$ ≤ {irp:g}\nhealthy:  d² ≤ {ir_bound:.1f}\n(11 statistics, clean max)", edge=IR)
     arrow(2.8, 37.5 + o, 5, 37.5 + o)
     arrow(2.8, 22 + o, 5, 22 + o)
 
@@ -649,8 +649,8 @@ def fig_n4() -> None:
         "yolo26m, ship + buoy. On gated blocks\n"
         "of 8 frames every BatchNorm layer uses\n"
         "BN-mix statistics:\n"
-        "μ = (16 μ_src + 8 μ_b) / 24, likewise σ²\n"
-        "N4c2: the previous block's statistics\n"
+        "$\\mu = (16\\,\\mu_{\\rm src} + 8\\,\\mu_b)\\,/\\,24$, likewise $\\sigma^2$\n"
+        "IG-BN-causal: the previous block's statistics\n"
         "no label, gradient or weight change", edge=VIS)
     arrow(59.5, 38 + o, 63, 38 + o, color=FUSED)
     arrow(2.8, 49 + o, 63, 49 + o, color=VIS)
@@ -665,7 +665,7 @@ def fig_n4() -> None:
     arrow(81.25, 15.5 + o, 81.25, 18.5 + o, color=IR)
 
     box(5, 0.3, 94.5, 7.4, "", edge=MUTED, dashed=True)
-    ax.text(6, 5.6, "Where compute allows (N4F):", ha="left", va="center", fontsize=T, fontweight="bold",
+    ax.text(6, 5.6, "Where compute allows (IG-BN+ens):", ha="left", va="center", fontsize=T, fontweight="bold",
             color=INK2)
     ax.text(6, 2.4, "the same gate and adaptation on all ten VIS views of full_tta "
             "(5 checkpoints × raw and flipped)", ha="left", va="center", fontsize=B, color=INK2)
