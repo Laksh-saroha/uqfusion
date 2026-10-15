@@ -924,3 +924,20 @@ from the detector" are different claims and only the first is true.
   * Constants frozen from `fcd3ebf` and `calib.pt` (training frames only). If P1 fails, it is reported as FAIL with
     no reinterpretation.
   * Seen first: the draw-941 screen and every earlier development and pohang04 number. No pohang04 frame is read.
+
+* **2026-10-16 (1:22 AM) — gate-free BN adaptation on development draws 942–944: GF31 PASSES, all four predictions
+  hold** (`docs/eval/ttbn/gatefree_dev_2026-10-16.md`; registered in `docs/prereg-gatefree-ttbn-2026-10-16.md`).
+  * P1 no cell worse than `union`; P1b 24 cells better.
+  * P2 10/10 better than IG-BN.
+  * P3 clean/low-light night −0.0046 to −0.0021, none worse.
+  * Against IG-BN: 22 better, 2 worse (lowlight/clean/day −0.0126, fog/clean/day −0.0033).
+  * GF21 (secondary) also passes: 22 better, 0 worse.
+  * IG-BN reproduced N4's registered scores exactly. No pohang04 frame was read.
+
+* **2026-10-16 (1:30 AM, before any GF31 detection on pohang04) — GF31 on pohang04 registered: the thirteenth scoring**
+  (`docs/prereg-gatefree-p04-2026-10-16.md`). The nine registered cells, draws 941–944, systems 0–4, the gate-free
+  scoring's replicates.
+  * Q1: none worse than `union`, at least one better (predicted REPLICATES).
+  * Q2/Q3: stated expectations against IG-BN and against ungated BN-mix.
+  * fp16 iff a development check passes.
+  * Seen first: every development and pohang04 number to date (P-T, GA and P-C2G among them).
