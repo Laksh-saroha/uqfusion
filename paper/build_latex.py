@@ -581,7 +581,7 @@ IEEE_MAIN = r"""\documentclass[journal]{IEEEtran}
 
 \title{\TITLE}
 
-\author{\AUTHOR\thanks{\AFFIL}}
+\author{\AUTHBLOCK}
 
 \markboth{}{\SHORT}
 
@@ -617,7 +617,7 @@ IEEE_SUPP = r"""\documentclass[journal,onecolumn]{IEEEtran}
 \begin{document}
 
 \title{Supplementary Material for\\``\TITLE''}
-\author{\AUTHOR}
+\author{\AUTHBLOCK}
 \markboth{}{\SHORT: supplementary material}
 \maketitle
 
@@ -635,8 +635,19 @@ This supplement holds Appendices A--J of the paper. Section numbers in Roman num
 
 def front_matter():
     text = (OUT / "front.md").read_text(encoding="utf-8").replace("\r\n", "\n")
-    parts = dict(re.findall(r"^## (.+?)\n\n(.+?)(?=\n\n## |\s*$)", text, re.S | re.M))
-    return {k: parts[k].strip() for k in ("Author", "Affiliation", "Abstract", "Index Terms")}
+    parts = dict(re.findall(r"^## (.+?)\n\n(.+?)(?=\n\n## |\s*\Z)", text, re.S | re.M))
+    return {k: parts[k].strip() for k in ("Author", "Abstract", "Index Terms")}
+
+
+def author_block(authors):
+    """IEEE author columns: name, then affiliation lines in italics, city, e-mail."""
+    esc = lambda s: s.replace("&", r"\&").replace("_", r"\_")
+    cols = []
+    for name, *aff, city, mail in authors:
+        lines = [r"\normalsize " + esc(name)] + [r"\textit{%s}" % esc(a) for a in aff] + [esc(city), esc(mail)]
+        cols.append("{\\small\\begin{tabular}[t]{@{}c@{}}\n" + "\\\\\n".join(lines) + "\n\\end{tabular}}")
+    # journal-mode IEEEtran ignores \IEEEauthorblockN/A, so the columns are set as tables
+    return "\n\\hspace{2.5em}\n".join(cols)
 
 
 def fill(template, values):
@@ -655,9 +666,10 @@ def main():
     if IEEE:
         title, _, body, appx = convert(MD, cv)
         fm = front_matter()
+        authors = [[f.strip() for f in ln.split("|")] for ln in fm["Author"].splitlines() if "|" in ln]
         assert len(fm["Abstract"].split()) <= 250, len(fm["Abstract"].split())
-        vals = {"PACKAGES": IEEE_PACKAGES, "TITLE": cv.inline(title, heading=True), "AUTHOR": fm["Author"],
-                "AFFIL": cv.inline(fm["Affiliation"]), "SHORT": "Saroha and Mandia: Context-gated test-time adaptation",
+        vals = {"PACKAGES": IEEE_PACKAGES, "TITLE": cv.inline(title, heading=True), "AUTHOR": " and ".join(a[0] for a in authors),
+                "AUTHBLOCK": author_block(authors), "SHORT": "Saroha and Mandia: Context-gated test-time adaptation",
                 "ABSTRACT": cv.inline(fm["Abstract"]), "KEYWORDS": cv.inline(fm["Index Terms"].rstrip("."))}
         tex = fill(IEEE_MAIN, {**vals, "BODY": body})
         (OUT / "main.tex").write_text(tex, encoding="utf-8")

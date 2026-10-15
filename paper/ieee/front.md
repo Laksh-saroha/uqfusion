@@ -1,14 +1,11 @@
 # IEEE front matter
 
-Read by `paper/build_latex.py --ieee`. Everything else in the IEEE version comes from [`PAPER.md`](../../PAPER.md). IEEE asks for a single-paragraph abstract of at most 250 words, so the abstract is rewritten here from the paper's own; the numbers are the paper's.
+Read by `paper/build_latex.py --ieee`. Everything else in the IEEE version comes from [`PAPER.md`](../../PAPER.md). IEEE asks for a single-paragraph abstract of at most 250 words, so the abstract is rewritten here from the paper's own; the numbers are the paper's. Authors take one line each, in order: name, affiliation lines, city and e-mail, separated by vertical bars.
 
 ## Author
 
-Laksh Saroha and Sandeep Mandia
-
-## Affiliation
-
-L. Saroha is with the Department of Electronics and Communication Engineering, Thapar Institute of Engineering and Technology, Patiala 147004, India (e-mail: lsaroha_be24@thapar.edu). S. Mandia is with the Thapar Institute of Engineering and Technology, Patiala 147004, India (e-mail: sandeep.mandia@thapar.edu).
+Laksh Saroha | Department of Electronics and Communication Engineering | Thapar Institute of Engineering and Technology | Patiala, India | lsaroha_be24@thapar.edu
+Sandeep Mandia | Thapar Institute of Engineering and Technology | Patiala, India | sandeep.mandia@thapar.edu
 
 ## Abstract
 
