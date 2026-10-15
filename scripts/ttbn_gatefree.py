@@ -66,6 +66,8 @@ ARMS2 = ("mix16", "hinge50", *(f"sh{k}_hinge{q}" for k in SHALLOW2 for q in (90,
          *(f"dom_sh{k}_hinge" for k in SHALLOW2))
 #: third set (2026-10-15): the two median-hinge shallow arms, full 60-cell build
 ARMS3 = ("mix16", "sh21_hinge50", "sh31_hinge50")
+#: registered (docs/prereg-gatefree-ttbn-2026-10-16.md): GF31 primary, GF21 secondary, development draws 942-944
+ARMS4 = ("sh31_hinge50", "sh21_hinge50")
 CFG: dict = {"c": None}
 RUN = {"dir": OUT, "arms": ARMS}      # arms, diagnostics, scores; OUT/quick for a subset run (--every > 1)
 
@@ -295,7 +297,8 @@ def _load_calib(dev):
 
 # ------------------------------------------------------------------ build (all frames, every arm)
 def arm_path(draw: int, k: int, arm: str, cond: str) -> Path:
-    return RUN["dir"] / "arms" / f"seed{k}" / ttbn.sub(draw) / f"{arm}_{cond}.pkl"
+    where = "clean" if (cond == "clean" and RUN.get("clean_shared")) else ttbn.sub(draw)
+    return RUN["dir"] / "arms" / f"seed{k}" / where / f"{arm}_{cond}.pkl"
 
 
 def cmd_build(args) -> int:
@@ -457,8 +460,8 @@ def _arm(draw, k, a, c):
         return pickle.load(fh)["records"]
 
 
-def _set_run(d: str, arms) -> None:
-    RUN["dir"], RUN["arms"] = Path(d), tuple(arms)
+def _set_run(d: str, arms, shared=False) -> None:
+    RUN["dir"], RUN["arms"], RUN["clean_shared"] = Path(d), tuple(arms), shared
 
 
 def _job(spec):
@@ -472,7 +475,7 @@ def _job(spec):
     ttbn._low()
     se._memo_distances()
     d = f"{se.STATS}/brightness/{ttbn.sub(draw)}"
-    conds = tuple(c for c in ttbn.DEV_CONDS if arm_path(draw, k, "mix16", c).is_file())
+    conds = tuple(c for c in ttbn.DEV_CONDS if arm_path(draw, k, RUN["arms"][0], c).is_file())
     ctx = load_context(preset="crossmodal26m", cache_dir=f"{se.CACHE}/seed{k}/{ttbn.sub(draw)}", bright_dir=d,
                        structure_dir=f"{se.STATS}/structure/{ttbn.sub(draw)}",
                        ir_bright=f"{d}/gauss_ir_paired_{ir_cond or 'clean'}.json",
@@ -480,7 +483,7 @@ def _job(spec):
     night = np.isin(ctx.runs, NIGHT_RUNS)
     sl = {"day": np.flatnonzero(~night), "night": np.flatnonzero(night)}
     u = dataclasses.replace(ctx, veto=None)
-    mix0 = _arm(draw, k, "mix16", "clean")
+    mix0 = _arm(draw, k, RUN["arms"][0], "clean")
     ones = np.array([r is not None for r in mix0])           # every frame, or the subset built
     sl = {s: np.intersect1d(idx, np.flatnonzero(ones)) for s, idx in sl.items()}
     res = {}
@@ -489,7 +492,11 @@ def _job(spec):
         g = ttbn.gate_ctx(ctx, c)
         o0 = run_systems(u, c, compute_metrics=False)
         parts = {"vis": frame_parts(vis, ctx.gts), "union": frame_parts(o0["fused_gated"], ctx.gts)}
-        mix = _arm(draw, k, "mix16", c)
+        if RUN.get("clean_shared"):     # registered run: IG-BN = the gate ablation's complete N4 streams, N4's gate
+            from gate_ablation import full_stream
+            mix = full_stream("dev", k, c, None if c == "clean" else draw)
+        else:
+            mix = _arm(draw, k, "mix16", c)
         streams = {"igbn": select(mix, vis, g & ones), **{a: select(_arm(draw, k, a, c), vis, ones) for a in RUN["arms"]}}
         for a, vg in streams.items():
             parts[f"vis_{a}"] = frame_parts(vg, ctx.gts)
@@ -503,14 +510,15 @@ def _job(spec):
 
 
 def cmd_score(args) -> int:
-    out_p = RUN["dir"] / f"score_{args.draw}.json"
+    out_p = RUN["dir"] / ("score.json" if args.set == 4 else f"score_{args.draw}.json")
     allres = json.loads(out_p.read_text(encoding="utf-8")) if out_p.is_file() else {}
-    specs = [(args.draw, ic, k) for ic in (ttbn.DEV_IR_CONDS if args.every == 1 else (None,)) for k in ttbn.SEEDS
-             if f"{args.draw}|{ic}|{k}" not in allres]
+    draws = ttbn.DEV_DRAWS if args.set == 4 else (args.draw,)
+    specs = [(d, ic, k) for d in draws for ic in (ttbn.DEV_IR_CONDS if args.every == 1 else (None,)) for k in ttbn.SEEDS
+             if f"{d}|{ic}|{k}" not in allres]
     print(f"[score] {len(specs)} jobs", flush=True)
     t0 = time.time()
     with ProcessPoolExecutor(args.workers, max_tasks_per_child=1, initializer=_set_run,
-                             initargs=(str(RUN['dir']), RUN['arms'])) as ex:
+                             initargs=(str(RUN['dir']), RUN['arms'], bool(RUN.get('clean_shared')))) as ex:
         for n, (spec, res) in enumerate(ex.map(_job, specs), 1):
             allres["|".join(map(str, spec))] = res
             tmp = out_p.with_suffix(".tmp")
@@ -602,6 +610,300 @@ def cmd_report(args) -> int:
     return 0
 
 
+P2_CELLS = tuple(f"fog_s1/{ic}/day" for ic in ("clean", "fog_s1", "fog_s2", "fog_s3", "noise_s2", "noise_s3")) + \
+    tuple(f"lowlight/{ic}/day" for ic in ("fog_s2", "fog_s3", "noise_s2", "noise_s3"))
+
+
+def cmd_verdict(args) -> int:
+    """`docs/prereg-gatefree-ttbn-2026-10-16.md`: per system, mean over draws 942-944; t-interval over systems."""
+    res = json.loads((RUN["dir"] / "score.json").read_text(encoding="utf-8"))
+    n4 = json.loads((ttbn.DEV_OUT / "score.json").read_text(encoding="utf-8"))
+    repro = max(abs(res[key][cs]["union_igbn"] - n4[key][cs]["union_ttbn"]) for key in res for cs in res[key])
+    cells = [(c, ic, s) for c in ttbn.DEV_CONDS for ic in ttbn.DEV_IR_CONDS for s in ("day", "night")]
+    tab = {}
+    for a in RUN["arms"] + ("igbn",):
+        tab[a] = {}
+        for c, ic, s in cells:
+            pk = {"u": [], "g": []}
+            for k in ttbn.SEEDS:
+                rs = [res[f"{d}|{ic}|{k}"][f"{c}|{s}"] for d in ttbn.DEV_DRAWS]
+                pk["u"].append(np.mean([r[f"union_{a}"] - r["union"] for r in rs]))
+                pk["g"].append(np.mean([r[f"union_{a}"] - r["union_igbn"] for r in rs]))
+            tab[a][f"{c}/{ic or 'clean'}/{s}"] = {"d": ttbn._cell_stats(pk["u"]), "d_igbn": ttbn._cell_stats(pk["g"]),
+                                                   "union": float(np.mean([res[f"{d}|{ic}|{k}"][f"{c}|{s}"]["union"]
+                                                                           for d in ttbn.DEV_DRAWS for k in ttbn.SEEDS]))}
+    worse = lambda x: x[0] <= -0.0014 and x[2] < 0
+    better = lambda x: x[0] >= 0.0060 and x[1] > 0
+    f = lambda x: f"{x[0]:+.4f} [{x[1]:+.4f}, {x[2]:+.4f}]"
+    out, L = {}, ["# Gate-free BN adaptation (GF31 / GF21), development verdict", "",
+                  "`docs/prereg-gatefree-ttbn-2026-10-16.md`. Draws VIS 942–944 / IR 952–954, five systems. Δ per system = "
+                  "mean over the three draws; cell = mean over systems, 95% t-interval (df 4). Worse: Δ ≤ −0.0014 with "
+                  "interval below zero; better: Δ ≥ +0.0060 with interval above zero.", "",
+                  f"IG-BN reproduces N4's registered `union_ttbn` scores: max |diff| {repro:.1e}.", ""]
+    for a in RUN["arms"]:
+        v = tab[a]
+        w = [k for k in v if worse(v[k]["d"])]
+        b = [k for k in v if better(v[k]["d"])]
+        p2 = [k for k in P2_CELLS if better(v[k]["d_igbn"])]
+        night = [k for k in v if k.endswith("/night") and k.split("/")[0] in ("clean", "lowlight")]
+        p3a = all(-0.0050 <= v[k]["d"][0] <= 0.0050 for k in night)
+        p3b = not any(worse(v[k]["d"]) for k in night)
+        p1, p1b = not w, bool(b)
+        bg = [k for k in v if better(v[k]["d_igbn"])]
+        wg = [k for k in v if worse(v[k]["d_igbn"])]
+        worst = min(v, key=lambda k: v[k]["d"][0])
+        out[a] = {"P1": p1, "P1b": p1b, "verdict": "PASSES" if (p1 and p1b) else "FAILS", "worse": w, "better": b,
+                  "P2": len(p2) == len(P2_CELLS), "P2_better": p2, "P3a": p3a, "P3b": p3b, "P3": p3a and p3b,
+                  "better_than_igbn": bg, "worse_than_igbn": wg, "worst": [worst, v[worst]["d"]]}
+        L += [f"## {'GF31 (primary)' if a == 'sh31_hinge50' else 'GF21 (secondary, descriptive)'}: development {out[a]['verdict']}", "",
+              f"* P1 (no cell worse than `union`): {'PASS' if p1 else 'FAIL (' + ', '.join(w) + ')'}.",
+              f"* P1b (a cell better): {'PASS' if p1b else 'FAIL'} ({len(b)} cells).",
+              f"* P2 (better than IG-BN in the ten cells): {'HOLDS' if out[a]['P2'] else 'FAILS'} ({len(p2)}/10"
+              f"{'; not better: ' + ', '.join(k for k in P2_CELLS if k not in p2) if len(p2) < 10 else ''}).",
+              f"* P3 (clean/low-light night within ±0.005 and none worse): {'HOLDS' if out[a]['P3'] else 'FAILS'} "
+              f"(a {'yes' if p3a else 'no'}, b {'yes' if p3b else 'no'}); night range "
+              f"{min(v[k]['d'][0] for k in night):+.4f} to {max(v[k]['d'][0] for k in night):+.4f}.",
+              f"* Worst cell: {worst} {f(v[worst]['d'])}.",
+              f"* Against IG-BN (all 60 cells): {len(bg)} better, {len(wg)} worse"
+              f"{' (' + ', '.join(f'{k} {f(v[k]['d_igbn'])}' for k in wg) + ')' if wg else ''}.", ""]
+    L += ["## Per cell: Δ vs `union` and vs IG-BN [95%]", "",
+          "| cell | union | IG-BN vs union | GF31 vs union | GF31 vs IG-BN | GF21 vs union | GF21 vs IG-BN |",
+          "|---|---:|---|---|---|---|---|"]
+    for k in tab["igbn"]:
+        L.append(f"| {k} | {tab['igbn'][k]['union']:.4f} | {f(tab['igbn'][k]['d'])} | {f(tab['sh31_hinge50'][k]['d'])} | "
+                 f"{f(tab['sh31_hinge50'][k]['d_igbn'])} | {f(tab['sh21_hinge50'][k]['d'])} | {f(tab['sh21_hinge50'][k]['d_igbn'])} |")
+    o = ROOT / args.out
+    o.write_text("\n".join(L) + "\n", encoding="utf-8")
+    o.with_suffix(".json").write_text(json.dumps({"repro_max_abs_diff": repro, "arms": out, "cells": tab}, indent=1),
+                                      encoding="utf-8")
+    print("\n".join(L[:30]))
+    return 0
+
+
+# ------------------------------------------------------------------ pohang04 (GF31 only; only after a development PASS)
+GF = "sh31_hinge50"
+GF_K = 31
+P04_DIR = OUT / "p04"
+P04_PRE = OUT / "p04_pre"
+
+
+def p04_path(k: int, cond: str, draw, fp16: bool) -> Path:
+    where = "clean" if cond == "clean" else ttbn.sub(draw)
+    return P04_DIR / f"seed{k}" / where / f"{GF}_{cond}{'_fp16' if fp16 else ''}.pkl"
+
+
+def _gf_stream(preds, nl, cal, lst, spec, chunks, fp16, workers, tag):
+    """GF31 records for the given blocks (the registered arithmetic; fp16 autocast if asked)."""
+    import p04_heldout as ph
+    recs = [[None] * len(lst) for _ in preds]
+    t0 = time.time()
+    for nb, ch in enumerate(ttbn._frames(spec, chunks, workers), 1):
+        ims = [im for _, im in ch]
+        with ph.amp(fp16):
+            r, _, _ = _run(preds, ims, _tensor(preds, ims), nl, kind="hinge", D0=cal["D0_exp"], kmax=GF_K)
+        for j in range(len(preds)):
+            for (i, _), x in zip(ch, r[j]):
+                recs[j][i] = {**(ph._f32(x) if fp16 else x), "image_path": lst[i]}
+        if nb % 200 == 0:
+            print(f"[{tag}] {nb}/{len(chunks)} blocks ({time.time() - t0:.0f}s)", flush=True)
+    return recs
+
+
+def _gf_preds(fp16: bool):
+    import p04_heldout as ph
+    preds, nl = _preds()
+    if fp16:
+        ph.setup_fp16(preds)
+    src, cal = _load_calib(preds[0].device)
+    return preds, nl, cal
+
+
+def cmd_check_fp16(args) -> int:
+    """Development fp16 check for GF31 (as N4's): draw 942, VIS fog / fog_s1 / lowlight, IR clean, day, five
+    systems; `union` with GF31 records in fp16 against the registered fp32 build; passes iff each cell moves by at most
+    0.0010 ship AP."""
+    import dataclasses
+    lst = [ln.strip() for ln in open(ttbn.DEV_LIST) if ln.strip()]
+    conds = ("fog", "fog_s1", "lowlight")
+    out_d = OUT / "fp16_check"
+    preds, nl, cal = _gf_preds(True)
+    chunks = [list(range(a, min(a + ttbn.BATCH, len(lst)))) for a in range(0, len(lst), ttbn.BATCH)]
+    for c in conds:
+        if all((out_d / f"seed{k}_{c}.pkl").is_file() for k in ttbn.SEEDS):
+            continue
+        kc = ttbn.DEV_CONDS[c]
+        recs = _gf_stream(preds, nl, cal, lst, {"kind": kc[0], "sev": kc[1], "seed": 942, "images": lst}, chunks,
+                          True, args.workers, f"fp16 {c}")
+        out_d.mkdir(parents=True, exist_ok=True)
+        for j, k in enumerate(ttbn.SEEDS):
+            with open(out_d / f"seed{k}_{c}.pkl", "wb") as fh:
+                pickle.dump({"records": recs[j]}, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    del preds
+    import seed_ensemble as se
+    from gate_ablation import select
+    from uqfusion.eval.apmetrics import frame_parts
+    from uqfusion.eval.ctx import NIGHT_RUNS, load_context, run_systems
+    from v2_sensitivity import ship_ap
+    ref = json.loads((OUT / "verdict" / "score.json").read_text(encoding="utf-8"))
+    se._memo_distances()
+    d = f"{se.STATS}/brightness/{ttbn.sub(942)}"
+    diffs = {c: [] for c in conds}
+    for k in ttbn.SEEDS:
+        ctx = load_context(preset="crossmodal26m", cache_dir=f"{se.CACHE}/seed{k}/{ttbn.sub(942)}", bright_dir=d,
+                           structure_dir=f"{se.STATS}/structure/{ttbn.sub(942)}",
+                           ir_bright=f"{d}/gauss_ir_paired_clean.json", conditions=conds, ir_condition=None,
+                           verbose=False)
+        day = np.flatnonzero(~np.isin(ctx.runs, NIGHT_RUNS))
+        u = dataclasses.replace(ctx, veto=None)
+        for c in conds:
+            with open(out_d / f"seed{k}_{c}.pkl", "rb") as fh:
+                rr = pickle.load(fh)["records"]
+            vg = select(rr, ctx.vis_by_cond[c], np.ones(len(rr), bool))
+            v = ship_ap(frame_parts(run_systems(u, c, compute_metrics=False, vis_records=vg)["fused_gated"], ctx.gts), day)
+            diffs[c].append(v - ref[f"942|None|{k}"][f"{c}|day"][f"union_{GF}"])
+    cells = {c: float(np.mean(v)) for c, v in diffs.items()}
+    ok = all(abs(v) <= 0.0010 for v in cells.values())
+    (OUT / "fp16_check.json").write_text(json.dumps({"pass": ok, "tolerance": 0.0010, "diff_mean_over_systems": cells,
+                                                     "per_system": diffs}, indent=1), encoding="utf-8")
+    print(json.dumps(cells), "PASS" if ok else "FAIL: pohang04 is built in fp32", flush=True)
+    return 0
+
+
+def _p04_fp16() -> bool:
+    p = OUT / "fp16_check.json"
+    return bool(json.loads(p.read_text(encoding="utf-8")).get("pass")) if p.is_file() else False
+
+
+def cmd_build_p04(args) -> int:
+    import p04_heldout as ph
+    from gate_ablation import streams
+    ver = json.loads((ROOT / "docs/eval/ttbn/gatefree_dev_2026-10-16.json").read_text(encoding="utf-8"))
+    if ver["arms"][GF]["verdict"] != "PASSES":
+        raise SystemExit("GF31 did not pass development: pohang04 is not scored")
+    if not (OUT / "fp16_check.json").is_file():
+        raise SystemExit("run check-fp16 first (it decides pohang04's precision)")
+    fp16 = _p04_fp16()
+    lst = ph.images("vis")
+    todo = [(c, d) for c, d in streams("p04") if not all(p04_path(k, c, d, fp16).is_file() for k in ttbn.SEEDS)]
+    print(f"[p04] {len(lst)} frames, {len(todo)} streams ({'fp16' if fp16 else 'fp32'})", flush=True)
+    if not todo:
+        return 0
+    preds, nl, cal = _gf_preds(fp16)
+    chunks = [list(range(a, min(a + ttbn.BATCH, len(lst)))) for a in range(0, len(lst), ttbn.BATCH)]
+    for c, d in todo:
+        kc = ttbn.P04_CONDS[c]
+        t0 = time.time()
+        recs = _gf_stream(preds, nl, cal, lst, {"kind": kc[0] if kc else None, "sev": kc[1] if kc else 0,
+                                                "seed": d or 0, "images": lst}, chunks, fp16, args.workers, f"p04 {c}/{d}")
+        for j, k in enumerate(ttbn.SEEDS):
+            o = p04_path(k, c, d, fp16)
+            o.parent.mkdir(parents=True, exist_ok=True)
+            with open(o.with_suffix(".tmp"), "wb") as fh:
+                pickle.dump({"meta": {"arm": GF, "cond": c, "draw": d, "fp16": fp16, "blocks": "every 8-frame block, no gate",
+                                      "prereg": "docs/prereg-gatefree-p04-2026-10-16.md"}, "records": recs[j]}, fh,
+                            protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(o.with_suffix(".tmp"), o)
+        print(f"[p04] {c}/{d} done: {len(chunks)} blocks, {time.time() - t0:.0f}s", flush=True)
+    return 0
+
+
+def _p04_job(job):
+    import dataclasses
+    import holdout_p04_look as look
+    import holdout_p04_v2_rescore as v2r
+    import p04_heldout_score as psc
+    import seed_ensemble as se
+    from gate_ablation import select
+    from uqfusion.eval.apmetrics import frame_parts
+    from uqfusion.eval.ctx import run_systems
+    k, s, ic, vc, fp16 = job
+    ttbn._low()
+    se._memo_distances()
+    tag, key = psc.cell_tag((vc, ic)), f"seed{k}_{s}"
+    d = P04_PRE / f"union_{GF}" / tag / key
+    if (d / "obs.json").is_file():
+        return job, json.loads((d / "obs.json").read_text())["ap"]
+    dev = look.dev_context(k, f"runs/cache_p3/seed{k}")
+    sub_ = look.Pohang04() if s == "clean" else v2r.Pohang04V2()
+    ctx = look.system_context(sub_, k, s, sorted({vc, "clean"}), ic, dev)
+    vis = ctx.vis_by_cond[vc]
+    draw = None if (s == "clean" or vc == "clean") else int(s[4:7])
+    with open(p04_path(k, vc, draw, fp16), "rb") as fh:
+        rr = pickle.load(fh)["records"]
+    recs = run_systems(dataclasses.replace(ctx, veto=None), vc, compute_metrics=False,
+                       vis_records=select(rr, vis, np.ones(len(vis), bool)))["fused_gated"]
+    d.mkdir(parents=True, exist_ok=True)
+    return job, psc.save_pre(frame_parts(recs, ctx.gts), d)
+
+
+def cmd_score_p04(args) -> int:
+    import p04_heldout_score as psc
+    from gate_ablation import _p04_cells
+    fp16 = _p04_fp16()
+    jobs = [(k, s, ic, vc, fp16) for vc, ic in _p04_cells() for s in psc.subs_of((vc, ic)) for k in ttbn.SEEDS]
+    print(f"[p04 score] {len(jobs)} jobs", flush=True)
+    t0 = time.time()
+    with ProcessPoolExecutor(args.workers, max_tasks_per_child=1) as ex:
+        for n, (j, v) in enumerate(ex.map(_p04_job, jobs), 1):
+            if n % 10 == 0 or n == len(jobs):
+                print(f"[p04 score] {n}/{len(jobs)} {j[:4]} {v:.4f} ({time.time() - t0:.0f}s)", flush=True)
+    return 0
+
+
+def cmd_boot_p04(args) -> int:
+    """The gate-free scoring's 1,000 moving-block replicates (L = 20, seed 1), the gate ablation's GPU path."""
+    import gate_ablation as ga
+    ga.PRE = P04_PRE
+    return ga.cmd_boot_p04(args)
+
+
+def cmd_report_p04(args) -> int:
+    import gate_ablation as ga
+    import p04_heldout_score as psc
+    gates = json.loads(ga.P04_GATES.read_text(encoding="utf-8"))
+    cells, L = {}, []
+    for c in ga._p04_cells():
+        tag = psc.cell_tag(c)
+        vals, reps = [], []
+        for s in psc.subs_of(c):
+            vv, rr = [], []
+            for k in ttbn.SEEDS:
+                d = P04_PRE / f"union_{GF}" / tag / f"seed{k}_{s}"
+                vv.append(json.loads((d / "obs.json").read_text())["ap"])
+                rr.append(np.load(d / "reps.npy"))
+            vals.append(np.mean(vv))
+            reps.append(np.mean(rr, axis=0))
+        gf = (float(np.mean(vals)), np.mean(reps, axis=0))
+        ref = {a: ga._series(a, c, gates) for a in ("union", "n4", "ungated")}
+        cells[tag] = {"union": ref["union"][0], "gf31": gf[0]}
+        for a, x in ref.items():
+            cells[tag][f"vs_{a}"] = [gf[0] - x[0], *psc.ci(gf[1] - x[1])]
+    rule_w = lambda v: v[0] <= -0.0014 and v[2] < 0
+    rule_b = lambda v: v[0] >= 0.0060 and v[1] > 0
+    cnt = {a: {"better": [t for t, v in cells.items() if rule_b(v[f"vs_{a}"])],
+               "worse": [t for t, v in cells.items() if rule_w(v[f"vs_{a}"])]} for a in ("union", "n4", "ungated")}
+    ver = "REPLICATES" if (not cnt["union"]["worse"] and cnt["union"]["better"]) else "DOES NOT REPLICATE"
+    f = lambda v: f"{v[0]:+.4f} [{v[1]:+.4f}, {v[2]:+.4f}]"
+    L = ["# Gate-free BN adaptation (GF31) on the held-out run (pohang04)", "",
+         "`docs/prereg-gatefree-p04-2026-10-16.md` (thirteenth scoring). Nine registered cells; ship AP against the VIS "
+         "ground truth, mean over the five systems and the four draws of a corrupted cell. Δ paired; 95% interval from "
+         "the gate-free scoring's 1,000 moving-block replicates (L = 20, seed 1). Worse: Δ ≤ −0.0014 with interval below "
+         f"zero; better: Δ ≥ +0.0060 with interval above zero. Precision: {'fp16' if _p04_fp16() else 'fp32'}.", "",
+         f"**Q1 (vs `union`): {ver}** ({len(cnt['union']['better'])} better, {len(cnt['union']['worse'])} worse"
+         f"{': ' + ', '.join(cnt['union']['worse']) if cnt['union']['worse'] else ''}).",
+         f"Against IG-BN: {len(cnt['n4']['better'])} better, {len(cnt['n4']['worse'])} worse. Against ungated BN-mix: "
+         f"{len(cnt['ungated']['better'])} better, {len(cnt['ungated']['worse'])} worse.", "",
+         "| cell (VIS/IR) | union | GF31 | Δ vs union | Δ vs IG-BN | Δ vs ungated |", "|---|---:|---:|---|---|---|"]
+    for t, v in cells.items():
+        L.append(f"| {t.replace('__', '/')} | {v['union']:.4f} | {v['gf31']:.4f} | {f(v['vs_union'])} | {f(v['vs_n4'])} | "
+                 f"{f(v['vs_ungated'])} |")
+    o = ROOT / args.out
+    o.write_text("\n".join(L) + "\n", encoding="utf-8")
+    o.with_suffix(".json").write_text(json.dumps({"Q1": ver, "counts": cnt, "cells": cells}, indent=1), encoding="utf-8")
+    print("\n".join(L))
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -616,8 +918,16 @@ def main() -> int:
     s.add_argument("--workers", type=int, default=3)
     r = sp.add_parser("report")
     r.add_argument("--draw", type=int, default=941)
-    for x in (b, s, r):
-        x.add_argument("--set", type=int, default=1, choices=[1, 2, 3], help="2: shallow + hinge arms (OUT/quick2); 3: the two median-hinge shallow arms (OUT/full3)")
+    for name in ("check-fp16", "build-p04", "score-p04", "boot-p04"):
+        q = sp.add_parser(name)
+        q.add_argument("--workers", type=int, default=4)
+    q = sp.add_parser("report-p04")
+    q.add_argument("--out", default="docs/eval/ttbn/gatefree_p04_2026-10-16.md")
+    v = sp.add_parser("verdict")
+    v.add_argument("--out", default="docs/eval/ttbn/gatefree_dev_2026-10-16.md")
+    v.add_argument("--draw", type=int, default=942)
+    for x in (b, s, r, v):
+        x.add_argument("--set", type=int, default=1, choices=[1, 2, 3, 4], help="2: shallow + hinge arms (OUT/quick2); 3: the two median-hinge shallow arms (OUT/full3)")
         x.add_argument("--every", type=int, default=1, help="run every k-th block only (subset run, OUT/quick)")
     args = ap.parse_args()
     if getattr(args, "every", 1) > 1:
@@ -626,7 +936,10 @@ def main() -> int:
         RUN["dir"], RUN["arms"] = OUT / "quick2", ARMS2
     if getattr(args, "set", 1) == 3:
         RUN["dir"], RUN["arms"] = OUT / ("full3" if args.every == 1 else "quick3"), ARMS3
-    return {"calib": cmd_calib, "build": cmd_build, "score": cmd_score, "report": cmd_report}[args.cmd](args)
+    if getattr(args, "set", 1) == 4:
+        RUN["dir"], RUN["arms"], RUN["clean_shared"] = OUT / "verdict", ARMS4, True
+    return {"calib": cmd_calib, "build": cmd_build, "score": cmd_score, "report": cmd_report, "verdict": cmd_verdict, "check-fp16": cmd_check_fp16, "build-p04": cmd_build_p04,
+            "score-p04": cmd_score_p04, "boot-p04": cmd_boot_p04, "report-p04": cmd_report_p04}[args.cmd](args)
 
 
 if __name__ == "__main__":
