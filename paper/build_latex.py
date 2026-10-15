@@ -300,7 +300,8 @@ def table_tex(cv, p, caption, label, notes):
     use_x = any("X" in c for c in cols)
     env, spec = ("tabularx", r"{\linewidth}") if use_x else ("tabular", "")
     # In a two-column IEEE page a column holds about 55 characters of \footnotesize; wider tables span both.
-    fenv = "table*" if STATE["two_col"] and (total + 2 * n > 55 or use_x) else "table"
+    # A two-column name/description table wraps its text column inside one page column.
+    fenv = "table*" if STATE["two_col"] and (total + 2 * n > 55 or use_x) and not (use_x and n == 2) else "table"
     if caption is None:  # an uncaptioned table stays in the text flow
         lines = [r"\begin{center}", size]
         if fenv == "table*":
@@ -666,7 +667,7 @@ def main():
     if IEEE:
         title, _, body, appx = convert(MD, cv)
         # keep IG-BN, IG-BN-causal, IG-BN+ens+glare ... on one line in the two-column layout
-        body, appx = (re.sub(r"(?<![\w{\\/-])IG-BN(?:[-+][a-z]+)*", lambda m: r"\mbox{%s}" % m.group(0), s)
+        body, appx = (re.sub(r"(?<![\w{\\/-])IG-BN(?:[-+][A-Za-z]+)*", lambda m: r"\mbox{%s}" % m.group(0), s)
                       for s in (body, appx))
         fm = front_matter()
         authors = [[f.strip() for f in ln.split("|")] for ln in fm["Author"].splitlines() if "|" in ln]
