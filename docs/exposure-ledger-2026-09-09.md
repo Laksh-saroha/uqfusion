@@ -916,3 +916,11 @@ from the detector" are different claims and only the first is true.
   * Stage 3: full 60 cells for shallow-21 and shallow-31 + median hinge. Shallow 31: 26 better / 0 worse vs `union`,
     13 / 2 vs IG-BN; night cells down to −0.0037 with intervals crossing zero.
   * Only draw 941 / 951, the screening draw, was read. No verdict draw (942 to 947) and no pohang04 frame.
+
+* **2026-10-16 (12:10 AM, before any gate-free detection on draws 942–944): gate-free shallow + hinge BN adaptation
+  (GF31 primary, GF21 secondary) registered for development** (`docs/prereg-gatefree-ttbn-2026-10-16.md`).
+  * P1: no cell worse than `union`. P1b: a cell better. P2: better than IG-BN in ten IR-corrupted fog_s1 / lowlight
+    day cells. P3: night within ±0.005 and none worse.
+  * Constants frozen from `fcd3ebf` and `calib.pt` (training frames only). If P1 fails, it is reported as FAIL with
+    no reinterpretation.
+  * Seen first: the draw-941 screen and every earlier development and pohang04 number. No pohang04 frame is read.
