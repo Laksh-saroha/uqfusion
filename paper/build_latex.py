@@ -665,6 +665,9 @@ def main():
     cv = Converter(refs)
     if IEEE:
         title, _, body, appx = convert(MD, cv)
+        # keep IG-BN, IG-BN-causal, IG-BN+ens+glare ... on one line in the two-column layout
+        body, appx = (re.sub(r"(?<![\w{\\/-])IG-BN(?:[-+][a-z]+)*", lambda m: r"\mbox{%s}" % m.group(0), s)
+                      for s in (body, appx))
         fm = front_matter()
         authors = [[f.strip() for f in ln.split("|")] for ln in fm["Author"].splitlines() if "|" in ln]
         assert len(fm["Abstract"].split()) <= 250, len(fm["Abstract"].split())
