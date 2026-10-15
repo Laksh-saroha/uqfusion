@@ -906,3 +906,13 @@ from the detector" are different claims and only the first is true.
   * Descriptive: N4c2g − N4g −0.0003 [−0.0005, −0.0000]. The prediction (Δ ≈ +0.030, price between −0.0010 and 0) held.
   * A parallel two-process build was tried and stopped (slower); every record was written by one complete run of
     its draw.
+
+* **2026-10-15 (9:50 PM) to 2026-10-16 (12:02 AM): gate-free BN adaptation screened on draw 941; not registered**
+  (`docs/eval/ttbn/gatefree_screen_2026-10-15.md`, `scripts/ttbn_gatefree.py`).
+  * Source statistics and D thresholds come from training-split frames only: 1,600 per domain, plus 240 blocks of 8
+    raw training-run frames, none in val, test or dev.
+  * Stage 1: 12 arms on VIS clean + lowlight, every 2nd block. Stage 2: 7 shallow + hinge arms, every 4th block. Both
+    IR clean.
+  * Stage 3: full 60 cells for shallow-21 and shallow-31 + median hinge. Shallow 31: 26 better / 0 worse vs `union`,
+    13 / 2 vs IG-BN; night cells down to −0.0037 with intervals crossing zero.
+  * Only draw 941 / 951, the screening draw, was read. No verdict draw (942 to 947) and no pohang04 frame.
