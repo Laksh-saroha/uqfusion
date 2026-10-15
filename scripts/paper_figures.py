@@ -630,11 +630,11 @@ def fig_n4() -> None:
     o = 2.6                                                     # room for the two-line strip below
     stream(30 + o, 51.5 + o, "VIS frame", VIS)
     stream(7 + o, 28.5 + o, "IR frame", IR)
-    box(5, 28.3 + o, 25, 16.2, "VIS frame health",
-        f"11 statistics → novelty d²\nunhealthy: d² > {vis_bound:.1f}\n(that is, $q_{{\\rm vis}}$ < 1)\n"
-        f"+glare term: mean > {g_mean:.1f}\n   and std > {g_std:.1f}", edge=VIS)
+    box(5, 28.3 + o, 25, 17.4, "VIS frame health",
+        f"11 statistics → novelty d²\nunhealthy: d² > $m$ = {vis_bound:.1f}\n(that is, $q_{{\\rm vis}}$ < 1)\n"
+        f"+glare: mean > $m$ = {g_mean:.1f}\n   and std > $m$ = {g_std:.1f}", edge=VIS)
     box(5, 15.5 + o, 25, 12, "IR reading of the scene",
-        f"reads day:  $p_{{05}}$ ≤ {irp:g}\nhealthy:  d² ≤ {ir_bound:.1f}\n(11 statistics, clean max)", edge=IR)
+        f"reads day:  $p_{{05}}$ ≤ {irp:g}\nhealthy:  d² ≤ $m$ = {ir_bound:.1f}\n(11 statistics)", edge=IR)
     arrow(2.8, 37.5 + o, 5, 37.5 + o)
     arrow(2.8, 22 + o, 5, 22 + o)
 

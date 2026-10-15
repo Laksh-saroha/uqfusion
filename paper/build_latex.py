@@ -46,7 +46,7 @@ UNI = [  # applied after escaping, longest first
     ("τ", r"$\tau$"), ("ρ", r"$\rho$"), ("Σ", r"$\Sigma$"), ("Δ", r"$\Delta$"), ("≥", r"$\geq$"), ("∧", r"$\wedge$"),
     ("≤", r"$\leq$"), ("≈", r"$\approx$"), ("·", r"$\cdot$"), ("÷", r"$\div$"), ("²", r"$^{2}$"),
     ("¼", r"$\frac{1}{4}$"), ("′", r"$'$"), ("—", "---"), ("–", "--"), ("†", r"\textdagger{}"),
-    ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"),
+    ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"), ("°", r"$^{\circ}$"),
 ]
 DISPLAY = {  # paragraphs that are one formula
     "`μ = (N μ_src + n μ_b) / (N + n)`, `σ² = (N σ²_src + n σ²_b) / (N + n)`,":
@@ -93,7 +93,7 @@ def parse_ref(e):
                  howpublished=r"\url{" + t[3] + "}")
         typ = "misc"
     else:
-        t = re.match(r"(.+?)\. (In \*|\*|arXiv)(.*)$", rest, re.S)
+        t = re.match(r"(.+?)(?:\.|(?<=\?)) (In \*|\*|arXiv)(.*)$", rest, re.S)  # a title may end in "?"
         f["title"], tail = t[1], t[2] + t[3]
         if tail.startswith("arXiv"):
             typ, f["note"] = "misc", tail.rstrip(".")
