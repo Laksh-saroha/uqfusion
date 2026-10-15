@@ -5,7 +5,7 @@ Read by `paper/build_latex.py --ieee`. Everything else in the IEEE version comes
 ## Author
 
 Laksh Saroha | Department of Electronics and Communication Engineering | Thapar Institute of Engineering and Technology | Patiala, India | lsaroha_be24@thapar.edu
-Sandeep Mandia | Thapar Institute of Engineering and Technology | Patiala, India | sandeep.mandia@thapar.edu
+Sandeep Mandia | Department of Electronics and Communication Engineering | Thapar Institute of Engineering and Technology | Patiala, India | sandeep.mandia@thapar.edu
 
 ## Abstract
 
