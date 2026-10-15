@@ -4,11 +4,11 @@ Read by `paper/build_latex.py --ieee`. Everything else in the IEEE version comes
 
 ## Author
 
-Laksh Saroha
+Laksh Saroha and Sandeep Mandia
 
 ## Affiliation
 
-L. Saroha is with the Department of Electronics and Communication Engineering, Thapar Institute of Engineering and Technology, Patiala, India.
+L. Saroha is with the Department of Electronics and Communication Engineering, Thapar Institute of Engineering and Technology, Patiala 147004, India (e-mail: lsaroha_be24@thapar.edu). S. Mandia is with the Thapar Institute of Engineering and Technology, Patiala 147004, India (e-mail: sandeep.mandia@thapar.edu).
 
 ## Abstract
 
