@@ -92,7 +92,7 @@ def main() -> int:
                 ax.text(XMAX - 0.004, y, f"all four {signed(min(over), 3)} to {signed(max(over), 3)} →", fontsize=6.8,
                         color=INK2, ha="right", va="center")
             if group == "Night test":                        # IG-BN and the clock gate adapt no frame here
-                ax.text(0.0015, y + (off["n4"] + off["clock"]) / 2, "IG-BN and clock gate adapt no frame: = UNION",
+                ax.text(0.019, y + (off["n4"] + off["clock"]) / 2, "IG-BN and clock gate adapt no frame: = UNION",
                         fontsize=6.6, color=INK2, ha="left", va="center")
             for a, _, col, mk in ARMS:
                 d, lo, hi = v[a]
