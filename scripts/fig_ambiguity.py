@@ -95,10 +95,15 @@ def main() -> int:
         lines = [f"visible health d² = {d2v[cond][i]:,.0f}: {'flagged' if flagged else 'healthy'}",
                  f"thermal p05 = {p05[i]:.0f}: reads {'day' if reads_day else 'night'}"
                  f"{'' if healthy else ' (thermal unhealthy)'}",
-                 f"sun {sun[i]:+.0f}°".replace("-", "−"),
-                 f"IG-BN and clock gate: {'adapt' if adapt else 'do not adapt'}"]
-        fig.text(x0 + 0.004, (text_h - 0.06) / H, "\n".join(lines), fontsize=6.8, color=INK2, va="top", ha="left",
-                 linespacing=1.35)
+                 f"sun {sun[i]:+.0f}°".replace("-", "−")]
+        ty = (text_h - 0.06) / H
+        fig.text(x0, ty, "\n".join(lines), fontsize=6.8, color=INK2, va="top", ha="left", linespacing=1.35)
+        fig.text(x0, ty - len(lines) * 1.35 * 6.8 / 72 / H, f"IG-BN and clock gate: {'adapt' if adapt else 'do not adapt'}",
+                 fontsize=6.8, color=INK, fontweight="bold", va="top", ha="left")
+        if c == 0:                                   # name the rows once, inside the first column
+            for a, name in ((ax, "Visible"), (ax2, "Thermal")):
+                a.text(0.012, 0.95, name, transform=a.transAxes, fontsize=6.6, color="white", va="top", ha="left",
+                       bbox=dict(boxstyle="round,pad=0.25", fc="black", ec="none", alpha=0.55))
         record["frames"][title] = {"vis": Path(lst[i]).name, "ir": Path(irl[i]).name, "cond": cond,
                                    "vis_d2": float(d2v[cond][i]), "ir_p05": float(p05[i]), "ir_d2": float(d2i[i]),
                                    "solar_deg": float(sun[i]), "gt_ships": int(len(gt_ships(lst[i])))}
