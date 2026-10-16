@@ -941,3 +941,14 @@ from the detector" are different claims and only the first is true.
   * Q2/Q3: stated expectations against IG-BN and against ungated BN-mix.
   * fp16 iff a development check passes.
   * Seen first: every development and pohang04 number to date (P-T, GA and P-C2G among them).
+
+* **2026-10-16 (5:45 AM) — GF31 on pohang04, the thirteenth scoring: Q1 REPLICATES; Q2 partly fails; Q3 holds**
+  (`docs/eval/ttbn/gatefree_p04_2026-10-16.md`; registered in `docs/prereg-gatefree-p04-2026-10-16.md`).
+  * Timeline: fp16 check passed (max |diff| 0.0003). Built 1:29–4:57 AM, scored to 5:29 AM, bootstrap to 5:45 AM.
+  * Q1: 3 better (noise_s2 +0.1789, fog +0.0377, lowlight +0.0088), 0 worse, as predicted.
+  * Q2 against IG-BN:
+    * not worse on the clean-VIS, blur_s3 and rain_s2 cells (rain +0.0021): held;
+    * better on a clean-VIS cell: FAILED. GF31 sits at −0.0003 to 0 there, i.e. the hinge barely fires on pohang04's
+      clean frames;
+    * worse on lowlight (−0.0099), as allowed.
+  * Q3: below ungated BN-mix in all nine cells (clean-VIS −0.021), none above: held.
