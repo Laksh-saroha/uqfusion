@@ -656,7 +656,7 @@ def fig_n4() -> None:
     arrow(2.8, 49 + o, 63, 49 + o, color=VIS)
     ax.text(46, 49.6 + o, "VIS frames", ha="center", va="bottom", fontsize=B, color=INK2)
 
-    box(63, 18.5 + o, 36.5, 10.5, "Fuse: union (no veto)",
+    box(63, 18.5 + o, 36.5, 10.5, "Fuse: UNION (no veto)",
         "WBF at IoU 0.85, constant weights;\nsupport at IoU 0.30 → fused boxes", fill=BAND, edge=BAND)
     box(63, 7 + o, 36.5, 8.5, "IR detector (never adapted)", "YOLO26-m-P2, ship only", edge=IR)
     arrow(2.8, 10 + o, 63, 10 + o, color=IR)
@@ -667,7 +667,7 @@ def fig_n4() -> None:
     box(5, 0.3, 94.5, 7.4, "", edge=MUTED, dashed=True)
     ax.text(6, 5.6, "Where compute allows (IG-BN+ens):", ha="left", va="center", fontsize=T, fontweight="bold",
             color=INK2)
-    ax.text(6, 2.4, "the same gate and adaptation on all ten VIS views of full_tta "
+    ax.text(6, 2.4, "the same gate and adaptation on all ten VIS views of FULL_TTA "
             "(5 checkpoints × raw and flipped)", ha="left", va="center", fontsize=B, color=INK2)
     save(fig, "fig_n4_gate")
 

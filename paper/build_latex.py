@@ -58,6 +58,7 @@ MATH = {  # the BN-mix formulas (§4.3) and the Appendix D.1 formulas, which the
     "μ = (N μ_src + n μ_b) / (N + n)": r"$\mu = (N\mu_{\mathrm{src}} + n\mu_b)/(N+n)$",
     "σ² = (N σ²_src + n σ²_b) / (N + n)": r"$\sigma^2 = (N\sigma^2_{\mathrm{src}} + n\sigma^2_b)/(N+n)$",
     "μ_b": r"$\mu_b$", "σ²_b": r"$\sigma^2_b$",
+    "n/(N + n) · max(0, 1 − D₀/D)": r"$n/(N+n)\cdot\max(0,\,1 - D_0/D)$", "D": r"$D$", "D₀": r"$D_0$",
     "u_i = ¼ Σ_t σ_{i,t} / s_{i,t}": r"$u_i = \frac{1}{4}\sum_t \sigma_{i,t}/s_{i,t}$",
     "U_box,m = Σ_i c_i u_i / Σ_i c_i": r"$U_{\mathrm{box},m} = \sum_i c_i u_i / \sum_i c_i$",
     "O_m = sigmoid((d_m − μ_d) / τ)": r"$O_m = \mathrm{sigmoid}((d_m - \mu_d)/\tau)$",
