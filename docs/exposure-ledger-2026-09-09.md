@@ -959,3 +959,10 @@ from the detector" are different claims and only the first is true.
   * N1 (primary): GF31 not worse than `union`. N2 (secondary): ungated BN-mix worse than `union`. N3: GF31 within ±0.005.
   * Seen first: the night test's `union`/`shipped`/`lex`/`ens5_union`/`full_tta` scores (2026-10-11) and its
     label-free gate statistics (2026-10-14); every development and pohang04 number to date. No pohang04 frame is read.
+
+* **2026-10-16 (8:05 PM) — shallow BN-mix and ungated BN-mix on the pohang01 night test: N1 PASS, N2 FAILS, N3 holds**
+  (`docs/eval/ttbn/gatefree_night_p01_2026-10-16.md`; registered in `docs/prereg-gatefree-night-p01-2026-10-16.md`).
+  * N1: GF31 +0.0006 [−0.0020, +0.0031] against `union` (0.0506), neither worse nor better.
+  * N2: ungated BN-mix is BETTER than `union`, +0.0106 [+0.0043, +0.0163], against the registered prediction of worse.
+    Descriptive: +0.0178 on stretch A, −0.0099 on stretch B.
+  * N3: GF31 within ±0.005: held.
