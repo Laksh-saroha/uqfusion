@@ -646,7 +646,7 @@ def fig_n4() -> None:
     arrow(30, 22 + o, 33.5, 22 + o)
 
     box(63, 32 + o, 36.5, 19.5, "VIS detector (frozen)",
-        "yolo26m, ship + buoy. On gated blocks\n"
+        "YOLO26-m, ship + buoy. On gated blocks\n"
         "of 8 frames every BatchNorm layer uses\n"
         "BN-mix statistics:\n"
         "$\\mu = (16\\,\\mu_{\\rm src} + 8\\,\\mu_b)\\,/\\,24$, likewise $\\sigma^2$\n"
@@ -658,7 +658,7 @@ def fig_n4() -> None:
 
     box(63, 18.5 + o, 36.5, 10.5, "Fuse: union (no veto)",
         "WBF at IoU 0.85, constant weights;\nsupport at IoU 0.30 → fused boxes", fill=BAND, edge=BAND)
-    box(63, 7 + o, 36.5, 8.5, "IR detector (never adapted)", "yolo26m-P2, ship only", edge=IR)
+    box(63, 7 + o, 36.5, 8.5, "IR detector (never adapted)", "YOLO26-m-P2, ship only", edge=IR)
     arrow(2.8, 10 + o, 63, 10 + o, color=IR)
     ax.text(46, 9.4 + o, "IR frames", ha="center", va="top", fontsize=B, color=INK2)
     arrow(81.25, 32 + o, 81.25, 29 + o, color=VIS)

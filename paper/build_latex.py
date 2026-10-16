@@ -46,7 +46,7 @@ UNI = [  # applied after escaping, longest first
     ("τ", r"$\tau$"), ("ρ", r"$\rho$"), ("Σ", r"$\Sigma$"), ("Δ", r"$\Delta$"), ("≥", r"$\geq$"), ("∧", r"$\wedge$"),
     ("≤", r"$\leq$"), ("≈", r"$\approx$"), ("·", r"$\cdot$"), ("÷", r"$\div$"), ("²", r"$^{2}$"),
     ("¼", r"$\frac{1}{4}$"), ("′", r"$'$"), ("—", "---"), ("–", "--"), ("†", r"\textdagger{}"),
-    ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"), ("°", r"$^{\circ}$"),
+    ("‡", r"\textdaggerdbl{}"), ("§", r"\S{}"), ("°", r"$^{\circ}$"), ("₀", r"$_{0}$"),
 ]
 DISPLAY = {  # paragraphs that are one formula
     "`μ = (N μ_src + n μ_b) / (N + n)`, `σ² = (N σ²_src + n σ²_b) / (N + n)`,":
@@ -226,6 +226,7 @@ class Converter:
             return f"\x00{len(toks) - 1}\x00"
 
         s = re.sub(r"`([^`]+)`", lambda m: T(MATH.get(m[1]) or code(m[1], breakable=not heading)), s)
+        s = re.sub(r"(?<![\w$])([Nn]) = (\d+)\b", lambda m: T(r"$%s\,{=}\,%s$" % (m[1], m[2])), s)
         for pat, rep in self.cite_pats:
             s = pat.sub(lambda m, rep=rep: T(rep), s)
         left = re.findall(r"[A-Z][\w-]+(?: et al\.| and [A-Z][\w-]+)?,? \(?(?:19|20)\d\d\b", s)
@@ -233,6 +234,13 @@ class Converter:
         if heading:
             s = re.sub(r"§(\d+(?:\.\d+)?)", lambda m: T(r"\S" + m[1]), s)
         else:
+            def secs(m):
+                self.used_labels.update({("sec", m[1]), ("sec", m[2])})
+                if not IEEE:
+                    return T(r"\S\ref{sec:" + m[1] + r"} and \S\ref{sec:" + m[2] + "}")
+                return T(r"Sections~\ref{sec:" + m[1] + r"} and~\ref{sec:" + m[2] + "}")
+            s = re.sub(r"§(\d+(?:\.\d+)?) and §(\d+(?:\.\d+)?)", secs, s)
+
             def sec(m):
                 self.used_labels.add(("sec", m[1]))
                 return T((r"Section~" if IEEE else r"\S") + r"\ref{sec:" + m[1] + "}")
