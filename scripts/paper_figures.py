@@ -570,7 +570,7 @@ def fig_tta() -> None:
             ax.scatter([before], [y], s=34, facecolor="white", edgecolor=MUTED, linewidth=1.2, zorder=3)
             ax.scatter([after], [y], s=34, color=FUSED, edgecolor="white", linewidth=0.8, zorder=4)
             if key == "clean__clean":              # label to the left: the panel ends just right of it
-                ax.text(min(before, after) - 0.010, y, "gate never fires", va="center", ha="right",
+                ax.text(min(before, after) - 0.010, y, "gate never activates", va="center", ha="right",
                         fontsize=6.6, color=INK)
                 continue
             label = signed(d) + (f" ({tag})" if tag else "")

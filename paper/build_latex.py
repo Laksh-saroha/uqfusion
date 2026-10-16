@@ -208,7 +208,7 @@ class Converter:
             by.setdefault((r["surnames"][0], r["year"]), []).append(r)
         for r in refs:
             s, y = r["surnames"][0], r["year"]
-            ini = re.escape(r["given"]) + r"\s" if len(by[(s, y)]) > 1 else r"(?:[A-Z][\w.-]*\s)?"
+            ini = re.escape(r["given"]) + r"\s" if len(by[(s, y)]) > 1 else r"(?:[A-Z]\.(?:-[A-Z]\.)?\s)?"
             if len(r["surnames"]) == 2:
                 who = re.escape(s) + r" and " + re.escape(r["surnames"][1])
             elif len(r["surnames"]) > 2:
@@ -630,7 +630,7 @@ IEEE_SUPP = r"""\documentclass[journal,onecolumn]{IEEEtran}
 \markboth{}{\SHORT: supplementary material}
 \maketitle
 
-This supplement holds Appendices A--J of the paper. Section numbers in Roman numerals, tables numbered I, II and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
+This supplement holds Appendices A--J of the paper. Section numbers in Roman numerals, tables numbered I--V and Figs.~1 and~2 refer to the paper; tables and figures numbered S1, S2, \ldots{} are in this supplement.
 
 \BODY
 
