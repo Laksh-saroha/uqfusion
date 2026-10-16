@@ -119,8 +119,9 @@ def main() -> int:
     ax.spines["left"].set_visible(False)
     handles = [Line2D([], [], linestyle="none", marker=m, markersize=6, markerfacecolor=c, markeredgecolor="white")
                for _, _, c, m in ARMS]
-    ax.legend(handles, [n for _, n, _, _ in ARMS], loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=4,
-              handlelength=0.8, handletextpad=0.4, columnspacing=1.8)
+    top = ax.get_position().y1                        # centred on the figure, sitting just above the plot
+    fig.legend(handles, [n for _, n, _, _ in ARMS], loc="lower center", bbox_to_anchor=(0.5, top), ncol=4,
+               handlelength=0.8, handletextpad=0.4, columnspacing=1.8, bbox_transform=fig.transFigure)
     for s in ("bottom",):
         ax.spines[s].set_color(RULE)
     save(fig, "fig_three_answers")
