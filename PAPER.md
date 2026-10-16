@@ -212,7 +212,7 @@ The gate's job is as much where it stays off as where it activates. It activates
 
 ![three_answers](docs/figures/fig_three_answers.png)
 
-**Figure 11. The three answers and ungated BN-mix on each kind of test.** Δ ship AP against `union` with 95% intervals: development cells (five systems, draws 942–944, t-intervals), the held-out daylight run (pohang04, moving-block intervals) and the night test (pohang01 test split, moving-block intervals). IG-BN and the clock gate adapt no night-test frame and equal `union` there (open markers). Under held-out sensor noise all four gain +0.179 to +0.191, beyond the axis.
+**Figure 11. The three answers and ungated BN-mix on each kind of test.** Δ ship AP against `union` with 95% intervals: development cells (five systems, draws 942–944, t-intervals), the held-out daylight run (pohang04, moving-block intervals) and the night test (pohang01 test split, moving-block intervals). IG-BN and the clock gate adapt no night-test frame and equal `union` there, so they are labelled rather than drawn. Under held-out sensor noise all four gain +0.179 to +0.191, beyond the axis.
 
 ### 5.4 An observation, not a test: ranking the adapted streams
 
