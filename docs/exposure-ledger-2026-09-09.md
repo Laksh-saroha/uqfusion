@@ -952,3 +952,10 @@ from the detector" are different claims and only the first is true.
       clean frames;
     * worse on lowlight (−0.0099), as allowed.
   * Q3: below ungated BN-mix in all nine cells (clean-VIS −0.021), none above: held.
+
+* **2026-10-16 (7:38 PM, before any adapted detection on these frames) — shallow BN-mix (GF31) and ungated BN-mix on
+  the pohang01 night test registered: the night test's second scoring** (`docs/prereg-gatefree-night-p01-2026-10-16.md`).
+  The 1,109 night-test pairs, VIS and IR clean, systems 0–4, `union` fusion, the night test's own replicates.
+  * N1 (primary): GF31 not worse than `union`. N2 (secondary): ungated BN-mix worse than `union`. N3: GF31 within ±0.005.
+  * Seen first: the night test's `union`/`shipped`/`lex`/`ens5_union`/`full_tta` scores (2026-10-11) and its
+    label-free gate statistics (2026-10-14); every development and pohang04 number to date. No pohang04 frame is read.
