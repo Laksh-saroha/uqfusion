@@ -36,7 +36,7 @@ Adverse conditions are simulated, from a camera-chain model for fog, low light a
 
 ## 2. Related work
 
-**How test-time adaptation repairs a detector.** AdaBN (Li et al., 2017) replaces BatchNorm statistics with those of the test batch, and BN-mix (Schneider et al., 2020), which IG-BN and the clock gate use unchanged, mixes them with the source statistics at a prior strength N. DUA (Mirza et al., 2022) updates the statistics online with a decaying momentum and is evaluated on detection. TENT (D. Wang et al., 2021) and ActMAD (Mirza et al., 2023) instead update parameters by gradient, minimizing entropy or aligning activation statistics at many layers; ActMAD applies to detectors. Because adapting where nothing shifted can hurt, some methods select which samples to adapt: SuMi (Guo and Jin, 2025) adapts only samples that pass feature-quartile and entropy tests. Others limit adaptation to some layers or weight source against test statistics per layer (T. Yang et al., 2022; Lim et al., 2023; Su et al., 2024; Liao et al., 2024); our shallow BN-mix (§4.4) combines both ideas.
+**How test-time adaptation repairs a detector.** AdaBN (Li et al., 2017) replaces BatchNorm statistics with those of the test batch, and BN-mix (Schneider et al., 2020), which IG-BN and the clock gate use unchanged, mixes them with the source statistics at a prior strength N. DUA (Mirza et al., 2022) updates the statistics online with a decaying momentum and is evaluated on detection. TENT (D. Wang et al., 2021) and ActMAD (Mirza et al., 2023) instead update parameters by gradient, minimizing entropy or aligning activation statistics at many layers; ActMAD applies to detectors. Because adapting where nothing shifted can hurt, some methods select which samples to adapt: SuMi (Guo and Jin, 2025) adapts only samples that pass feature-quartile and entropy tests. Others limit adaptation to some layers or weight source against test statistics per layer (T. Yang et al., 2022; Lim et al., 2023; Su et al., 2024; Liao et al., 2026); our shallow BN-mix (§4.4) combines both ideas.
 
 **How multimodal methods decide what to adapt.** Several methods adapt only the shifted modality or reweight toward the reliable one. All of them decide from the model's own predictions or features and update parameters by gradient; they differ in the selection signal. TSA (Chen et al., 2025) learns a router that chooses which modality to adapt, and reports negative transfer when an unshifted modality is adapted, the failure our gate guards against. AdaPGC (Xu et al., 2026) uses the divergence of each modality's prediction from the fused prediction, DASP (He et al., 2026) the redundancy of the fused features, and CARAT (Mohapatra et al., 2026) each stream's own clean statistics; CARAT argues that cross-modal agreement misleads when sensors measure different physical processes. READ (M. Yang et al., 2024), ABPEM (Zhao et al., 2025) and MM-TTA (Shin et al., 2022) reweight the modalities inside the model, through attention or cross-modal pseudo-labels. These methods are evaluated on audio–video classification, sentiment, image–text classification, wearable time series and segmentation. The closest in sensors, Night-TTA (Liu et al., 2024), adapts night color–thermal segmentation by training BatchNorm affine parameters against an ensemble teacher, on every night frame, without deciding which frames to adapt.
 
@@ -222,7 +222,7 @@ IG-BN inherits a weakness of `union`. Where the visible stream is clean, the fus
 
 ## 6. What did not work on the same system
 
-The adaptation was the last of a sequence of registered attempts to use the second sensor. The earlier ones shaped the adaptation designs of §4, and we summarize them here.
+Earlier registered attempts to use the second sensor shaped the designs of §4; we summarize them here.
 
 ### 6.1 Predicted uncertainty is informative but does not improve the fusion
 
@@ -274,7 +274,7 @@ The method improves object detection for vessel perception in degraded visibilit
 
 Bodla, N., Singh, B., Chellappa, R., and Davis, L. S. (2017). Soft-NMS: improving object detection with one line of code. In *Proceedings of the IEEE International Conference on Computer Vision (ICCV)*, pp. 5562–5570. doi:10.1109/ICCV.2017.593.
 
-Bovcon, B., Muhovič, J., Perš, J., and Kristan, M. (2019). The MaSTr1325 dataset for training deep USV obstacle detection models. In *Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)*.
+Bovcon, B., Muhovič, J., Perš, J., and Kristan, M. (2019). The MaSTr1325 dataset for training deep USV obstacle detection models. In *Proceedings of the IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)*, pp. 3431–3438. doi:10.1109/IROS40897.2019.8967909.
 
 Bovcon, B., Muhovič, J., Vranac, D., Mozetič, D., Perš, J., and Kristan, M. (2022). MODS: a USV-oriented object detection and obstacle segmentation benchmark. *IEEE Transactions on Intelligent Transportation Systems*, 23(8), 13403–13418.
 
@@ -282,9 +282,9 @@ Buslaev, A., Iglovikov, V. I., Khvedchenya, E., Parinov, A., Druzhinin, M., and 
 
 Chen, M., Zhang, B., Han, Z., Jiang, W., Wang, Y., Feng, S., Du, Y., and Bao, B. (2025). Test-time selective adaptation for uni-modal distribution shift in multi-modal data. In *Proceedings of the 42nd International Conference on Machine Learning (ICML)*, PMLR 267, pp. 9711–9727.
 
-Chen, Y.-T., Shi, J., Ye, Z., Mertz, C., Ramanan, D., and Kong, S. (2022). Multimodal object detection via probabilistic ensembling. In *Computer Vision – ECCV 2022*, Lecture Notes in Computer Science, pp. 139–158.
+Chen, Y.-T., Shi, J., Ye, Z., Mertz, C., Ramanan, D., and Kong, S. (2022). Multimodal object detection via probabilistic ensembling. In *Computer Vision – ECCV 2022*, Lecture Notes in Computer Science, vol. 13669, pp. 139–158. doi:10.1007/978-3-031-20077-9_9.
 
-Choi, Jiwon, Cho, D., Lee, G., Kim, H., Yang, G., Kim, J., and Cho, Y. (2025). PoLaRIS dataset: a maritime object detection and tracking dataset in Pohang Canal. In *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, pp. 13626–13632. doi:10.1109/ICRA55743.2025.11128583. Preprint arXiv:2412.06192.
+Choi, Jiwon, Cho, D., Lee, G., Kim, H., Yang, G., Kim, J., and Cho, Y. (2025). PoLaRIS dataset: a maritime object detection and tracking dataset in Pohang Canal. In *Proceedings of the IEEE International Conference on Robotics and Automation (ICRA)*, pp. 13626–13632. doi:10.1109/ICRA55743.2025.11128583.
 
 Choi, Jiwoong, Chun, D., Kim, H., and Lee, H.-J. (2019). Gaussian YOLOv3: an accurate and fast object detector using localization uncertainty for autonomous driving. In *Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)*, pp. 502–511. doi:10.1109/ICCV.2019.00059.
 
@@ -298,7 +298,7 @@ He, Y., Guo, Z., and Jin, T. (2026). Decoupling stability and plasticity for mul
 
 Hendrycks, D., and Dietterich, T. (2019). Benchmarking neural network robustness to common corruptions and perturbations. In *International Conference on Learning Representations (ICLR)*. arXiv:1903.12261.
 
-Ilg, E., Çiçek, Ö., Galesso, S., Klein, A., Makansi, O., Hutter, F., and Brox, T. (2018). Uncertainty estimates and multi-hypotheses networks for optical flow. In *Computer Vision – ECCV 2018*, Lecture Notes in Computer Science, pp. 677–693. doi:10.1007/978-3-030-01234-2_40.
+Ilg, E., Çiçek, Ö., Galesso, S., Klein, A., Makansi, O., Hutter, F., and Brox, T. (2018). Uncertainty estimates and multi-hypotheses networks for optical flow. In *Computer Vision – ECCV 2018*, Lecture Notes in Computer Science, vol. 11211, pp. 677–693. doi:10.1007/978-3-030-01234-2_40.
 
 Jocher, G., and Qiu, J. (2024). *Ultralytics YOLO11* (software, version 11.0.0). https://github.com/ultralytics/ultralytics. AGPL-3.0.
 
@@ -312,23 +312,23 @@ Küppers, F., Kronenberger, J., Shantia, A., and Haselhoff, A. (2020). Multivari
 
 Ledoit, O., and Wolf, M. (2004). A well-conditioned estimator for large-dimensional covariance matrices. *Journal of Multivariate Analysis*, 88(2), 365–411. doi:10.1016/S0047-259X(03)00096-4.
 
-Lee, K., Lee, K., Lee, H., and Shin, J. (2018). A simple unified framework for detecting out-of-distribution samples and adversarial attacks. In *Advances in Neural Information Processing Systems 31* (NeurIPS 2018).
+Lee, K., Lee, K., Lee, H., and Shin, J. (2018). A simple unified framework for detecting out-of-distribution samples and adversarial attacks. In *Advances in Neural Information Processing Systems 31* (NeurIPS 2018). arXiv:1807.03888.
 
 Li, C., Song, D., Tong, R., and Tang, M. (2019). Illumination-aware faster R-CNN for robust multispectral pedestrian detection. *Pattern Recognition*, 85, 161–171. doi:10.1016/j.patcog.2018.08.005.
 
 Li, Y., Wang, N., Shi, J., Liu, J., and Hou, X. (2017). Revisiting batch normalization for practical domain adaptation. In *International Conference on Learning Representations (ICLR) Workshop*. arXiv:1603.04779.
 
-Liao, D., Qi, M., Liu, L., and Ma, H. (2024). Improving batch normalization with TTA for robust object detection in self-driving. arXiv:2411.18860.
+Liao, D., Qi, M., Liu, L., and Ma, H. (2026). Improving batch normalization with test-time adaptation for robust object detection in self-driving. *Proceedings of the AAAI Conference on Artificial Intelligence*, 40(9), 6925–6933. doi:10.1609/aaai.v40i9.37626.
 
 Lim, H., Kim, B., Choo, J., and Choi, S. (2023). TTN: a domain-shift aware batch normalization in test-time adaptation. In *International Conference on Learning Representations (ICLR)*. arXiv:2302.05155.
 
-Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Dollár, P., and Zitnick, C. L. (2014). Microsoft COCO: common objects in context. In *Computer Vision – ECCV 2014*, Lecture Notes in Computer Science, pp. 740–755. doi:10.1007/978-3-319-10602-1_48.
+Lin, T.-Y., Maire, M., Belongie, S., Hays, J., Perona, P., Ramanan, D., Dollár, P., and Zitnick, C. L. (2014). Microsoft COCO: common objects in context. In *Computer Vision – ECCV 2014*, Lecture Notes in Computer Science, vol. 8693, pp. 740–755. doi:10.1007/978-3-319-10602-1_48.
 
 Liu, T., Pang, B., Zhang, L., Yang, W., and Sun, X. (2021). Sea surface object detection algorithm based on YOLO v4 fused with reverse depthwise separable convolution (RDSC) for USV. *Journal of Marine Science and Engineering*, 9(7), 753. doi:10.3390/jmse9070753.
 
-Liu, Y., Zhang, W., Zhao, G., Zhu, J., Vasilakos, A. V., and Wang, L. (2024). Test-time adaptation for nighttime color-thermal semantic segmentation. *IEEE Transactions on Artificial Intelligence*, 5(10), 4893–4904.
+Liu, Y., Zhang, W., Zhao, G., Zhu, J., Vasilakos, A. V., and Wang, L. (2024). Test-time adaptation for nighttime color-thermal semantic segmentation. *IEEE Transactions on Artificial Intelligence*, 5(10), 4893–4904. doi:10.1109/TAI.2023.3336611.
 
-Mirza, M. J., Micorek, J., Possegger, H., and Bischof, H. (2022). The norm must go on: dynamic unsupervised domain adaptation by normalization. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*.
+Mirza, M. J., Micorek, J., Possegger, H., and Bischof, H. (2022). The norm must go on: dynamic unsupervised domain adaptation by normalization. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 14745–14755. doi:10.1109/CVPR52688.2022.01435.
 
 Mirza, M. J., Soneira, P. J., Lin, W., Kozinski, M., Possegger, H., and Bischof, H. (2023). ActMAD: activation matching to align distributions for test-time-training. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 24152–24161. doi:10.1109/CVPR52729.2023.02313.
 
@@ -336,41 +336,41 @@ Mohapatra, P., Sui, Y., Yang, H., Lundell, B., Xia, S., and Zhu, Q. (2026). Sour
 
 Nirgudkar, S., DeFilippo, M., Sacarny, M., Benjamin, M., and Robinette, P. (2023). MassMIND: Massachusetts Maritime INfrared Dataset. *The International Journal of Robotics Research*, 42(1–2), 21–32. doi:10.1177/02783649231153020.
 
-Pang, S., Morris, D., and Radha, H. (2020). CLOCs: Camera-LiDAR object candidates fusion for 3D object detection. In *Proceedings of the 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)*, pp. 10386–10393.
+Pang, S., Morris, D., and Radha, H. (2020). CLOCs: Camera-LiDAR object candidates fusion for 3D object detection. In *Proceedings of the 2020 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)*, pp. 10386–10393. doi:10.1109/IROS45743.2020.9341791.
 
 Prasad, D. K., Rajan, D., Rachmawati, L., Rajabally, E., and Quek, C. (2017). Video processing from electro-optical sensors for object detection and tracking in a maritime environment: a survey. *IEEE Transactions on Intelligent Transportation Systems*, 18(8), 1993–2016. doi:10.1109/TITS.2016.2634580.
 
 Sakaridis, C., Dai, D., and Van Gool, L. (2018). Semantic foggy scene understanding with synthetic data. *International Journal of Computer Vision*, 126(9), 973–992. doi:10.1007/s11263-018-1072-8.
 
-Schneider, S., Rusak, E., Eck, L., Bringmann, O., Brendel, W., and Bethge, M. (2020). Improving robustness against common corruptions by covariate shift adaptation. In *Advances in Neural Information Processing Systems 33* (NeurIPS 2020).
+Schneider, S., Rusak, E., Eck, L., Bringmann, O., Brendel, W., and Bethge, M. (2020). Improving robustness against common corruptions by covariate shift adaptation. In *Advances in Neural Information Processing Systems 33* (NeurIPS 2020), pp. 11539–11551.
 
 Seitzer, M., Tavakoli, A., Antic, D., and Martius, G. (2022). On the pitfalls of heteroscedastic uncertainty estimation with probabilistic neural networks. In *International Conference on Learning Representations (ICLR)*. arXiv:2203.09168.
 
-Shin, I., Tsai, Y.-H., Zhuang, B., Schulter, S., Liu, B., Garg, S., Kweon, I. S., and Yoon, K.-J. (2022). MM-TTA: multi-modal test-time adaptation for 3D semantic segmentation. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*.
+Shin, I., Tsai, Y.-H., Zhuang, B., Schulter, S., Liu, B., Garg, S., Kweon, I. S., and Yoon, K.-J. (2022). MM-TTA: multi-modal test-time adaptation for 3D semantic segmentation. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 16907–16916. doi:10.1109/CVPR52688.2022.01642.
 
 Solovyev, R., Wang, W., and Gabruseva, T. (2021). Weighted boxes fusion: ensembling boxes from different object detection models. *Image and Vision Computing*, 107, 104117. doi:10.1016/j.imavis.2021.104117.
 
-Su, Z., Guo, J., Yao, K., Yang, X., Wang, Q., and Huang, K. (2024). Unraveling batch normalization for realistic test-time adaptation. In *Proceedings of the AAAI Conference on Artificial Intelligence*. arXiv:2312.09486.
+Su, Z., Guo, J., Yao, K., Yang, X., Wang, Q., and Huang, K. (2024). Unraveling batch normalization for realistic test-time adaptation. *Proceedings of the AAAI Conference on Artificial Intelligence*, 38(13), 15136–15144. doi:10.1609/aaai.v38i13.29436.
 
-Sun, Y., Cao, B., Zhu, P., and Hu, Q. (2022). Drone-based RGB-infrared cross-modality vehicle detection via uncertainty-aware learning. *IEEE Transactions on Circuits and Systems for Video Technology*, 32(10), 6700–6713. doi:10.1109/TCSVT.2022.3168279. Preprint arXiv:2003.02437.
+Sun, Y., Cao, B., Zhu, P., and Hu, Q. (2022). Drone-based RGB-infrared cross-modality vehicle detection via uncertainty-aware learning. *IEEE Transactions on Circuits and Systems for Video Technology*, 32(10), 6700–6713. doi:10.1109/TCSVT.2022.3168279.
 
-Tian, Y., Ye, Q., and Doermann, D. (2025). YOLOv12: attention-centric real-time object detectors. In *Advances in Neural Information Processing Systems 38* (NeurIPS 2025). arXiv:2502.12524.
+Tian, Y., Ye, Q., and Doermann, D. (2025). YOLOv12: attention-centric real-time object detectors. In *Advances in Neural Information Processing Systems 38* (NeurIPS 2025), pp. 78433–78457. doi:10.52202/085713-2627.
 
-Wang, A., Chen, H., Liu, L., Chen, K., Lin, Z., Han, J., and Ding, G. (2024). YOLOv10: real-time end-to-end object detection. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024).
+Wang, A., Chen, H., Liu, L., Chen, K., Lin, Z., Han, J., and Ding, G. (2024). YOLOv10: real-time end-to-end object detection. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024), pp. 107984–108011. doi:10.52202/079017-3429.
 
-Wang, C.-Y., Yeh, I-H., and Liao, H.-Y. M. (2024). YOLOv9: learning what you want to learn using programmable gradient information. In *Computer Vision – ECCV 2024*, Lecture Notes in Computer Science, pp. 1–21. doi:10.1007/978-3-031-72751-1_1.
+Wang, C.-Y., Yeh, I-H., and Liao, H.-Y. M. (2024). YOLOv9: learning what you want to learn using programmable gradient information. In *Computer Vision – ECCV 2024*, Lecture Notes in Computer Science, vol. 15089, pp. 1–21. doi:10.1007/978-3-031-72751-1_1.
 
 Wang, D., Shelhamer, E., Liu, S., Olshausen, B., and Darrell, T. (2021). Tent: fully test-time adaptation by entropy minimization. In *International Conference on Learning Representations (ICLR)*. arXiv:2006.10726.
 
 Xu, J., Li, Y., Sun, C., Xu, X., Li, J., and Xu, F. (2026). Multi-modal test-time adaptation via adaptive probabilistic Gaussian calibration. In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*. arXiv:2604.19093.
 
-Yang, L., Kang, B., Huang, Z., Zhao, Z., Xu, X., Feng, J., and Zhao, H. (2024). Depth Anything V2. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024). arXiv:2406.09414.
+Yang, L., Kang, B., Huang, Z., Zhao, Z., Xu, X., Feng, J., and Zhao, H. (2024). Depth Anything V2. In *Advances in Neural Information Processing Systems 37* (NeurIPS 2024), pp. 21875–21911. doi:10.52202/079017-0688.
 
 Yang, M., Li, Y., Zhang, C., Hu, P., and Peng, X. (2024). Test-time adaptation against multi-modal reliability bias. In *International Conference on Learning Representations (ICLR)*.
 
 Yang, T., Zhou, S., Wang, Y., Lu, Y., and Zheng, N. (2022). Test-time batch normalization. arXiv:2205.10210.
 
-Yoo, J., Lee, D., Chung, I., Kim, D., and Kwak, N. (2024). What, how, and when should object detectors update in continually changing test domains? In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*. arXiv:2312.08875.
+Yoo, J., Lee, D., Chung, I., Kim, D., and Kwak, N. (2024). What, how, and when should object detectors update in continually changing test domains? In *Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)*, pp. 23354–23363. doi:10.1109/CVPR52733.2024.02204.
 
 Zhao, H., Zhang, H., and Zhao, Y. (2023). YOLOv7-sea: object detection of maritime UAV images based on improved YOLOv7. In *Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision Workshops (WACVW)*, pp. 233–238. doi:10.1109/WACVW58289.2023.00029.
 
@@ -378,7 +378,7 @@ Zhao, J., Wang, Y., Zhang, Y., Wang, H., and Guo, Y. (2024). Uncertainty-aware c
 
 Zhao, Y., Luo, J., Luo, X., Huang, J., Yuan, J., Xiao, Z., and Zhang, M. (2025). Attention bootstrapping for multi-modal test-time adaptation. *Proceedings of the AAAI Conference on Artificial Intelligence*, 39(21), 22849–22857. doi:10.1609/aaai.v39i21.34446.
 
-Zhou, K., Chen, L., and Cao, X. (2020). Improving multispectral pedestrian detection by addressing modality imbalance problems. In *Computer Vision – ECCV 2020*, Lecture Notes in Computer Science. doi:10.1007/978-3-030-58523-5_46.
+Zhou, K., Chen, L., and Cao, X. (2020). Improving multispectral pedestrian detection by addressing modality imbalance problems. In *Computer Vision – ECCV 2020*, Lecture Notes in Computer Science, vol. 12363, pp. 787–803. doi:10.1007/978-3-030-58523-5_46.
 
 Žust, L., Perš, J., and Kristan, M. (2023). LaRS: a diverse panoptic maritime obstacle detection dataset and benchmark. In *Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)*, pp. 20304–20314. doi:10.1109/ICCV51070.2023.01857.
 

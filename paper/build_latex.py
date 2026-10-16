@@ -121,6 +121,10 @@ def parse_ref(e):
                 if "Lecture Notes in Computer Science" in extra:
                     f["series"] = "Lecture Notes in Computer Science"
                     extra = extra.replace("Lecture Notes in Computer Science", "")
+                    vm = re.search(r"vol\. (\d+)", extra)
+                    if vm:
+                        f["volume"] = vm[1]
+                        extra = extra.replace(vm[0], "")
                 pm = re.search(r"PMLR (\d+)", extra)
                 if pm:
                     f["series"], f["volume"] = "Proceedings of Machine Learning Research", pm[1]
