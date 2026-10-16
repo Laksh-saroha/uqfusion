@@ -1,0 +1,40 @@
+{
+ "draw": 942,
+ "frames": {
+  "Clean day": {
+   "vis": "pohang00_L_006767.png",
+   "ir": "pohang00_006767.png",
+   "cond": "clean",
+   "vis_d2": 2.71431095808766,
+   "ir_p05": 16.0,
+   "ir_d2": 7.0246912006286095,
+   "solar_deg": 34.90238653604028,
+   "gt_ships": 14
+  },
+  "Low light by day: a failing camera": {
+   "vis": "pohang00_L_006767.png",
+   "ir": "pohang00_006767.png",
+   "cond": "lowlight",
+   "vis_d2": 5149.24853742627,
+   "ir_p05": 16.0,
+   "ir_d2": 7.0246912006286095,
+   "solar_deg": 34.90238653604028,
+   "gt_ships": 14
+  },
+  "Clean night: a dark scene": {
+   "vis": "pohang01_L_007837.png",
+   "ir": "pohang01_007838.png",
+   "cond": "clean",
+   "vis_d2": 3480.4320949026264,
+   "ir_p05": 64.0,
+   "ir_d2": 4.4312356376398405,
+   "solar_deg": -5.268910941871269,
+   "gt_ships": 14
+  }
+ },
+ "bounds": {
+  "vis_d2": 124.32785266046415,
+  "ir_p05_day_max": 41.5,
+  "ir_d2": 222.70912476553008
+ }
+}
