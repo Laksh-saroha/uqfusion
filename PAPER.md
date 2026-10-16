@@ -52,7 +52,7 @@ Adverse conditions are simulated, from a camera-chain model for fog, low light a
 
 ### 3.1 Data
 
-The Pohang Canal dataset (Chung et al., 2023) records a 7.5 km route through a canal, a port and near-coastal water, not open sea, with a visible camera at 2048×1080 and a thermal camera at 640×512, both at 10 Hz. PoLaRIS (Choi et al., 2025) supplies ship and buoy boxes on both streams. There are five runs: pohang00 (day), pohang01 (night), and pohang02 to pohang04 (day). On disk they hold 158,319 images, 1,183,736 boxes and 28,388 paired visible–infrared frames. The two cameras are not co-registered: frames are paired by nearest timestamp, and the measured residual misalignment is a median of 3–6 px per run. Visible frames are letterboxed to 640×640; thermal frames are delivered as 8-bit images by per-frame min–max normalization, and the 14-bit radiometric values are not recoverable. Splits are interleaved contiguous blocks with guard bands, identical across modalities, and the night labels are the corrected set from a pre-registered restoration of boxes deleted from dark frames (§6.2).
+The Pohang Canal dataset (Chung et al., 2023) records a 7.5 km route through a canal, a port and near-coastal water, not open sea, with a visible camera at 2048×1080 and a thermal camera at 640×512, both at 10 Hz. PoLaRIS (Choi et al., 2025) supplies ship and buoy boxes on both streams. There are five runs: pohang00 (day), pohang01 (night), and pohang02 to pohang04 (day). The labeled streams hold 158,319 images, 1,183,736 boxes and 28,388 paired visible–infrared frames. The two cameras are not co-registered: frames are paired by nearest timestamp, and the measured residual misalignment is a median of 3–6 px per run. Visible frames are letterboxed to 640×640; thermal frames are delivered as 8-bit images by per-frame min–max normalization, and the 14-bit radiometric values are not recoverable. Splits are interleaved contiguous blocks with guard bands, identical across modalities, and the night labels are the corrected set from a pre-registered restoration of boxes deleted from dark frames (§6.2).
 
 ### 3.2 Detectors and fusion
 
@@ -388,7 +388,7 @@ All counts below were re-derived from disk on 2026-09-10 and supersede earlier e
 | Boxes | 962,960 | 220,776 | 1,183,736 |
 | Paired VIS–IR frames | | | 28,388 |
 
-Per-run image counts (VIS / IR): pohang00 21,768 / 10,918; pohang01 24,473 / 11,995; pohang02 27,795 / 6,175; pohang03 27,085 / 1,922; pohang04 26,188 / 0. Paired rows per run: pohang00 10,786; pohang01 11,990; pohang02 3,739; pohang03 1,873; pohang04 0. Pairing is defined by the dataset's own timestamp table, not by frame ordinal: 16,544 of the 28,388 pairs have different VIS and IR indices, with per-run offsets ranging from −155 to +1.
+Per-run labeled image counts (VIS / IR; pohang04's 22,235 thermal frames are on disk but unlabeled and in no IR list): pohang00 21,768 / 10,918; pohang01 24,473 / 11,995; pohang02 27,795 / 6,175; pohang03 27,085 / 1,922; pohang04 26,188 / 0. Paired rows per run: pohang00 10,786; pohang01 11,990; pohang02 3,739; pohang03 1,873; pohang04 0. Pairing is defined by the dataset's own timestamp table, not by frame ordinal: 16,544 of the 28,388 pairs have different VIS and IR indices, with per-run offsets ranging from −155 to +1.
 
 ### A.2 Preprocessing
 
@@ -430,7 +430,7 @@ The result is in Appendix D.4. Two further provenance facts belong here. First, 
 
 ### A.5 Holdout and contamination
 
-pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**, and we state exactly what has and has not touched it. Before the Phase 3 pre-registration, its VIS frames were in the standard training lists: the earlier VIS detectors, and the VIS ensemble and MC-Dropout arms, trained on 9,841 pohang04 frames. 2,343 of its frames were also pooled into an earlier VIS validation list, and two VIS-only probes scored that list on 2026-09-02: day-only re-ranking and oracle re-ranking (Appendix E.4). What never touched pohang04 is the fusion system: no fusion score was ever computed on it, since it has no thermal frames in any list. The ten Phase 3 checkpoints were never trained on it, and the Mahalanobis references built from them were never fitted on it. The held-out claim of Appendix G rests on those facts and no wider one.
+pohang04 (26,188 VIS images, no IR) is the held-out run, but its visible labels are **not unseen**, and we state exactly what has and has not touched it. Before the Phase 3 pre-registration, its VIS frames were in the standard training lists: the earlier VIS detectors, and the VIS ensemble and MC-Dropout arms, trained on 9,841 pohang04 frames. 2,343 of its frames were also pooled into an earlier VIS validation list, and two VIS-only probes scored that list on 2026-09-02: day-only re-ranking and oracle re-ranking (Appendix E.4). What never touched pohang04 is the fusion system: no fusion score was ever computed on it, since none of its thermal frames is in any list. The ten Phase 3 checkpoints were never trained on it, and the Mahalanobis references built from them were never fitted on it. The held-out claim of Appendix G rests on those facts and no wider one.
 
 Phase 3 lists were built by filtering the existing lists to remove pohang04 rows, preserving every surviving frame's stride identity: VIS train 48,136 to 38,295, val 11,352 to 9,009, test 11,445 to 9,054. IR lists needed no change. Removing an all-day run shifts composition: validation night share rises from 18.2 percent to 23.0 percent, so Phase 3 numbers are not comparable to earlier pooled validation numbers.
 
@@ -596,7 +596,7 @@ A related repair, adding a VIS-independent confirmation to the veil mechanism, h
 
 ### D.5 Is the IR night switch safe when IR is corrupted?
 
-The night vote trusts the IR stream. IR was uncorrupted in every benchmark cell, so we tested the frozen rule `ir_p05 > 41.5` against IR corruption at three severities, over all 2,232 paired frames. A false night on a clear day vetoes a working VIS stream and is the dangerous direction. Table 8 uses the v2 corruptions (Appendix B.1). The v1 probe also applied IR glare (19.2–26.8 percent false night), low light and rain; those are visible-light filters on thermal frames, and v2 does not model them.
+The night vote trusts the IR stream. IR was uncorrupted in every benchmark cell, so we tested the frozen rule `ir_p05 > 41.5` against IR corruption at three severities, over the 2,232 paired frames; the false-night rate is counted on their 1,200 day frames. A false night on a clear day vetoes a working VIS stream and is the dangerous direction. Table 8 uses the v2 corruptions (Appendix B.1). The v1 probe also applied IR glare (19.2–26.8 percent false night), low light and rain; those are visible-light filters on thermal frames, and v2 does not model them.
 
 **Table 8. False-night rate of the IR night rule under IR corruption, corruption v2, 1,200 day frames.** Raw rule `ir_p05 > 41.5`; v1 raw rate in brackets. Hardened = the shipped vote (raw rule and IR health within the authority bound).
 
